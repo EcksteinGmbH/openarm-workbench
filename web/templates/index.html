@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenARM 机械臂测试工作台</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="app-shell">
+        <header class="topbar">
+            <div>
+                <h1>OpenARM 出厂测试工作台</h1>
+                <p>按出厂测试顺序组织：准备建链、单电机测试、整臂静态验收、官方动态测试、报告归档。</p>
+            </div>
+            <div class="topbar-meta">
+                <div class="meta-pill" id="connectionPill">未连接</div>
+                <div class="meta-pill" id="jobPill">未创建任务</div>
+            </div>
+        </header>
+
+        <nav class="primary-tabs" id="primaryTabs">
+            <button class="tab-button active" data-tab="connectTab"><span>01</span> 准备建链</button>
+            <button class="tab-button" data-tab="motorWorkbenchTab"><span>02</span> 单电机测试</button>
+            <button class="tab-button" data-tab="staticAcceptanceTab" data-tab-target="armWorkbenchTab" data-test-subtab="scanWorkbenchPanel"><span>03</span> 整臂静态验收</button>
+            <button class="tab-button" data-tab="officialDynamicTab" data-tab-target="armWorkbenchTab" data-test-subtab="factoryWorkbenchPanel" data-factory-section="identity"><span>04</span> 官方动态测试</button>
+            <button class="tab-button" data-tab="reportTab"><span>05</span> 报告归档</button>
+        </nav>
+
+        <main class="workspace">
+            <aside class="left-rail panel">
+                <div class="left-rail-section">
+                    <h2>当前任务</h2>
+                    <div class="panel-body left-rail-card">
+                        <div class="form-grid">
+                            <label class="field">
+                                <span>任务类型</span>
+                                <select id="jobType"></select>
+                            </label>
+                            <label class="field">
+                                <span>Transport</span>
+                                <select id="transportType"></select>
+                            </label>
+                            <label class="field">
+                                <span>Profile</span>
+                                <select id="profileSelect"></select>
+                            </label>
+                            <label class="field" id="targetJointField">
+                                <span>目标 Joint</span>
+                                <select id="targetJoint"></select>
+                            </label>
+                            <label class="field inline-field">
+                                <span>专家模式</span>
+                                <input type="checkbox" id="expertMode">
+                            </label>
+                            <label class="field" id="manualIdField">
+                                <span>当前 ID（专家模式）</span>
+                                <input type="number" id="manualCurrentId" min="1" max="255" placeholder="例如 1">
+                            </label>
+                        </div>
+                        <div class="button-row compact-button-row">
+                            <button class="btn btn-primary" id="createJobBtn">创建任务</button>
+                        </div>
+                        <div class="scope-section">
+                            <h3>范围说明</h3>
+                            <ul class="info-list" id="scopeList"></ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="left-rail-section">
+                    <h2>作业流程</h2>
+                    <div id="stepList" class="step-list"></div>
+                </div>
+                <div class="assumption-box" id="assumptionBox">
+                    <h3>工位假设</h3>
+                    <p id="assumptionText">加载中...</p>
+                </div>
+            </aside>
+
+            <section class="center-stage">
+                <section class="tab-panel active" id="connectTab">
+                    <div class="panel split-panel">
+                        <div class="panel-body">
+                            <h2>设备连接</h2>
+                            <div class="workflow-command-card">
+                                <div class="workflow-command-meta">
+                                    <div class="group-kicker">下一步</div>
+                                    <h3 id="connectWorkflowActionTitle">先检测接口</h3>
+                                    <p id="connectWorkflowActionDetail" class="muted">连接页会提示当前应该先配置 CAN、拉起接口，还是直接连接设备。</p>
+                                </div>
+                                <div class="workflow-command-side">
+                                    <div class="action-status blocked" id="connectWorkflowActionState">未就绪</div>
+                                    <button class="btn btn-primary workflow-action-btn" id="connectWorkflowActionBtn">刷新接口</button>
+                                </div>
+                            </div>
+                            <div id="serialConnectionForm" class="connection-form">
+                                <div class="form-grid">
+                                    <label class="field">
+                                        <span>串口</span>
+                                        <input type="text" id="serialPort" value="/dev/ttyUSB0">
+                                    </label>
+                                    <label class="field">
+                                        <span>波特率</span>
+                                        <input type="number" id="serialBaudrate" value="115200">
+                                    </label>
+                                </div>
+                            </div>
+                            <div id="socketcanConnectionForm" class="connection-form hidden">
+                                <div class="form-grid">
+                                    <label class="field">
+                                        <span>Channel</span>
+                                        <input type="text" id="socketcanChannel" value="can0">
+                                    </label>
+                                    <label class="field">
+                                        <span>Bitrate</span>
+                                        <input type="number" id="socketcanBitrate" value="1000000">
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="button-row">
+                                <button class="btn btn-primary" id="connectBtn">连接设备</button>
+                                <button class="btn btn-secondary" id="disconnectBtn">断开连接</button>
+                            </div>
+                        </div>
+                        <div class="panel-side">
+                            <div class="stacked-card-list">
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>USB-CAN / SocketCAN 识别</h3>
+                                        <button class="btn btn-secondary slim" id="refreshInterfacesBtn">刷新</button>
+                                    </div>
+                                    <div id="interfaceSummary" class="summary-grid empty-state">正在检测接口...</div>
+                                    <div id="interfaceCard" class="artifact-list empty-state">尚未识别到 SocketCAN 接口</div>
+                                </div>
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>系统 CAN 配置</h3>
+                                    </div>
+                                    <div class="form-grid compact-grid interface-config-grid">
+                                        <label class="field">
+                                            <span>接口</span>
+                                            <select id="systemCanName"></select>
+                                        </label>
+                                        <label class="field">
+                                            <span>模式</span>
+                                            <select id="systemCanMode">
+                                                <option value="can20">CAN 2.0</option>
+                                                <option value="canfd">CAN FD</option>
+                                            </select>
+                                        </label>
+                                        <label class="field">
+                                            <span>bitrate</span>
+                                            <input type="number" id="systemCanBitrate" value="1000000" min="1000">
+                                        </label>
+                                        <label class="field" id="systemCanDbitrateField">
+                                            <span>dbitrate</span>
+                                            <input type="number" id="systemCanDbitrate" value="5000000" min="1000">
+                                        </label>
+                                    </div>
+                                    <div class="button-row compact-button-row">
+                                        <button class="btn btn-secondary slim" id="canDownBtn">Down</button>
+                                        <button class="btn btn-primary slim" id="canConfigureBtn">配置</button>
+                                        <button class="btn btn-primary slim" id="canUpBtn">Up</button>
+                                    </div>
+                                </div>
+                                <div class="side-card">
+                                    <h3>Transport 能力</h3>
+                                    <div id="capabilitiesCard" class="capability-list empty-state">连接后显示</div>
+                                </div>
+                                <div class="side-card">
+                                    <h3>官方对齐</h3>
+                                    <ul class="info-list compact">
+                                        <li>Step 1：先确认 CAN ID / MASTER ID 正确。</li>
+                                        <li>Step 2：先用 CAN 2.0 建链，默认 1 Mbps。</li>
+                                        <li>Step 3：先做基础通信 sanity check，再做后续动作。</li>
+                                        <li>Step 4：修改波特率时先保持 CAN 2.0，再切目标模式。</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-panel" id="motorWorkbenchTab">
+                    <div class="panel split-panel wide-side">
+                        <div class="panel-body">
+                            <div class="panel-heading">
+                                <div>
+                                    <h2>单电机配置工站</h2>
+                                    <p class="muted">面向一颗电机：改 ID、改波特率、改模式 / 参数、回读保存、单关节诊断和电机报告。</p>
+                                </div>
+                            </div>
+                            <div class="station-flow-strip">
+                                <div class="station-flow-card active">
+                                    <span>1</span>
+                                    <strong>参数配置</strong>
+                                    <small>ID / 模式 / 波特率</small>
+                                </div>
+                                <div class="station-flow-card">
+                                    <span>2</span>
+                                    <strong>回读保存</strong>
+                                    <small>Verify / Flash</small>
+                                </div>
+                                <div class="station-flow-card">
+                                    <span>3</span>
+                                    <strong>单电机测试</strong>
+                                    <small>链路 / 微动</small>
+                                </div>
+                                <div class="station-flow-card">
+                                    <span>4</span>
+                                    <strong>报告归档</strong>
+                                    <small>SN / 参数报告</small>
+                                </div>
+                            </div>
+                            <div class="section-title-row">
+                                <div>
+                                    <span class="group-kicker">MOTOR MAIN</span>
+                                    <h3>主流程：一步一命令</h3>
+                                </div>
+                                <p class="muted">主按钮会根据当前任务状态自动切换，避免操作员同时看到多个危险命令。</p>
+                            </div>
+                            <div class="panel full-panel embedded-panel">
+                                <div class="panel-heading">
+                                    <div>
+                                        <h2>电机配置与执行</h2>
+                                        <p class="execution-summary" id="executeSummary">选择任务后显示当前阶段可执行命令。</p>
+                                    </div>
+                                    <div class="secondary-tabs" id="executeTabs">
+                                        <button class="subtab-button active" data-subtab="paramPanel">参数</button>
+                                        <button class="subtab-button" data-subtab="savePanel">保存</button>
+                                        <button class="subtab-button" data-subtab="zeroPanel">零点</button>
+                                        <button class="subtab-button" data-subtab="testPanel">测试</button>
+                                    </div>
+                                </div>
+                                <div class="workflow-command-card">
+                                    <div class="workflow-command-meta">
+                                        <div class="group-kicker">下一步</div>
+                                        <h3 id="workflowActionTitle">请先创建任务</h3>
+                                        <p id="workflowActionDetail" class="muted">电机工站会根据当前任务状态，只保留一条主流程命令。</p>
+                                    </div>
+                                    <div class="workflow-command-side">
+                                        <div class="action-status blocked" id="workflowActionState">未就绪</div>
+                                        <button class="btn btn-primary workflow-action-btn" id="workflowActionBtn" disabled>等待任务</button>
+                                    </div>
+                                </div>
+                                <div class="subtab-panel active" id="paramPanel">
+                                    <div class="action-grid">
+                                        <div class="action-card">
+                                            <h3>目标参数</h3>
+                                            <div id="targetConfigCard" class="kv-list empty-state">尚未选择 Joint</div>
+                                            <div id="expertOverridesCard" class="expert-overrides hidden">
+                                                <h4 id="paramEditorTitle">参数编辑</h4>
+                                                <div class="form-grid compact-grid">
+                                                    <label class="field">
+                                                        <span>ESC_ID</span>
+                                                        <input type="number" id="overrideEscId" min="1" max="255">
+                                                    </label>
+                                                    <label class="field">
+                                                        <span>MST_ID</span>
+                                                        <input type="number" id="overrideMstId" min="1" max="255">
+                                                    </label>
+                                                    <label class="field">
+                                                        <span>CTRL_MODE</span>
+                                                        <select id="overrideCtrlMode">
+                                                            <option value="MIT">MIT</option>
+                                                            <option value="POS_VEL">POS_VEL</option>
+                                                            <option value="VEL">VEL</option>
+                                                            <option value="Torque_Pos">Torque_Pos</option>
+                                                        </select>
+                                                    </label>
+                                                    <label class="field">
+                                                        <span>TIMEOUT</span>
+                                                        <input type="number" id="overrideTimeout" min="1">
+                                                    </label>
+                                                    <label class="field">
+                                                        <span>can_br</span>
+                                                        <input type="number" id="overrideCanBr" min="10000">
+                                                    </label>
+                                                    <label class="field">
+                                                        <span>KT_Value</span>
+                                                        <input type="number" id="overrideKtValue" step="0.001">
+                                                    </label>
+                                                    <label class="field">
+                                                        <span>Gr</span>
+                                                        <input type="number" id="overrideGr" step="0.001">
+                                                    </label>
+                                                    <label class="field">
+                                                        <span>PMAX</span>
+                                                        <input type="number" id="overridePmax" step="0.001">
+                                                    </label>
+                                                    <label class="field">
+                                                        <span>VMAX</span>
+                                                        <input type="number" id="overrideVmax" step="0.001">
+                                                    </label>
+                                                    <label class="field">
+                                                        <span>TMAX</span>
+                                                        <input type="number" id="overrideTmax" step="0.001">
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="action-card">
+                                            <h3>参数写入</h3>
+                                            <div class="action-status" id="writeParamsState">等待进入参数写入阶段</div>
+                                            <p class="muted">需要填写修改参数时，请在左侧选择“单电机参数配置”，创建任务后本页会显示 ESC_ID、MST_ID、模式、波特率和限位参数编辑框。</p>
+                                            <button class="btn btn-primary" id="writeParamsBtn">写入参数</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="subtab-panel" id="savePanel">
+                                    <div class="action-grid">
+                                        <div class="action-card">
+                                            <h3>回读校验</h3>
+                                            <div class="action-status" id="verifyParamsState">等待参数写入完成</div>
+                                            <p class="muted">保存前必须完成回读校验。</p>
+                                            <button class="btn btn-primary" id="verifyParamsBtn">回读校验</button>
+                                        </div>
+                                        <div class="action-card">
+                                            <h3>保存到 Flash</h3>
+                                            <div class="action-status" id="saveFlashState">等待回读校验通过</div>
+                                            <p class="muted">保存前会自动失能。若失能失败则阻断保存。</p>
+                                            <button class="btn btn-warning" id="saveFlashBtn">保存 Flash</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="subtab-panel" id="zeroPanel">
+                                    <div class="action-grid">
+                                        <div class="action-card">
+                                            <h3>单电机零点前检查</h3>
+                                            <ul class="info-list compact">
+                                                <li>机械基准已对齐。</li>
+                                                <li>连续 3 次刷新稳定。</li>
+                                                <li>MOS &lt; 60°C，Rotor &lt; 80°C。</li>
+                                                <li>当前为失能状态。</li>
+                                            </ul>
+                                        </div>
+                                        <div class="action-card">
+                                            <h3>设置单电机零点</h3>
+                                            <div class="action-status" id="zeroState">等待参数保存完成</div>
+                                            <p class="muted">用于给单个电机写入当前机械基准零点；整臂 OpenARM 零位请到“整臂测试 / 校准与交付 / 零位校准”。</p>
+                                            <button class="btn btn-warning" id="zeroBtn">设置零点</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="subtab-panel" id="testPanel">
+                                    <div class="action-grid">
+                                        <div class="action-card">
+                                            <h3 id="testInfoTitle">safe_mit_ping</h3>
+                                            <ul class="info-list compact" id="testInfoList">
+                                                <li>`q=+0.05 rad`，`kp=10`，`kd=0.2`。</li>
+                                                <li>持续 250 ms 后回到 `q=0`。</li>
+                                                <li>动作完成后自动失能。</li>
+                                            </ul>
+                                        </div>
+                                        <div class="action-card">
+                                            <h3 id="testActionTitle">执行测试</h3>
+                                            <div class="action-status" id="testState">等待进入测试阶段</div>
+                                            <button class="btn btn-warning" id="testBtn">执行测试</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="section-title-row">
+                                <div>
+                                    <span class="group-kicker">MOTOR TOOLS</span>
+                                    <h3>辅助工具：官方命令、诊断与报告</h3>
+                                </div>
+                            </div>
+                            <div class="command-band single-column-band">
+                                <div class="command-group">
+                                    <div class="group-kicker">电机测试报告</div>
+                                    <div class="command-inline">
+                                        <div>
+                                            <strong>导出电机参数报告</strong>
+                                            <p class="muted">包含 SN、型号、关节、ESC/MST、运行模式、波特率、限位、KT、减速比和固件信息。</p>
+                                        </div>
+                                        <button class="btn btn-primary slim" id="generateMotorReportBtn">导出报告</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="command-band">
+                                <div class="command-group">
+                                    <div class="group-kicker">OpenARM 官方 motor-check</div>
+                                    <div class="form-grid compact-grid">
+                                        <label class="field">
+                                            <span>canid</span>
+                                            <input type="number" id="officialCheckCanid" min="1" max="255" value="1">
+                                        </label>
+                                        <label class="field">
+                                            <span>recvid</span>
+                                            <input type="number" id="officialCheckRecvid" min="1" max="255" value="17">
+                                        </label>
+                                        <label class="field">
+                                            <span>socketcan</span>
+                                            <input type="text" id="officialCheckSocketcan" value="can0">
+                                        </label>
+                                        <label class="field inline-field">
+                                            <span>CAN FD</span>
+                                            <input type="checkbox" id="officialCheckFd">
+                                        </label>
+                                    </div>
+                                    <div class="button-row compact-button-row">
+                                        <button class="btn btn-secondary slim" id="syncOfficialCommandFromJointBtn">同步当前关节</button>
+                                        <button class="btn btn-secondary slim" id="planOfficialMotorCheckBtn">生成命令</button>
+                                        <button class="btn btn-primary slim" id="runOfficialMotorCheckBtn">受控执行</button>
+                                    </div>
+                                    <div id="officialMotorCheckResult" class="comparison-card empty-state">尚未生成官方 motor-check 命令</div>
+                                </div>
+                                <div class="command-group">
+                                    <div class="group-kicker">OpenARM 官方波特率变更</div>
+                                    <div class="form-grid compact-grid">
+                                        <label class="field">
+                                            <span>canid</span>
+                                            <input type="number" id="officialBaudrateCanid" min="1" max="255" value="1">
+                                        </label>
+                                        <label class="field">
+                                            <span>baudrate</span>
+                                            <select id="officialBaudrateValue">
+                                                <option value="1000000">1000000</option>
+                                                <option value="5000000">5000000</option>
+                                                <option value="4000000">4000000</option>
+                                                <option value="3200000">3200000</option>
+                                                <option value="2500000">2500000</option>
+                                                <option value="2000000">2000000</option>
+                                                <option value="500000">500000</option>
+                                                <option value="250000">250000</option>
+                                                <option value="200000">200000</option>
+                                                <option value="125000">125000</option>
+                                            </select>
+                                        </label>
+                                        <label class="field">
+                                            <span>socketcan</span>
+                                            <input type="text" id="officialBaudrateSocketcan" value="can0">
+                                        </label>
+                                        <label class="field inline-field">
+                                            <span>--flash</span>
+                                            <input type="checkbox" id="officialBaudrateFlash">
+                                        </label>
+                                    </div>
+                                    <p class="muted">官方要求变更波特率时先使用 CAN 2.0；保存 Flash 后需断电重上电复核。</p>
+                                    <div class="button-row compact-button-row">
+                                        <button class="btn btn-secondary slim" id="planOfficialBaudrateBtn">生成命令</button>
+                                        <button class="btn btn-warning slim" id="runOfficialBaudrateBtn">受控执行</button>
+                                    </div>
+                                    <div id="officialBaudrateResult" class="comparison-card empty-state">尚未生成官方波特率命令</div>
+                                </div>
+                            </div>
+                            <div class="testing-workbench-grid">
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>当前参数 / 目标参数</h3>
+                                    </div>
+                                    <div id="comparisonCard" class="comparison-card empty-state">创建任务后显示</div>
+                                </div>
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>单关节安全测试</h3>
+                                    </div>
+                                    <div class="form-grid compact-grid">
+                                        <label class="field">
+                                            <span>目标关节</span>
+                                            <select id="diagnosticJointSelect"></select>
+                                        </label>
+                                    </div>
+                                    <div class="button-row compact-button-row">
+                                        <button class="btn btn-secondary slim" id="probeJointBtn">参数诊断</button>
+                                        <button class="btn btn-secondary slim" id="jointLinkTestBtn">链路测试</button>
+                                        <button class="btn btn-warning slim" id="jointMicroTestBtn">极小幅响应</button>
+                                    </div>
+                                    <div id="jointDiagnosticDetail" class="result-list compact-results empty-state">尚未执行单关节测试</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="panel-side">
+                            <div class="stacked-card-list">
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>最近单关节测试</h3>
+                                    </div>
+                                    <div id="jointDiagnosticSummary" class="summary-grid empty-state">先执行参数诊断、链路测试或极小幅响应。</div>
+                                </div>
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>电机工站建议</h3>
+                                    </div>
+                                    <ul class="info-list compact">
+                                        <li>官方主线先配 ID，再做 CAN 建链与通信检查。</li>
+                                        <li>波特率改写前保持 CAN 2.0，确认后再切目标模式。</li>
+                                        <li>只有在链路、参数和状态正常时再做微动。</li>
+                                    </ul>
+                                </div>
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>达妙维护工具</h3>
+                                        <button class="btn btn-secondary slim" id="refreshVendorToolBtn">刷新</button>
+                                    </div>
+                                    <div id="vendorToolStatus" class="summary-grid empty-state">尚未检测 DMTool</div>
+                                    <div class="button-row compact-button-row">
+                                        <button class="btn btn-primary slim" id="launchDmToolBtn">打开 DMTool</button>
+                                    </div>
+                                    <div class="form-grid compact-grid">
+                                        <label class="field">
+                                            <span>对象</span>
+                                            <input type="text" id="vendorMaintTarget" placeholder="例如 R-J4 / Loose motor">
+                                        </label>
+                                        <label class="field">
+                                            <span>阶段</span>
+                                            <select id="vendorMaintStage">
+                                                <option value="single_motor_pre_assembly">单电机装配前</option>
+                                                <option value="service_repair">维修复核</option>
+                                                <option value="whole_arm_debug">整臂调试辅助</option>
+                                            </select>
+                                        </label>
+                                        <label class="field">
+                                            <span>电机编码器校准</span>
+                                            <select id="vendorMotorEncoder">
+                                                <option value="not_performed">未执行</option>
+                                                <option value="performed">已执行</option>
+                                                <option value="not_required">不需要</option>
+                                                <option value="failed">失败</option>
+                                                <option value="unknown">未知</option>
+                                            </select>
+                                        </label>
+                                        <label class="field">
+                                            <span>输出轴编码器校准</span>
+                                            <select id="vendorOutputEncoder">
+                                                <option value="not_performed">未执行</option>
+                                                <option value="performed">已执行</option>
+                                                <option value="not_required">不需要</option>
+                                                <option value="failed">失败</option>
+                                                <option value="unknown">未知</option>
+                                            </select>
+                                        </label>
+                                        <label class="field">
+                                            <span>保存零点</span>
+                                            <select id="vendorZeroSave">
+                                                <option value="not_performed">未执行</option>
+                                                <option value="performed">已执行</option>
+                                                <option value="not_required">不适用</option>
+                                                <option value="failed">失败</option>
+                                                <option value="unknown">未知</option>
+                                            </select>
+                                        </label>
+                                        <label class="field">
+                                            <span>操作员</span>
+                                            <input type="text" id="vendorMaintOperator" placeholder="姓名">
+                                        </label>
+                                    </div>
+                                    <label class="field">
+                                        <span>备注</span>
+                                        <textarea id="vendorMaintNotes" rows="3" placeholder="只记录在达妙上位机或工装中完成的维护动作，不自动判定出厂 PASS/FAIL。"></textarea>
+                                    </label>
+                                    <div class="button-row compact-button-row">
+                                        <button class="btn btn-primary slim" id="saveVendorMaintenanceBtn">保存维护记录</button>
+                                    </div>
+                                    <div id="vendorMaintenanceRecords" class="artifact-list empty-state">尚无维护记录</div>
+                                </div>
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>关联整臂任务</h3>
+                                    </div>
+                                    <p class="muted">整臂扫描、问题监测、零位校准和官方 Demo 流程都归入机械臂工站。</p>
+                                    <button class="btn btn-secondary slim" id="goArmWorkbenchBtn">前往机械臂工站</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-panel" id="armWorkbenchTab">
+                    <div class="panel split-panel wide-side">
+                        <div class="panel-body">
+                            <div class="panel-heading">
+                                <div>
+                                    <h2>整臂测试工站</h2>
+                                    <p class="muted">面向单侧或双侧 OpenARM：ID 盘点、通信扫描、问题监测、零位校准、Demo 验证和出厂放行。</p>
+                                </div>
+                                <button class="btn btn-primary slim" id="refreshFactoryBtn">刷新机械臂工站</button>
+                            </div>
+                            <div class="station-flow-strip" data-flow-scope="static">
+                                <div class="station-flow-card active">
+                                    <span>1</span>
+                                    <strong>ID 盘点</strong>
+                                    <small>发现总线所有电机</small>
+                                </div>
+                                <div class="station-flow-card">
+                                    <span>2</span>
+                                    <strong>通信扫描</strong>
+                                    <small>J1-J8 参数对账</small>
+                                </div>
+                                <div class="station-flow-card">
+                                    <span>3</span>
+                                    <strong>状态复核</strong>
+                                    <small>只读健康与 TIMEOUT</small>
+                                </div>
+                                <div class="station-flow-card">
+                                    <span>4</span>
+                                    <strong>问题诊断</strong>
+                                    <small>阻断项与建议</small>
+                                </div>
+                            </div>
+                            <div class="station-flow-strip" data-flow-scope="dynamic">
+                                <div class="station-flow-card active">
+                                    <span>1</span>
+                                    <strong>整机 CN</strong>
+                                    <small>建立追溯档案</small>
+                                </div>
+                                <div class="station-flow-card">
+                                    <span>2</span>
+                                    <strong>官方零位</strong>
+                                    <small>Step 4 动态校准</small>
+                                </div>
+                                <div class="station-flow-card">
+                                    <span>3</span>
+                                    <strong>官方 Demo</strong>
+                                    <small>Step 5 动作验证</small>
+                                </div>
+                                <div class="station-flow-card">
+                                    <span>4</span>
+                                    <strong>Gate / 证据</strong>
+                                    <small>放行与归档</small>
+                                </div>
+                            </div>
+                            <div class="workflow-command-card" data-flow-scope="static">
+                                <div class="workflow-command-meta">
+                                    <div class="group-kicker">下一步</div>
+                                    <h3 id="identifyWorkflowActionTitle">请先连接设备并创建任务</h3>
+                                    <p id="identifyWorkflowActionDetail" class="muted">机械臂工站会根据当前任务，提示你是先扫描、进入问题监测，还是推进校准与 Demo 流程。</p>
+                                </div>
+                                <div class="workflow-command-side">
+                                    <div class="action-status blocked" id="identifyWorkflowActionState">未就绪</div>
+                                    <button class="btn btn-primary workflow-action-btn" id="identifyWorkflowActionBtn">等待任务</button>
+                                </div>
+                            </div>
+                            <div class="command-band" data-flow-scope="static">
+                                <div class="command-group">
+                                    <div class="group-kicker">流程命令</div>
+                                    <div class="command-inline">
+                                        <div>
+                                            <strong>整臂扫描 / 验收</strong>
+                                            <p class="muted">按当前 Profile 执行总线扫描、参数对账或验收预扫描。</p>
+                                        </div>
+                                        <div class="scan-repeat-inline">
+                                            <label class="field compact-inline-field">
+                                                <span>复扫次数</span>
+                                                <input type="number" id="scanRepeatCount" min="1" max="5" value="3">
+                                            </label>
+                                        </div>
+                                        <button class="btn btn-primary slim" id="scanBtn">开始扫描</button>
+                                    </div>
+                                </div>
+                                <div class="command-group">
+                                    <div class="group-kicker">工程工具</div>
+                                    <div class="command-inline">
+                                        <div>
+                                            <strong>总线 ID 盘点</strong>
+                                            <p class="muted">只盘点当前总线上的电机 ID，不改变任务状态。</p>
+                                        </div>
+                                        <button class="btn btn-secondary slim" id="lineInventoryBtn">盘点 ID</button>
+                                    </div>
+                                    <div class="command-inline">
+                                        <div>
+                                            <strong>整臂状态复核</strong>
+                                            <p class="muted">只读取 J1-J8 状态和 TIMEOUT，不使能、不发送控制帧。</p>
+                                        </div>
+                                        <button class="btn btn-secondary slim" id="armStatusCheckBtn">状态复核</button>
+                                    </div>
+                                    <div class="command-inline">
+                                        <div>
+                                            <strong>TIMEOUT 标准化</strong>
+                                            <p class="muted">整臂验收阶段使用；按所选左右臂 Profile 逐关节写入、回读并保存 Flash，不发送运动控制。</p>
+                                        </div>
+                                        <button class="btn btn-warning slim" id="armTimeoutStandardizeBtn">按 Profile 写入 TIMEOUT</button>
+                                    </div>
+                                    <div class="command-inline">
+                                        <div>
+                                            <strong>工程短时使能</strong>
+                                            <p class="muted">工程调试项；基础出厂测试通常不需要。逐关节短时 enable，发送零力矩保活，然后自动 disable。</p>
+                                        </div>
+                                        <button class="btn btn-warning slim" id="armSafeEnableCheckBtn">工程使能</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="testing-subtabs" id="testingTabs" data-flow-scope="static">
+                                <button class="testing-subtab-button active" data-test-subtab="scanWorkbenchPanel">静态验收</button>
+                                <button class="testing-subtab-button" data-test-subtab="issueWorkbenchPanel">问题诊断</button>
+                            </div>
+                            <div class="testing-subtab-panel active" id="scanWorkbenchPanel" data-flow-scope="static">
+                                <div id="scanSummary" class="summary-grid empty-state">尚未生成扫描摘要</div>
+                                <div id="armRuntimeCheck" class="result-list empty-state">状态复核或安全使能检查后显示运行结果</div>
+                                <div id="scanResults" class="result-list empty-state">尚未扫描</div>
+                                <div id="scanMatrix" class="result-list empty-state">整臂扫描后显示参数一致性矩阵</div>
+                                <div id="shipmentChecklist" class="result-list empty-state">整臂扫描后显示出厂前检查清单</div>
+                            </div>
+                            <div class="testing-subtab-panel" id="issueWorkbenchPanel" data-flow-scope="static">
+                                <div class="testing-monitor-layout">
+                                    <div class="testing-monitor-main">
+                                        <div class="panel-heading">
+                                            <div>
+                                                <h3>问题扫描监测</h3>
+                                                <p class="muted">汇总当前任务中的掉线、参数不一致、模式错误、波特率错误、过温和放行阻断项。</p>
+                                            </div>
+                                            <button class="btn btn-primary slim" id="refreshIssuesBtn">刷新监测</button>
+                                        </div>
+                                        <div id="issuesSummary" class="summary-grid empty-state">创建并执行任务后显示问题摘要</div>
+                                        <div class="command-band single-column-band">
+                                            <div class="command-group">
+                                                <div class="group-kicker">过滤器</div>
+                                                <div class="form-grid compact-grid monitor-filter-grid">
+                                                    <label class="field">
+                                                        <span>严重级别</span>
+                                                        <select id="issueSeverityFilter">
+                                                            <option value="all">全部</option>
+                                                            <option value="critical">Critical</option>
+                                                            <option value="warning">Warning</option>
+                                                            <option value="info">Info</option>
+                                                        </select>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div id="issuesList" class="result-list empty-state">暂无问题明细</div>
+                                    </div>
+                                    <div class="testing-monitor-side">
+                                        <div class="side-card">
+                                            <div class="panel-heading compact-heading">
+                                                <h3>问题详情</h3>
+                                            </div>
+                                            <div id="issueDetailCard" class="comparison-card empty-state">点击左侧问题卡片查看详情</div>
+                                        </div>
+                                        <div class="side-card">
+                                            <div class="panel-heading compact-heading">
+                                                <h3>专项诊断建议</h3>
+                                            </div>
+                                            <div id="issuePlaybooks" class="artifact-list empty-state">当前还没有专项诊断建议</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="testing-subtab-panel" id="factoryWorkbenchPanel" data-flow-scope="dynamic">
+                                <div class="workflow-command-card">
+                                    <div class="workflow-command-meta">
+                                        <div class="group-kicker">下一步</div>
+                                        <h3 id="factoryWorkflowActionTitle">先建立整机 CN</h3>
+                                        <p id="factoryWorkflowActionDetail" class="muted">机械臂工站会按整臂 CN、测试任务、零位流程、Demo 流程和交付包导出的顺序给出下一步建议。</p>
+                                    </div>
+                                    <div class="workflow-command-side">
+                                        <div class="action-status blocked" id="factoryWorkflowActionState">未就绪</div>
+                                        <button class="btn btn-primary workflow-action-btn" id="factoryWorkflowActionBtn">等待配置</button>
+                                    </div>
+                                </div>
+                                <div class="factory-section-tabs" id="factorySectionTabs">
+                                    <button class="factory-section-button active" data-factory-section="identity">身份档案</button>
+                                    <button class="factory-section-button" data-factory-section="zero">零位校准</button>
+                                    <button class="factory-section-button" data-factory-section="demo">Demo 验证</button>
+                                    <button class="factory-section-button" data-factory-section="evidence">证据 / Gate</button>
+                                    <button class="factory-section-button" data-factory-section="reports">报告导出</button>
+                                </div>
+                                <div class="factory-section-panel active" data-factory-section-panel="identity">
+                                <div class="section-title-row">
+                                    <div>
+                                        <span class="group-kicker">IDENTITY</span>
+                                        <h3>整机 CN 与可选关节信息</h3>
+                                    </div>
+                                    <p class="muted">正式出厂报告只保留整机 CN。内部电机追溯号/关节绑定仅作为可选内部记录，不进入整机 PDF 结论。</p>
+                                </div>
+                                <div class="action-grid">
+                                    <div class="action-card">
+                                        <h3>整机 CN</h3>
+                                        <div class="form-grid compact-grid">
+                                            <label class="field">
+                                                <span>机械臂 CN</span>
+                                                <input type="text" id="factoryArmCn" placeholder="例如 OAF26042701">
+                                            </label>
+                                            <label class="field">
+                                                <span>机型</span>
+                                                <input type="text" id="factoryArmType" value="OpenARM Follower">
+                                            </label>
+                                            <label class="field">
+                                                <span>BOM Profile</span>
+                                                <input type="text" id="factoryBomProfile" value="openarm_v1">
+                                            </label>
+                                            <label class="field">
+                                                <span>角色</span>
+                                                <select id="factorySerialRole">
+                                                    <option value="F">Follower</option>
+                                                    <option value="L">Leader</option>
+                                                </select>
+                                            </label>
+                                            <label class="field">
+                                                <span>日期码 YYMMDD</span>
+                                                <input type="text" id="factorySerialDate" placeholder="例如 260427">
+                                            </label>
+                                            <label class="field">
+                                                <span>序号</span>
+                                                <input type="number" id="factorySerialSequence" min="1" max="99" value="1">
+                                            </label>
+                                        </div>
+                                        <div class="button-row compact-button-row">
+                                            <button class="btn btn-secondary slim" id="generateArmCnBtn">生成 CN</button>
+                                            <button class="btn btn-primary slim" id="bindArmCnBtn">保存 CN</button>
+                                            <button class="btn btn-secondary slim" id="attachCurrentJobToArmBtn">挂当前任务</button>
+                                            <button class="btn btn-warning slim" id="buildFactoryBundleBtn">导出基础包</button>
+                                        </div>
+                                        <div id="factorySerialValidation" class="comparison-card empty-state">编号规则：整机 CN=OA{F/L}{YYMMDD}{NN}；整机 PDF 仅输出 CN</div>
+                                    </div>
+                                    <div class="action-card">
+                                        <h3>可选内部电机记录 / 关节绑定</h3>
+                                        <div class="form-grid compact-grid">
+                                            <label class="field">
+                                                <span>内部电机追溯号</span>
+                                                <input type="text" id="factoryMotorSn" placeholder="可选内部记录，不进入正式 PDF">
+                                            </label>
+                                            <label class="field">
+                                                <span>型号</span>
+                                                <input type="text" id="factoryMotorType" placeholder="例如 DM-J4310-2EC">
+                                            </label>
+                                            <label class="field">
+                                                <span>关节</span>
+                                                <select id="factoryJointSelect"></select>
+                                            </label>
+                                            <label class="field">
+                                                <span>ESC_ID</span>
+                                                <input type="number" id="factoryEscId" min="1" max="255">
+                                            </label>
+                                            <label class="field">
+                                                <span>MST_ID</span>
+                                                <input type="number" id="factoryMstId" min="1" max="255">
+                                            </label>
+                                        </div>
+                                        <div class="button-row compact-button-row">
+                                            <button class="btn btn-secondary slim" id="generateMotorSnBtn">生成 SN</button>
+                                            <button class="btn btn-primary slim" id="bindMotorSnBtn">保存 SN</button>
+                                            <button class="btn btn-secondary slim" id="assignJointMotorBtn">绑定关节</button>
+                                            <button class="btn btn-secondary slim" id="attachCurrentJobToMotorBtn">挂当前任务</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="factorySummary" class="summary-grid empty-state">尚未加载出厂追溯信息</div>
+                                <div id="factoryBundleResult" class="artifact-list empty-state">尚未生成交付包</div>
+                                </div>
+                                <div class="factory-section-panel" data-factory-section-panel="zero">
+                                <div class="section-title-row">
+                                    <div>
+                                        <span class="group-kicker">ZERO</span>
+                                        <h3>零位校准与校准记录</h3>
+                                    </div>
+                                    <p class="muted">按官方 Step 4 执行动态零位校准；出厂默认只做臂关节找限位，夹爪开合放在 Demo 阶段单独验证。</p>
+                                </div>
+                                <div class="action-grid factory-workflow-grid">
+                                    <div class="action-card">
+                                        <h3>零位校准流程</h3>
+                                        <p class="muted">官方零位校准会自动移动机械臂。请先完成 ID、SocketCAN、motor-check，再按受控按钮执行；夹爪动作默认跳过，避免与 Demo 验证混在一起。</p>
+                                        <div id="zeroWorkflowSummary" class="comparison-card empty-state">尚未启动零位校准流程</div>
+                                        <div class="form-grid compact-grid">
+                                            <label class="field">
+                                                <span>官方命令 canport</span>
+                                                <input type="text" id="officialZeroCanport" value="can0">
+                                            </label>
+                                            <label class="field">
+                                                <span>arm_side</span>
+                                                <select id="officialZeroArmSide">
+                                                    <option value="right_arm">right_arm</option>
+                                                    <option value="left_arm">left_arm</option>
+                                                </select>
+                                            </label>
+                                            <label class="field">
+                                                <span>最大找限位角度 deg</span>
+                                                <input type="number" id="officialZeroMaxBumpDeg" value="90" min="1" max="180" step="1">
+                                            </label>
+                                            <label class="field">
+                                                <span>最大找限位时间 s</span>
+                                                <input type="number" id="officialZeroMaxBumpTime" value="20" min="1" max="60" step="1">
+                                            </label>
+                                            <label class="field">
+                                                <span>找限位步进 deg</span>
+                                                <input type="number" id="officialZeroBumpStepDeg" value="0.2" min="0.01" max="1" step="0.01">
+                                            </label>
+                                            <label class="field">
+                                                <span>找限位间隔 s</span>
+                                                <input type="number" id="officialZeroBumpDt" value="0.005" min="0.001" max="0.1" step="0.001">
+                                            </label>
+                                            <label class="field">
+                                                <span>写零点后回初始姿态</span>
+                                                <select id="officialZeroRestoreInitialPose">
+                                                    <option value="true" selected>是</option>
+                                                    <option value="false">否</option>
+                                                </select>
+                                            </label>
+                                            <label class="field">
+                                                <span>最大回位角度 deg</span>
+                                                <input type="number" id="officialZeroRestoreMaxDeg" value="120" min="1" max="180" step="1">
+                                            </label>
+                                            <label class="field">
+                                                <span>零位阶段夹爪找限位</span>
+                                                <select id="officialZeroSkipGripper">
+                                                    <option value="true" selected>跳过，Demo 单独验证</option>
+                                                    <option value="false">包含夹爪</option>
+                                                </select>
+                                            </label>
+                                        </div>
+                                        <div class="button-row compact-button-row">
+                                            <button class="btn btn-primary slim" id="startZeroWorkflowBtn">启动零位流程</button>
+                                            <button class="btn btn-secondary slim" id="completeZeroWorkflowStepBtn">完成当前步骤</button>
+                                            <button class="btn btn-warning slim" id="finalizeZeroWorkflowBtn">完成并归档</button>
+                                            <button class="btn btn-secondary slim" id="failZeroWorkflowBtn">标记失败</button>
+                                            <button class="btn btn-secondary slim" id="runNativeZeroCalibrationBtn">辅助静态写零位</button>
+                                            <button class="btn btn-secondary slim" id="planOfficialZeroBtn">生成官方动态零位命令</button>
+                                            <button class="btn btn-warning slim" id="runOfficialZeroBtn">受控执行官方动态零位</button>
+                                        </div>
+                                        <div id="nativeZeroCalibrationResult" class="comparison-card empty-state">尚未执行工站辅助静态零位</div>
+                                        <div id="officialZeroCommandResult" class="comparison-card empty-state">尚未生成官方零位命令</div>
+                                    </div>
+                                    <div class="action-card">
+                                        <h3>零位校准记录</h3>
+                                        <div class="form-grid compact-grid">
+                                            <label class="field">
+                                                <span>校准范围</span>
+                                                <select id="factoryZeroScope">
+                                                    <option value="whole_arm">整臂</option>
+                                                    <option value="right_arm">右臂</option>
+                                                    <option value="left_arm">左臂</option>
+                                                    <option value="custom_joint_set">指定关节</option>
+                                                </select>
+                                            </label>
+                                            <label class="field">
+                                                <span>校准结论</span>
+                                                <select id="factoryZeroStatus">
+                                                    <option value="passed">通过</option>
+                                                    <option value="warning">有风险</option>
+                                                    <option value="failed">失败</option>
+                                                </select>
+                                            </label>
+                                            <label class="field">
+                                                <span>零位姿态名</span>
+                                                <input type="text" id="factoryZeroPoseName" value="openarm_home">
+                                            </label>
+                                            <label class="field">
+                                                <span>操作人</span>
+                                                <input type="text" id="factoryZeroOperator" placeholder="例如 QC-A01">
+                                            </label>
+                                            <label class="field factory-span-2">
+                                                <span>说明</span>
+                                                <input type="text" id="factoryZeroNotes" placeholder="记录零位姿态、风险点或复核说明">
+                                            </label>
+                                        </div>
+                                        <div class="button-row compact-button-row">
+                                            <button class="btn btn-primary slim" id="recordZeroCalibrationBtn">记录零位校准</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                </div>
+                                <div class="factory-section-panel" data-factory-section-panel="demo">
+                                <div class="section-title-row">
+                                    <div>
+                                        <span class="group-kicker">DEMO</span>
+                                        <h3>官方 Demo / Follower 验证</h3>
+                                    </div>
+                                    <p class="muted">按官方 Step 5 执行 Demo：使能、位置控制、力矩控制、夹爪、状态监测和安全失能。</p>
+                                </div>
+                                <div class="action-grid factory-validation-grid">
+                                    <div class="action-card">
+                                        <h3>官方 Demo / Follower 验证流程</h3>
+                                        <p class="muted">Demo 前必须完成官方动态零位校准，并确认急停、清空工作区和快速断电手段。</p>
+                                        <div id="demoWorkflowSummary" class="comparison-card empty-state">尚未启动 Demo / Follower 验证流程</div>
+                                        <div class="button-row compact-button-row">
+                                            <button class="btn btn-primary slim" id="startDemoWorkflowBtn">启动 Demo 流程</button>
+                                            <button class="btn btn-secondary slim" id="completeDemoWorkflowStepBtn">完成当前步骤</button>
+                                            <button class="btn btn-warning slim" id="finalizeDemoWorkflowBtn">完成并归档</button>
+                                            <button class="btn btn-secondary slim" id="failDemoWorkflowBtn">标记失败</button>
+                                            <button class="btn btn-secondary slim" id="planOfficialDemoBtn">生成 Demo 命令</button>
+                                            <button class="btn btn-warning slim" id="runOfficialDemoBtn">受控执行 Demo</button>
+                                        </div>
+                                        <div id="officialDemoCommandResult" class="comparison-card empty-state">尚未生成官方 Demo 命令</div>
+                                    </div>
+                                    <div class="action-card">
+                                        <h3>官方 Demo / 验证记录</h3>
+                                        <div class="form-grid compact-grid">
+                                            <label class="field">
+                                                <span>验证范围</span>
+                                                <select id="factoryDemoScope">
+                                                    <option value="official_demo">官方 Demo</option>
+                                                    <option value="follower_validation">Follower 功能</option>
+                                                    <option value="custom_validation">自定义验证</option>
+                                                </select>
+                                            </label>
+                                            <label class="field">
+                                                <span>验证结论</span>
+                                                <select id="factoryDemoStatus">
+                                                    <option value="passed">通过</option>
+                                                    <option value="warning">有风险</option>
+                                                    <option value="failed">失败</option>
+                                                </select>
+                                            </label>
+                                            <label class="field">
+                                                <span>Demo 名称</span>
+                                                <input type="text" id="factoryDemoName" value="official_demo">
+                                            </label>
+                                            <label class="field">
+                                                <span>操作人</span>
+                                                <input type="text" id="factoryDemoOperator" placeholder="例如 QC-A01">
+                                            </label>
+                                            <label class="field">
+                                                <span>命令/程序</span>
+                                                <input type="text" id="factoryDemoCommand" value="openarm-can-demo" placeholder="例如 openarm-can-demo">
+                                            </label>
+                                            <label class="field">
+                                                <span>说明</span>
+                                                <input type="text" id="factoryDemoNotes" placeholder="记录 Demo 过程、风险点或失败现象">
+                                            </label>
+                                        </div>
+                                        <div class="button-row compact-button-row">
+                                            <button class="btn btn-primary slim" id="recordDemoValidationBtn">记录 Demo 验证</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                </div>
+                                <div class="factory-section-panel" data-factory-section-panel="evidence">
+                                <div class="section-title-row">
+                                    <div>
+                                        <span class="group-kicker">EVIDENCE</span>
+                                        <h3>证据链与出厂 Gate</h3>
+                                    </div>
+                                    <p class="muted">这里仅采集 CAN 证据和读取档案，不发送动作控制，用于最终 PASS/HOLD 判断。</p>
+                                </div>
+                                <div class="command-band single-column-band">
+                                    <div class="command-group">
+                                        <div class="group-kicker">证据链与放行 Gate</div>
+                                        <p class="muted">只采集 CAN 证据和读取档案，不发送电机动作命令；用于最终出厂报告 PASS/HOLD 判断。</p>
+                                        <div class="form-grid compact-grid">
+                                            <label class="field">
+                                                <span>CAN 接口</span>
+                                                <input type="text" id="factoryEvidenceInterface" value="can0">
+                                            </label>
+                                            <label class="field">
+                                                <span>candump 秒数</span>
+                                                <input type="number" id="factoryCandumpDuration" min="1" max="10" value="2">
+                                            </label>
+                                        </div>
+                                        <div class="button-row compact-button-row">
+                                            <button class="btn btn-secondary slim" id="captureCanHealthBtn">CAN 健康快照</button>
+                                            <button class="btn btn-secondary slim" id="captureCandumpBtn">采集 candump</button>
+                                            <button class="btn btn-warning slim" id="runReleaseGateBtn">检查出厂 Gate</button>
+                                        </div>
+                                        <div id="factoryEvidenceResult" class="artifact-list empty-state">尚未采集证据或执行 Gate</div>
+                                    </div>
+                                </div>
+                                </div>
+                                <div class="factory-section-panel" data-factory-section-panel="reports">
+                                <div class="section-title-row">
+                                    <div>
+                                        <span class="group-kicker">REPORTS</span>
+                                        <h3>正式报告与交付包</h3>
+                                    </div>
+                                    <p class="muted">正式出厂 PDF 会汇总单电机样本、整臂扫描、官方零位、Demo、原始帧和证据哈希。</p>
+                                </div>
+                                <div class="command-band single-column-band">
+                                    <div class="command-group">
+                                        <div class="group-kicker">出厂报告</div>
+                                        <div class="comparison-card">
+                                            <strong>报告数据规则</strong>
+                                            <ul class="info-list compact">
+                                                <li>报告格式可以固定，测量值、状态帧、参数值和 PASS/WARNING 结论不能固定。</li>
+                                                <li>正式报告只读取同一整机 CN、同一左右臂 Profile、已链接的测试证据。</li>
+                                                <li>缺少 active standard 要求的数据时，报告会列出补测项；新版标准不再要求的数据应从报告标准移除。</li>
+                                                <li>当前右臂 J1-J8 TIMEOUT=5000；左臂 J1-J4=1000、J5-J8=5000。报告数值仍必须来自同 CN、同侧实测证据。</li>
+                                                <li>CAN / ESC / MST ID 在报告中使用 0x05 这类十六进制格式。</li>
+                                            </ul>
+                                        </div>
+                                        <div class="button-row compact-button-row">
+                                            <button class="btn btn-primary slim" id="generateZeroReportBtn">零位校准报告</button>
+                                            <button class="btn btn-primary slim" id="generateSafetyReportBtn">安全测试报告</button>
+                                            <button class="btn btn-warning slim" id="generateFactoryAcceptanceReportBtn">正式出厂 PDF</button>
+                                        </div>
+                                        <div id="factoryReportResult" class="artifact-list empty-state">尚未生成出厂报告</div>
+                                    </div>
+                                </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="panel-side">
+                            <div class="stacked-card-list">
+                                <div class="side-card" data-flow-scope="static">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>总线电机 ID 盘点</h3>
+                                    </div>
+                                    <div id="lineInventorySummary" class="summary-grid empty-state">连接后可检测整条线路上的电机 ID</div>
+                                    <div id="lineInventoryList" class="result-list compact-results empty-state">尚未盘点</div>
+                                </div>
+                                <div class="side-card" data-flow-scope="static">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>机械臂工站建议</h3>
+                                    </div>
+                                    <ul class="info-list compact">
+                                        <li>先做整臂 ID 盘点，再做通信扫描。</li>
+                                        <li>先把 `openarm-can-motor-check` 这一层打通，再考虑 Demo。</li>
+                                        <li>零位校准和 Demo 都属于受控动作模式，未满足条件时不要执行。</li>
+                                    </ul>
+                                </div>
+                                <div class="side-card" data-flow-scope="dynamic">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>最近整机档案</h3>
+                                    </div>
+                                    <div id="factoryArmList" class="result-list compact-results empty-state">暂无整机档案</div>
+                                </div>
+                                <div class="side-card" data-flow-scope="dynamic">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>最近电机档案</h3>
+                                    </div>
+                                    <div id="factoryMotorList" class="result-list compact-results empty-state">暂无电机档案</div>
+                                </div>
+                                <div class="side-card" data-flow-scope="dynamic">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>最近零位校准</h3>
+                                    </div>
+                                    <div id="factoryZeroRecordList" class="result-list compact-results empty-state">暂无零位校准记录</div>
+                                </div>
+                                <div class="side-card" data-flow-scope="dynamic">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>最近 Demo 验证</h3>
+                                    </div>
+                                    <div id="factoryDemoRecordList" class="result-list compact-results empty-state">暂无 Demo 验证记录</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="tab-panel" id="reportTab">
+                    <div class="panel split-panel wide-side">
+                        <div class="panel-body">
+                            <div class="panel-heading">
+                                <div>
+                                    <h2>报告归档</h2>
+                                    <p class="muted">最终归档入口：生成正式出厂 PDF，并保留当前任务原始报告与工件。</p>
+                                </div>
+                                <button class="btn btn-primary slim" id="refreshReportBtn">刷新报告</button>
+                            </div>
+                            <div class="command-band single-column-band">
+                                <div class="command-group">
+                                    <div class="group-kicker">正式出厂报告</div>
+                                    <div class="comparison-card">
+                                        <strong>报告数据规则</strong>
+                                        <ul class="info-list compact">
+                                            <li>严格按整机 CN、左/右臂 Profile 和链接证据取数，不借用其他机械臂数据。</li>
+                                            <li>缺测数据会在报告结果中提示补全；已废止测试项应从报告标准移除后再生成。</li>
+                                            <li>固定模板不等于固定数值，所有测量值必须来自对应测试记录。</li>
+                                            <li>当前右臂 J1-J8 TIMEOUT=5000；左臂保留分级 TIMEOUT。报告仅记录同 CN、同侧回读值。</li>
+                                        </ul>
+                                    </div>
+                                    <div class="command-inline">
+                                        <div>
+                                            <strong>生成正式出厂 PDF</strong>
+                                            <p class="muted">使用当前整机 CN，按最终模板输出整臂测试、单电机数据、官方零位、Demo、原始帧和证据哈希。</p>
+                                        </div>
+                                        <button class="btn btn-warning slim" id="generateFactoryAcceptanceReportArchiveBtn">正式出厂 PDF</button>
+                                    </div>
+                                    <div id="archiveFactoryReportResult" class="artifact-list empty-state">尚未生成正式出厂报告</div>
+                                </div>
+                            </div>
+                            <div class="section-title-row">
+                                <div>
+                                    <span class="group-kicker">JOB REPORT</span>
+                                    <h3>当前任务原始报告</h3>
+                                </div>
+                            </div>
+                            <div id="reportSummary" class="summary-grid empty-state">尚无报告</div>
+                        </div>
+                        <div class="panel-side">
+                            <h3>工件</h3>
+                            <div id="artifactList" class="artifact-list empty-state">任务完成后显示</div>
+                        </div>
+                    </div>
+                </section>
+            </section>
+
+            <aside class="right-rail panel">
+                <div class="monitor-heading">
+                    <div>
+                        <span class="group-kicker">LIVE</span>
+                        <h2>实时数据监测</h2>
+                    </div>
+                    <div class="monitor-dot"></div>
+                </div>
+                <div class="status-stack">
+                    <div class="status-card">
+                        <div class="status-label">设备</div>
+                        <div class="status-value" id="deviceState">未连接</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">任务</div>
+                        <div class="status-value" id="jobState">draft</div>
+                    </div>
+                    <div class="status-card">
+                        <div class="status-label">步骤</div>
+                        <div class="status-value" id="jobStep">-</div>
+                    </div>
+                </div>
+                <div class="live-grid" id="liveStatus">
+                    <div class="live-item"><span>位置</span><strong id="livePosition">0.00</strong></div>
+                    <div class="live-item"><span>速度</span><strong id="liveVelocity">0.00</strong></div>
+                    <div class="live-item"><span>扭矩</span><strong id="liveTorque">0.00</strong></div>
+                    <div class="live-item"><span>MOS</span><strong id="liveMos">0.0</strong></div>
+                    <div class="live-item"><span>Rotor</span><strong id="liveRotor">0.0</strong></div>
+                    <div class="live-item"><span>状态</span><strong id="liveStatusText">UNKNOWN</strong></div>
+                    <div class="live-item bus-health"><span>CAN RX/TX Err</span><strong id="liveCanErrors">0 / 0</strong></div>
+                    <div class="live-item bus-health"><span>CAN Drop</span><strong id="liveCanDropped">0</strong></div>
+                    <div class="live-item bus-health"><span>CAN Packets</span><strong id="liveCanPackets">0</strong></div>
+                    <div class="live-item bus-health"><span>CAN Health</span><strong id="liveCanHealth">-</strong></div>
+                </div>
+                <div class="log-box">
+                    <div class="panel-heading">
+                        <h3>最近事件</h3>
+                        <button class="text-button" id="clearLogBtn">清空</button>
+                    </div>
+                    <div id="eventLog" class="event-log"></div>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <div class="modal hidden" id="confirmModal">
+        <div class="modal-card">
+            <h3 id="modalTitle">确认危险操作</h3>
+            <p id="modalBody"></p>
+            <div class="button-row">
+                <button class="btn btn-secondary" id="modalCancelBtn">取消</button>
+                <button class="btn btn-warning" id="modalConfirmBtn">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}?v=20260509-arm-runtime-2"></script>
+</body>
+</html>

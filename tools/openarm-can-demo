@@ -1,0 +1,270 @@
+#!/home/ubuntu/Projects/OpenARM/.venv/bin/python
+"""OpenArm official demo flow adapted for this workstation's single-arm IDs."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+import sys
+import time
+
+import can
+import openarm_can as oa
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.openarm_official_enable_check import collect_status, keepalive_and_collect_status, read_positions_with_workbench_driver
+
+
+MOTOR_TYPES = [
+    oa.MotorType.DM8009,
+    oa.MotorType.DM8009,
+    oa.MotorType.DM4340,
+    oa.MotorType.DM4340,
+    oa.MotorType.DM4310,
+    oa.MotorType.DM4310,
+    oa.MotorType.DM4310,
+]
+
+def id_map(arm_side: str):
+    if arm_side == "left_arm":
+        return (
+            [0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F],
+            [0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F],
+            0x10,
+            0x20,
+        )
+    return (
+        [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07],
+        [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17],
+        0x08,
+        0x18,
+    )
+
+
+def print_motor_status(prefix: str, motor):
+    print(
+        f"{prefix} {motor.get_send_can_id()} "
+        f"recv={motor.get_recv_can_id()} "
+        f"position={motor.get_position():.6f} "
+        f"velocity={motor.get_velocity():.6f} "
+        f"torque={motor.get_torque():.6f} "
+        f"tmos={motor.get_state_tmos()} "
+        f"trotor={motor.get_state_trotor()}"
+    )
+
+
+def hold_all(openarm, duration_s: float, kp: float = 2.0, kd: float = 0.5):
+    arm_component = openarm.get_arm()
+    gripper = openarm.get_gripper()
+    deadline = time.time() + float(duration_s)
+    while time.time() < deadline:
+        arm_component.mit_control_all(
+            [oa.MITParam(kp, kd, motor.get_position(), 0.0, 0.0) for motor in arm_component.get_motors()]
+        )
+        gripper.mit_control_all(
+            [oa.MITParam(1.0, 0.2, gripper.get_motors()[0].get_position(), 0.0, 0.0)]
+        )
+        openarm.recv_all()
+        time.sleep(0.005)
+
+
+def command_all(openarm, arm_params, gripper_param=None, duration_s: float = 0.2):
+    arm_component = openarm.get_arm()
+    gripper = openarm.get_gripper()
+    if gripper_param is None:
+        gripper_param = oa.MITParam(1.0, 0.2, gripper.get_motors()[0].get_position(), 0.0, 0.0)
+    deadline = time.time() + float(duration_s)
+    while time.time() < deadline:
+        arm_component.mit_control_all(arm_params)
+        gripper.mit_control_all([gripper_param])
+        openarm.recv_all()
+        time.sleep(0.005)
+
+
+def command_gripper_position(
+    openarm,
+    target_position: float,
+    label: str,
+    duration_s: float = 3.0,
+    kp: float = 5.0,
+    kd: float = 0.6,
+    arm_hold_q=None,
+):
+    arm_component = openarm.get_arm()
+    gripper = openarm.get_gripper()
+    motor = gripper.get_motors()[0]
+    start = float(motor.get_position())
+    observed = [start]
+    print(f"{label} gripper: target={target_position:.6f} start={start:.6f}")
+    if arm_hold_q is None:
+        arm_hold_q = [float(arm_motor.get_position()) for arm_motor in arm_component.get_motors()]
+    deadline = time.time() + float(duration_s)
+    while time.time() < deadline:
+        alpha = 1.0 - max(0.0, deadline - time.time()) / max(float(duration_s), 0.001)
+        alpha = min(max(alpha, 0.0), 1.0)
+        alpha = alpha * alpha * (3.0 - 2.0 * alpha)
+        target = start + (float(target_position) - start) * min(max(alpha, 0.0), 1.0)
+        arm_params = [oa.MITParam(1.5, 0.4, q, 0.0, 0.0) for q in arm_hold_q]
+        arm_component.mit_control_all(arm_params)
+        gripper.mit_control_all([oa.MITParam(kp, kd, target, 0.0, 0.0)])
+        openarm.recv_all()
+        observed.append(float(motor.get_position()))
+        time.sleep(0.005)
+    for _ in range(20):
+        arm_component.mit_control_all([oa.MITParam(1.5, 0.4, q, 0.0, 0.0) for q in arm_hold_q])
+        gripper.mit_control_all([oa.MITParam(kp, kd, float(target_position), 0.0, 0.0)])
+        openarm.recv_all()
+        observed.append(float(motor.get_position()))
+        time.sleep(0.005)
+    end = float(motor.get_position())
+    min_pos = min(observed)
+    max_pos = max(observed)
+    travel = max_pos - min_pos
+    print(
+        f"{label} gripper result: start={start:.6f} end={end:.6f} "
+        f"delta={end - start:.6f} min={min_pos:.6f} max={max_pos:.6f} travel={travel:.6f}"
+    )
+    return start, end
+
+
+def status_is_clean_disabled(status):
+    if not status:
+        return False
+    if status.get("status") == "STATE_FRAME_ID16_UNTAGGED":
+        return True
+    if status.get("status") in {"DISABLED", "NORMAL"} and status.get("status_code") in (0x0, None):
+        return True
+    return False
+
+
+def disable_with_confirmation(openarm, bus, recv_ids):
+    disabled_status = {}
+    for _ in range(8):
+        openarm.disable_all()
+        openarm.recv_all(1000)
+        time.sleep(0.05)
+        disabled_status = collect_status(bus, recv_ids, 0.2)
+        if all(status_is_clean_disabled(disabled_status.get(recv_id)) for recv_id in recv_ids):
+            break
+    ok = True
+    for recv_id in recv_ids:
+        status = disabled_status.get(recv_id)
+        print(f"DISABLE recv_id=0x{recv_id:X} status={status}")
+        if not status_is_clean_disabled(status):
+            ok = False
+    return ok
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="OpenArm demo adapted for workstation arm ID profiles")
+    parser.add_argument("--canport", default="can0")
+    parser.add_argument("--arm-side", "--arm_side", dest="arm_side", choices=["right_arm", "left_arm"], default="right_arm")
+    parser.add_argument("--fd", action="store_true", help="Use CAN-FD mode. Default keeps official demo behavior off unless requested.")
+    parser.add_argument("--enable-hold-ms", type=int, default=1500, help="Low-gain hold duration after enable.")
+    parser.add_argument("--phase-hold-s", type=float, default=1.0, help="Visible hold duration for each demo phase.")
+    parser.add_argument("--gripper-open-target", type=float, default=1.0472, help="Target position used for the gripper open phase.")
+    parser.add_argument("--gripper-close-target", type=float, default=0.0, help="Target position used for the gripper close phase.")
+    args = parser.parse_args()
+
+    send_ids, recv_ids, gripper_send, gripper_recv = id_map(args.arm_side)
+
+    print("=== OpenArm Workstation Demo ===")
+    print(f"CAN interface: {args.canport}")
+    print(f"arm_side: {args.arm_side}")
+    print(f"CAN-FD enabled: {args.fd}")
+    print(f"send_can_ids: {[hex(item) for item in send_ids + [gripper_send]]}")
+    print(f"recv_can_ids: {[hex(item) for item in recv_ids + [gripper_recv]]}")
+
+    arm = oa.OpenArm(args.canport, args.fd)
+    arm.init_arm_motors(MOTOR_TYPES, send_ids, recv_ids)
+    arm.init_gripper_motor(oa.MotorType.DM4310, gripper_send, gripper_recv)
+    bus = can.interface.Bus(channel=args.canport, interface="socketcan")
+
+    try:
+        all_recv_ids = recv_ids + [gripper_recv]
+        arm_q, grip_q = read_positions_with_workbench_driver(args.canport, args.arm_side)
+        print(f"pre_enable_positions_arm={[round(item, 6) for item in arm_q]}")
+        print(f"pre_enable_positions_gripper={[round(item, 6) for item in grip_q]}")
+
+        arm.set_callback_mode_all(oa.CallbackMode.STATE)
+        print("\n=== Enabling Motors ===")
+        arm.enable_all()
+        sent, enabled_status = keepalive_and_collect_status(
+            arm,
+            bus,
+            all_recv_ids,
+            len(send_ids),
+            max(0.3, min(args.enable_hold_ms / 1000.0, 10.0)),
+            arm_q,
+            grip_q,
+        )
+        print(f"enable_keepalive_frames_sent={sent}")
+        enabled_ok = True
+        for recv_id in all_recv_ids:
+            status = enabled_status.get(recv_id)
+            print(f"ENABLE recv_id=0x{recv_id:X} status={status}")
+            if not status or (status.get("status_code") not in (0x1, None)):
+                enabled_ok = False
+        if not enabled_ok:
+            raise RuntimeError("not all motors reported ENABLED during demo enable hold")
+
+        print("\n=== Verifying Workstation ID Mapping ===")
+        print("Parameter query skipped: IDs were verified by the workstation profile scan and motor-check.")
+        for motor in arm.get_arm().get_motors():
+            print(f"Arm Motor: send={motor.get_send_can_id()} recv={motor.get_recv_can_id()}")
+        for motor in arm.get_gripper().get_motors():
+            print(f"Gripper Motor: send={motor.get_send_can_id()} recv={motor.get_recv_can_id()}")
+
+        print("\n=== Controlling Motors ===")
+        arm.set_callback_mode_all(oa.CallbackMode.STATE)
+        command_all(
+            arm,
+            [oa.MITParam(2.0, 1.0, motor.get_position(), 0.0, 0.0) for motor in arm.get_arm().get_motors()],
+            duration_s=args.phase_hold_s,
+        )
+
+        command_all(
+            arm,
+            [oa.MITParam(1.5, 0.5, motor.get_position(), 0.0, 0.0) for motor in arm.get_arm().get_motors()],
+            duration_s=min(args.phase_hold_s, 0.5),
+        )
+
+        print("Opening gripper...")
+        command_gripper_position(arm, args.gripper_open_target, "OPEN", duration_s=max(args.phase_hold_s, 2.0), arm_hold_q=arm_q)
+        print("Closing gripper...")
+        command_gripper_position(arm, args.gripper_close_target, "CLOSE", duration_s=max(args.phase_hold_s, 2.0), arm_hold_q=arm_q)
+        hold_all(arm, 0.5)
+
+        print("\n=== Status Monitoring ===")
+        for index in range(10):
+            hold_all(arm, 0.1)
+            print(f"--- sample {index + 1}/10 ---")
+            for motor in arm.get_arm().get_motors():
+                print_motor_status("Arm Motor", motor)
+            for motor in arm.get_gripper().get_motors():
+                print_motor_status("Gripper Motor", motor)
+
+        print("\n=== Cleanup ===")
+        if not disable_with_confirmation(arm, bus, all_recv_ids):
+            raise RuntimeError("one or more motors did not report clean DISABLED status after demo")
+        print("Demo completed successfully; motors disabled.")
+        return 0
+    except KeyboardInterrupt:
+        print("\nInterrupted, disabling motors...")
+        arm.disable_all()
+        collect_status(bus, recv_ids + [gripper_recv], 0.2)
+        return 130
+    except Exception as exc:
+        print(f"Error: {exc}")
+        arm.disable_all()
+        collect_status(bus, recv_ids + [gripper_recv], 0.2)
+        return 1
+    finally:
+        bus.shutdown()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

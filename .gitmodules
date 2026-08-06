@@ -1,0 +1,3 @@
+[submodule "external/qt5_damiao_motor_friction_detection"]
+	path = external/qt5_damiao_motor_friction_detection
+	url = https://github.com/cdssywc/qt5_damiao_motor_friction_detection.git

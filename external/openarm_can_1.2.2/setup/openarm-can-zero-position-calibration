@@ -1,0 +1,780 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Copyright 2025 Enactic, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import openarm_can as oa
+import argparse
+from pathlib import Path
+import sys
+import time
+import numpy as np
+from enum import IntEnum
+
+ROOT = Path(__file__).resolve().parents[3]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from src.damiao_motor_driver import DM_Motor_Type, DamiaoSocketCANDriver, Motor
+
+# ---------- IDs / Limits / Signs ----------
+
+WORKSTATION_GAIN_SCALE = 1.0
+WORKSTATION_MAX_BUMP_DEG = 18.0
+WORKSTATION_MAX_BUMP_TIME_S = 6.0
+WORKSTATION_BUMP_STEP_SCALE = 1.0
+WORKSTATION_BUMP_DT_S = 0.005
+WORKSTATION_BUMP_BASE_STEP_DEG = 0.2
+WORKSTATION_POSITION_SYNC_TOL_RAD = 0.15
+WORKSTATION_RESTORE_MAX_DEG = 30.0
+WORKSTATION_RESTORE_SPEED_RAD_S = 0.12
+WORKSTATION_RECV_PUMP_CYCLES = 3
+WORKSTATION_RECV_TIMEOUT_US = 2000
+WORKSTATION_BUMP_PROGRESS_DEG = 5.0
+WORKSTATION_ACCEPT_NEAR_GUARD_DEG = 3.0
+WORKSTATION_ZERO_VERIFY_TOL_RAD = 0.02
+
+
+class LimitSearchFailed(RuntimeError):
+    """Raised when a joint does not produce a reliable mechanical-stop signal."""
+
+
+class JointID(IntEnum):
+    J1 = 0
+    J2 = 1
+    J3 = 2
+    J4 = 3
+    J5 = 4
+    J6 = 5
+    J7 = 6
+    GRIPPER = -1
+
+
+mech_lim = {
+    JointID.J1: [np.deg2rad(-80),  np.deg2rad(200)],
+    JointID.J2: [np.deg2rad(-100), np.deg2rad(100)],
+    JointID.J3: [np.deg2rad(-90),  np.deg2rad(90)],
+    JointID.J4: [np.deg2rad(0),    np.deg2rad(140)],
+    JointID.J5: [np.deg2rad(-90),  np.deg2rad(90)],
+    JointID.J6: [np.deg2rad(-45),  np.deg2rad(45)],
+    JointID.J7: [np.deg2rad(-90),  np.deg2rad(90)],
+    JointID.GRIPPER: [np.deg2rad(-60), np.deg2rad(0)],
+}
+
+# Per-joint sign convention used in ideal-zero delta computation
+JOINT_SIGN = {
+    JointID.J1: -1.0, JointID.J2: -1.0, JointID.J3: +1.0, JointID.J4: +1.0,
+    JointID.J5: +1.0, JointID.J6: +1.0, JointID.J7: +1.0, JointID.GRIPPER: +1.0,
+}
+
+# ---------- Core motion primitives ----------
+
+
+def _scaled_gain(kp, kd):
+    return max(0.0, kp * WORKSTATION_GAIN_SCALE), max(0.0, kd * WORKSTATION_GAIN_SCALE)
+
+
+def _hold_param(motor, kp=6.0, kd=0.6):
+    kp, kd = _scaled_gain(kp, kd)
+    return oa.MITParam(kp, kd, motor.get_position(), 0.0, 0.0)
+
+
+def _read_initial_positions(openarm, arm, grip, samples=30, timeout_us=2000):
+    """Collect several state frames before enabling so the first hold target is real."""
+    arm_samples = []
+    grip_samples = []
+    for _ in range(samples):
+        openarm.recv_all(timeout_us)
+        arm_q = [motor.get_position() for motor in arm.get_motors()]
+        grip_q = [motor.get_position() for motor in grip.get_motors()]
+        if all(np.isfinite(arm_q)) and all(np.isfinite(grip_q)):
+            arm_samples.append(arm_q)
+            grip_samples.append(grip_q)
+        time.sleep(0.005)
+    if len(arm_samples) < 5 or len(grip_samples) < 5:
+        raise RuntimeError("not enough valid position feedback before enable")
+    arm_arr = np.asarray(arm_samples, dtype=float)
+    grip_arr = np.asarray(grip_samples, dtype=float)
+    if np.max(np.ptp(arm_arr, axis=0)) > 0.25 or np.max(np.ptp(grip_arr, axis=0)) > 0.25:
+        raise RuntimeError("position feedback is unstable before enable")
+    if np.all(np.abs(np.median(arm_arr, axis=0)) < 1e-9) and np.all(np.abs(np.median(grip_arr, axis=0)) < 1e-9):
+        raise RuntimeError("openarm_can position feedback is all zero; refusing to enable")
+    return list(np.median(arm_arr, axis=0)), list(np.median(grip_arr, axis=0))
+
+
+def _ids_for_side(arm_side):
+    if arm_side == 'left_arm':
+        return [0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F], [0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F], 0x10, 0x20
+    return [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07], [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17], 0x08, 0x18
+
+
+def _read_initial_positions_workbench(canport, arm_side, samples=5):
+    send_ids, recv_ids, gripper_send_can_id, gripper_recv_can_id = _ids_for_side(arm_side)
+    motor_types = [
+        DM_Motor_Type.DM8009, DM_Motor_Type.DM8009, DM_Motor_Type.DM4340, DM_Motor_Type.DM4340,
+        DM_Motor_Type.DM4310, DM_Motor_Type.DM4310, DM_Motor_Type.DM4310,
+    ]
+    driver = DamiaoSocketCANDriver(channel=canport, bitrate=1000000)
+    if not driver.connect():
+        raise RuntimeError("workbench driver failed to connect for position pre-read")
+    try:
+        motors = [
+            Motor(motor_type, send_id, recv_id)
+            for motor_type, send_id, recv_id in zip(motor_types, send_ids, recv_ids)
+        ]
+        gripper = Motor(DM_Motor_Type.DM4310, gripper_send_can_id, gripper_recv_can_id)
+        arm_samples = []
+        grip_samples = []
+        for _ in range(samples):
+            arm_q = []
+            for motor in motors:
+                driver.refresh_motor_status(motor)
+                snap = motor.snapshot()
+                if snap.get("has_error") or snap.get("is_enabled"):
+                    raise RuntimeError(f"unsafe pre-read status on motor {motor.SlaveID}: {snap.get('status')}")
+                arm_q.append(float(snap["position"]))
+            driver.refresh_motor_status(gripper)
+            grip_snap = gripper.snapshot()
+            if grip_snap.get("has_error") or grip_snap.get("is_enabled"):
+                raise RuntimeError(f"unsafe pre-read status on gripper {gripper.SlaveID}: {grip_snap.get('status')}")
+            arm_samples.append(arm_q)
+            grip_samples.append(float(grip_snap["position"]))
+            time.sleep(0.02)
+    finally:
+        driver.disconnect()
+    arm_arr = np.asarray(arm_samples, dtype=float)
+    grip_arr = np.asarray(grip_samples, dtype=float)
+    if np.max(np.ptp(arm_arr, axis=0)) > 0.05 or np.max(np.ptp(grip_arr, axis=0)) > 0.05:
+        raise RuntimeError("workbench position feedback is unstable before enable")
+    arm_q = list(np.median(arm_arr, axis=0))
+    grip_q = [float(np.median(grip_arr, axis=0))]
+    if all(abs(item) < 1e-9 for item in arm_q + grip_q):
+        raise RuntimeError("workbench position feedback is all zero; refusing to enable")
+    return arm_q, grip_q
+
+
+def _safe_hold_params(arm_q, grip_q):
+    """Very soft current-position hold used before any limit-search motion."""
+    arm_params = [oa.MITParam(2.0, 0.15, float(q), 0.0, 0.0) for q in arm_q]
+    grip_params = [oa.MITParam(1.0, 0.1, float(grip_q[0]), 0.0, 0.0)]
+    return arm_params, grip_params
+
+
+def _safe_disable_all(openarm, repeats=5):
+    """Send disable more than once so shutdown is robust on a busy CAN bus."""
+    for _ in range(max(1, int(repeats))):
+        openarm.disable_all()
+        openarm.recv_all(1000)
+        time.sleep(0.02)
+
+
+def _fresh_zero_verify_with_workbench(canport, arm_side):
+    """Read fresh post-zero frames with the workstation driver.
+
+    openarm_can keeps the last decoded position on the motor object. If a motor
+    stops replying immediately after set_zero_all(), reading that object can look
+    like a position error even though the more precise problem is missing fresh
+    feedback. Factory acceptance should fail in both cases, but the diagnosis
+    must distinguish stale/missing frames from a real non-zero readback.
+    """
+    send_ids, recv_ids, gripper_send_can_id, gripper_recv_can_id = _ids_for_side(arm_side)
+    motor_types = [
+        DM_Motor_Type.DM8009, DM_Motor_Type.DM8009, DM_Motor_Type.DM4340, DM_Motor_Type.DM4340,
+        DM_Motor_Type.DM4310, DM_Motor_Type.DM4310, DM_Motor_Type.DM4310,
+    ]
+    driver = DamiaoSocketCANDriver(channel=canport, bitrate=1000000)
+    if not driver.connect():
+        raise RuntimeError("workbench driver failed to connect for zero verification")
+    try:
+        motors = [
+            Motor(motor_type, send_id, recv_id)
+            for motor_type, send_id, recv_id in zip(motor_types, send_ids, recv_ids)
+        ]
+        gripper = Motor(DM_Motor_Type.DM4310, gripper_send_can_id, gripper_recv_can_id)
+        arm_q = []
+        missing = []
+        for idx, motor in enumerate(motors, start=1):
+            if not driver.refresh_motor_status(motor):
+                missing.append(f"J{idx}")
+                arm_q.append(float("nan"))
+                continue
+            arm_q.append(float(motor.getPosition()))
+        if not driver.refresh_motor_status(gripper):
+            missing.append("GRIPPER")
+            grip_q = [float("nan")]
+        else:
+            grip_q = [float(gripper.getPosition())]
+        return arm_q, grip_q, missing
+    finally:
+        driver.disconnect()
+
+
+def _quick_disable_and_write_zero(openarm, arm, grip, canport=None, arm_side=None, repeats=3):
+    """Minimize disabled drift before writing the persistent zero position."""
+    openarm.disable_all()
+    openarm.recv_all(1000)
+    time.sleep(0.005)
+    for _ in range(max(1, int(repeats))):
+        openarm.set_zero_all()
+        openarm.recv_all(2000)
+        time.sleep(0.02)
+    for _ in range(10):
+        openarm.recv_all(2000)
+        time.sleep(0.005)
+    if canport and arm_side:
+        arm_q, grip_q, missing = _fresh_zero_verify_with_workbench(canport, arm_side)
+    else:
+        missing = []
+        arm_q = [float(motor.get_position()) for motor in arm.get_motors()]
+        grip_q = [float(motor.get_position()) for motor in grip.get_motors()]
+    printable_arm_q = [None if not np.isfinite(q) else round(q, 6) for q in arm_q]
+    printable_grip_q = [None if not np.isfinite(q) else round(q, 6) for q in grip_q]
+    print("[INFO] post-zero arm q:", printable_arm_q, flush=True)
+    print("[INFO] post-zero gripper q:", printable_grip_q, flush=True)
+    if missing:
+        raise RuntimeError(
+            "zero write verification failed; missing fresh status frames: "
+            f"{', '.join(missing)}"
+        )
+    bad = [
+        f"J{idx + 1}={pos:.6f}"
+        for idx, pos in enumerate(arm_q)
+        if np.isfinite(pos) and abs(pos) > WORKSTATION_ZERO_VERIFY_TOL_RAD
+    ]
+    bad.extend(
+        f"GRIPPER={pos:.6f}"
+        for pos in grip_q
+        if np.isfinite(pos) and abs(pos) > WORKSTATION_ZERO_VERIFY_TOL_RAD
+    )
+    if bad:
+        raise RuntimeError(
+            "zero write verification failed; positions outside "
+            f"{WORKSTATION_ZERO_VERIFY_TOL_RAD:.3f} rad: {', '.join(bad)}"
+        )
+    return arm_q, grip_q
+
+
+def _pump_feedback(openarm, cycles=WORKSTATION_RECV_PUMP_CYCLES, timeout_us=WORKSTATION_RECV_TIMEOUT_US):
+    """Drain several state frames after MIT commands before reading motor objects."""
+    for _ in range(max(1, int(cycles))):
+        openarm.recv_all(timeout_us)
+        time.sleep(0.001)
+
+
+def _verify_openarm_position_sync(openarm, arm, grip, expected_arm_q, expected_grip_q):
+    arm_params, grip_params = _safe_hold_params(expected_arm_q, expected_grip_q)
+    for _ in range(40):
+        arm.mit_control_all(arm_params)
+        grip.mit_control_all(grip_params)
+        openarm.recv_all(2000)
+        time.sleep(0.005)
+    arm_q = [motor.get_position() for motor in arm.get_motors()]
+    grip_q = [motor.get_position() for motor in grip.get_motors()]
+    arm_err = [abs(float(actual) - float(expected)) for actual, expected in zip(arm_q, expected_arm_q)]
+    grip_err = [abs(float(actual) - float(expected)) for actual, expected in zip(grip_q, expected_grip_q)]
+    print("[INFO] openarm_can synced arm q:", [round(q, 6) for q in arm_q], flush=True)
+    print("[INFO] openarm_can sync errors:", [round(e, 6) for e in arm_err + grip_err], flush=True)
+    if any(error > WORKSTATION_POSITION_SYNC_TOL_RAD for error in arm_err):
+        raise RuntimeError("openarm_can arm position feedback is not synchronized; refusing dynamic zero")
+    if any(error > WORKSTATION_POSITION_SYNC_TOL_RAD for error in grip_err):
+        raise RuntimeError("openarm_can gripper position feedback is not synchronized; refusing dynamic zero")
+
+
+def _safe_enable_hold(openarm, arm, grip, arm_q, grip_q, cycles=120):
+    """Enable with a low-gain current-position hold for workstation safety."""
+    openarm.enable_all()
+    arm_params, grip_params = _safe_hold_params(arm_q, grip_q)
+    for _ in range(cycles):
+        arm.mit_control_all(arm_params)
+        grip.mit_control_all(grip_params)
+        openarm.recv_all(2000)
+        time.sleep(0.005)
+
+
+def _send_with_holds(openarm, arm, grip, active_comp, active_idx, active_param, feedback_cycles=None):
+    arm_motors = arm.get_motors()
+    grip_motors = grip.get_motors()
+    arm_params = [_hold_param(motor) for motor in arm_motors]
+    grip_params = [_hold_param(grip_motors[0], kp=2.0, kd=0.3)]
+    if len(active_comp.get_motors()) == 1:
+        grip_params[0] = active_param
+    else:
+        arm_params[active_idx] = active_param
+    arm.mit_control_all(arm_params)
+    grip.mit_control_all(grip_params)
+    # Keep the official active-joint send path as the final command.  The
+    # workstation uses mit_control_all for watchdog keepalive, but the upstream
+    # zero script drives the searched joint with mit_control_one; sending it
+    # explicitly avoids a stale hold/batch-send issue on later arm indices.
+    active_comp.mit_control_one(active_idx, active_param)
+    _pump_feedback(openarm, cycles=feedback_cycles or WORKSTATION_RECV_PUMP_CYCLES)
+
+
+def _hold_all(openarm, arm, grip, duration_s, dt=0.005):
+    """Pause while keeping every motor alive so TIMEOUT=1000 does not trip."""
+    deadline = time.time() + float(duration_s)
+    while time.time() < deadline:
+        arm.mit_control_all([_hold_param(motor) for motor in arm.get_motors()])
+        grip.mit_control_all([_hold_param(grip.get_motors()[0], kp=2.0, kd=0.3)])
+        openarm.recv_all()
+        time.sleep(dt)
+
+
+def interpolate(openarm, arm, grip, comp, joint_id: JointID, delta_rad,
+                kp=52.0, kd=1.5, torque_assist=0.0, interp_time=2.0):
+    """Official interpolation for the active joint plus TIMEOUT keepalive for the rest."""
+    idx = int(joint_id)
+    m = comp.get_motors()[idx]
+    q0 = m.get_position()
+    q1 = q0 + float(delta_rad)
+    n_steps, dt = 500, (interp_time / 500.0)
+    tau = np.copysign(1.0, q1 - q0) * abs(torque_assist)
+    for i in range(n_steps + 1):
+        alpha = i / n_steps
+        q = q0 + (q1 - q0) * alpha
+        _send_with_holds(openarm, arm, grip, comp, idx, oa.MITParam(kp, kd, q, 0.0, tau), feedback_cycles=1)
+        time.sleep(dt)
+
+
+def _hit_thresholds(comp, idx):
+    """Return (dq_th, tau_th) based on joint/gripper."""
+    is_gripper = (len(comp.get_motors()) == 1)
+    if is_gripper:     # gripper is soft
+        return 0.3, 0.3
+    if idx == 0:       # J1 on arm is stricter
+        return 0.0125, 5.0
+    return 0.1, 2.0
+
+
+def bump_to_limit(openarm, arm, grip, comp, joint_id,
+                  step_deg=None, kp=45.0, kd=1.2, torque_bias=0.0):
+    """Official-style step on active joint plus TIMEOUT keepalive for the rest."""
+    idx = int(joint_id)
+    if step_deg is None:
+        step_deg = WORKSTATION_BUMP_BASE_STEP_DEG
+    step_rad = np.deg2rad(step_deg * WORKSTATION_BUMP_STEP_SCALE)
+    tau_cmd = np.copysign(1.0, step_deg) * abs(torque_bias)
+
+    motors = comp.get_motors()
+    q_start = motors[idx].get_position()
+    q_target = q_start
+    max_delta = np.deg2rad(WORKSTATION_MAX_BUMP_DEG)
+    deadline = time.time() + WORKSTATION_MAX_BUMP_TIME_S
+
+    dq_th, tau_th = _hit_thresholds(comp, idx)
+    last_progress_deg = 0.0
+    print(f"[BUMP] {joint_id.name}: start={q_start:.6f} rad "
+          f"step={np.rad2deg(step_rad):.3f} deg max={WORKSTATION_MAX_BUMP_DEG:.1f} deg",
+          flush=True)
+
+    while True:
+        target_delta_rad = q_target - q_start
+        if abs(target_delta_rad) >= max_delta or time.time() > deadline:
+            _pump_feedback(openarm, cycles=12)
+            m = comp.get_motors()[idx]
+            actual_delta_rad = m.get_position() - q_start
+            target_delta_deg = np.rad2deg(target_delta_rad)
+            actual_delta_deg = np.rad2deg(actual_delta_rad)
+            near_guard = abs(actual_delta_rad) >= max_delta - np.deg2rad(WORKSTATION_ACCEPT_NEAR_GUARD_DEG)
+            expected_limit_rad = mech_lim.get(joint_id, [None, None])[1 if step_rad > 0 else 0]
+            near_joint_limit = (
+                expected_limit_rad is not None
+                and abs(actual_delta_rad - expected_limit_rad) <= np.deg2rad(WORKSTATION_ACCEPT_NEAR_GUARD_DEG)
+                and abs(m.get_torque()) > tau_th
+            )
+            if near_guard or near_joint_limit:
+                stop_reason = "near guard" if near_guard else "near joint limit"
+                print(f"[INFO] mechanical stop near guard (Joint {joint_id.name}): "
+                      f"reason={stop_reason} "
+                      f"target={target_delta_deg:.2f}° actual={actual_delta_deg:.2f}° "
+                      f"pos={m.get_position():.6f} vel={m.get_velocity():.6f} "
+                      f"tau={m.get_torque():.6f}", flush=True)
+                return float(actual_delta_rad)
+            print(f"[WARN] bump limit guard reached (Joint {joint_id.name}): "
+                  f"target={target_delta_deg:.2f}° actual={actual_delta_deg:.2f}° "
+                  f"pos={m.get_position():.6f} vel={m.get_velocity():.6f} tau={m.get_torque():.6f}",
+                  flush=True)
+            raise LimitSearchFailed(
+                f"Joint {joint_id.name} did not reach a reliable limit before guard "
+                f"(target {target_delta_deg:.2f} deg, actual {actual_delta_deg:.2f} deg). "
+                "Refusing reverse motion and zero write."
+            )
+        q_target += step_rad
+        _send_with_holds(openarm, arm, grip, comp, idx, oa.MITParam(kp, kd, q_target, 0.0, tau_cmd), feedback_cycles=1)
+        time.sleep(WORKSTATION_BUMP_DT_S)
+
+        m = comp.get_motors()[idx]
+        actual_delta_rad = m.get_position() - q_start
+        actual_delta_deg = np.rad2deg(actual_delta_rad)
+        if abs(actual_delta_deg) - abs(last_progress_deg) >= WORKSTATION_BUMP_PROGRESS_DEG:
+            print(f"[BUMP] {joint_id.name}: target={np.rad2deg(q_target - q_start):.2f}° "
+                  f"actual={actual_delta_deg:.2f}° vel={m.get_velocity():.4f} "
+                  f"tau={m.get_torque():.4f}", flush=True)
+            last_progress_deg = actual_delta_deg
+        if np.abs(m.get_velocity()) < dq_th and np.abs(m.get_torque()) > tau_th:
+            delta_rad = m.get_position() - q_start
+            delta_deg = np.rad2deg(delta_rad)
+            print(f"[INFO] mechanical stop (Joint {joint_id.name}): "
+                  f"{delta_rad:.4f} rad / {delta_deg:.2f}° "
+                  f"vel={m.get_velocity():.6f} tau={m.get_torque():.6f}", flush=True)
+            return float(delta_rad)
+
+
+def calc_delta_to_zero_pos_joint(initial_rad: float,
+                                 ideal_limit_rad: float,
+                                 delta_to_stop_rad: float,
+                                 joint_id: JointID) -> float:
+    """Relative delta from 'hit position' to 'ideal limit', with per-joint sign."""
+    q_hit = initial_rad + delta_to_stop_rad
+    delta_to_ideal = ideal_limit_rad - q_hit
+    return float(JOINT_SIGN.get(joint_id, 1.0) * delta_to_ideal)
+
+# ---------- Optional: precise homing (left as a hook) ----------
+
+
+def _move_arm_to_targets(openarm, arm, grip, target_q, target_grip_q=None, speed_rad_s=WORKSTATION_RESTORE_SPEED_RAD_S):
+    """Slowly move the arm and optional gripper target in the current zero frame."""
+    start_q = [motor.get_position() for motor in arm.get_motors()]
+    grip_motor = grip.get_motors()[0]
+    start_grip_q = float(grip_motor.get_position())
+    grip_target = start_grip_q if target_grip_q is None else float(target_grip_q[0])
+    deltas = [float(target) - float(start) for target, start in zip(target_q, start_q)]
+    grip_delta = grip_target - start_grip_q
+    max_delta = max([abs(delta) for delta in deltas] + [abs(grip_delta)] or [0.0])
+    steps = max(80, int(max_delta / max(0.02, speed_rad_s) / 0.01))
+    arm_kp, arm_kd = _scaled_gain(10.0, 0.8)
+    grip_kp, grip_kd = _scaled_gain(1.5, 0.2)
+    for step in range(steps + 1):
+        alpha = step / steps
+        params = [
+            oa.MITParam(arm_kp, arm_kd, start + delta * alpha, 0.0, 0.0)
+            for start, delta in zip(start_q, deltas)
+        ]
+        grip_param = oa.MITParam(grip_kp, grip_kd, start_grip_q + grip_delta * alpha, 0.0, 0.0)
+        arm.mit_control_all(params)
+        grip.mit_control_all([grip_param])
+        openarm.recv_all(2000)
+        time.sleep(0.01)
+
+
+def _restore_target_for_initial_pose(initial_arm_q, pre_zero_arm_q):
+    return [float(initial) - float(pre_zero) for initial, pre_zero in zip(initial_arm_q, pre_zero_arm_q)]
+
+
+def _restore_gripper_target_for_initial_pose(initial_grip_q, pre_zero_grip_q):
+    return [float(initial) - float(pre_zero) for initial, pre_zero in zip(initial_grip_q, pre_zero_grip_q)]
+
+
+def _assert_restore_target_allowed(target_q, max_deg, target_grip_q=None):
+    max_restore_rad = np.deg2rad(float(max_deg))
+    all_targets = list(target_q)
+    if target_grip_q is not None:
+        all_targets.extend(target_grip_q)
+    restore_max = max([abs(target) for target in all_targets] or [0.0])
+    if restore_max > max_restore_rad:
+        raise RuntimeError(
+            f"restore target too large ({np.rad2deg(restore_max):.2f} deg > {float(max_deg):.2f} deg); "
+            "refusing zero write because automatic restore would be unsafe"
+        )
+
+
+def restore_initial_pose_after_zero(openarm, arm, grip, initial_arm_q, initial_grip_q, pre_zero_arm_q, pre_zero_grip_q, max_deg):
+    """Restore the pre-calibration physical pose after set_zero_all changes the coordinate frame."""
+    target_q = _restore_target_for_initial_pose(initial_arm_q, pre_zero_arm_q)
+    target_grip_q = _restore_gripper_target_for_initial_pose(initial_grip_q, pre_zero_grip_q)
+    print("[RESTORE] target q in new zero frame:", [round(q, 6) for q in target_q], flush=True)
+    print("[RESTORE] target gripper q in new zero frame:", [round(q, 6) for q in target_grip_q], flush=True)
+    _assert_restore_target_allowed(target_q, max_deg, target_grip_q)
+    _safe_enable_hold(openarm, arm, grip, [0.0] * 7, [0.0], cycles=30)
+    _move_arm_to_targets(openarm, arm, grip, target_q, target_grip_q)
+    _hold_all(openarm, arm, grip, 0.5)
+
+# ---------- One function per arm-side to keep intentions explicit ----------
+
+
+def _run_right_sequence(openarm, arm, grip, include_gripper=True):
+    if include_gripper:
+        d_grip = bump_to_limit(openarm, arm, grip, grip, JointID.GRIPPER)
+        _hold_all(openarm, arm, grip, 0.5)
+    else:
+        d_grip = 0.0
+        print("[WORKSTATION_SAFE] GRIPPER limit search skipped; gripper motion is reserved for Demo validation.", flush=True)
+    d_j4 = bump_to_limit(openarm, arm, grip, arm,  JointID.J4, step_deg=-0.2)
+    _hold_all(openarm, arm, grip, 0.5)
+
+    interpolate(openarm, arm, grip, arm, JointID.J2, np.deg2rad(5),  interp_time=0.4)
+    _hold_all(openarm, arm, grip, 0.5)
+    d_j3 = bump_to_limit(openarm, arm, grip, arm,  JointID.J3)
+    _hold_all(openarm, arm, grip, 0.5)
+
+    interpolate(openarm, arm, grip, arm, JointID.J3, -
+                mech_lim[JointID.J3][1], interp_time=1.0)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J2, -np.deg2rad(5), interp_time=0.4)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J4,  np.pi/2.0)
+    _hold_all(openarm, arm, grip, 0.5)
+
+    d_j5 = bump_to_limit(openarm, arm, grip, arm,  JointID.J5)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J5, -mech_lim[JointID.J5][1])
+    _hold_all(openarm, arm, grip, 0.5)
+
+    d_j6 = bump_to_limit(openarm, arm, grip, arm,  JointID.J6)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J6, -mech_lim[JointID.J6][1])
+    _hold_all(openarm, arm, grip, 0.5)
+
+    d_j7 = bump_to_limit(openarm, arm, grip, arm,  JointID.J7)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J7, -mech_lim[JointID.J7][1])
+    _hold_all(openarm, arm, grip, 0.5)
+
+    d_j2 = bump_to_limit(openarm, arm, grip, arm,  JointID.J2, step_deg=-0.2)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J2, np.deg2rad(
+        10), interp_time=0.9, kp=180, kd=2.0)
+    _hold_all(openarm, arm, grip, 0.5)
+
+    d_j1 = bump_to_limit(openarm, arm, grip, arm,  JointID.J1,
+                         step_deg=-0.2, kp=180, kd=2.1)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J1, np.deg2rad(80))
+    _hold_all(openarm, arm, grip, 0.5)
+
+    interpolate(openarm, arm, grip, arm, JointID.J4, -np.pi/2.0)
+    _hold_all(openarm, arm, grip, 2.5)
+
+    ideal = {
+        JointID.J7: np.pi/2.0,
+        JointID.J6: np.pi/4.0,
+        JointID.J5: np.pi/2.0,
+        JointID.J4: 0.0,
+        JointID.J3: np.pi/2.0,
+        JointID.J2: np.deg2rad(-10),
+        JointID.J1: np.deg2rad(-80),
+    }
+    deltas = [d_j1, d_j2, d_j3, d_j4, d_j5, d_j6, d_j7, d_grip]
+    return ideal, deltas
+
+
+def _run_left_sequence(openarm, arm, grip, include_gripper=True):
+    if include_gripper:
+        d_grip = bump_to_limit(openarm, arm, grip, grip, JointID.GRIPPER)
+        _hold_all(openarm, arm, grip, 0.5)
+    else:
+        d_grip = 0.0
+        print("[WORKSTATION_SAFE] GRIPPER limit search skipped; gripper motion is reserved for Demo validation.", flush=True)
+    d_j4 = bump_to_limit(openarm, arm, grip, arm,  JointID.J4, step_deg=-0.2)
+    _hold_all(openarm, arm, grip, 0.5)
+
+    interpolate(openarm, arm, grip, arm, JointID.J2, -np.deg2rad(5), interp_time=0.4)
+    _hold_all(openarm, arm, grip, 0.5)
+    d_j3 = bump_to_limit(openarm, arm, grip, arm,  JointID.J3)
+    _hold_all(openarm, arm, grip, 0.5)
+
+    interpolate(openarm, arm, grip, arm, JointID.J3, -
+                mech_lim[JointID.J3][1], interp_time=1.0)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J2,  np.deg2rad(5),  interp_time=0.4)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J4,  np.pi/2.0)
+    _hold_all(openarm, arm, grip, 0.5)
+
+    d_j5 = bump_to_limit(openarm, arm, grip, arm,  JointID.J5)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J5, -mech_lim[JointID.J5][1])
+    _hold_all(openarm, arm, grip, 0.5)
+
+    d_j6 = bump_to_limit(openarm, arm, grip, arm,  JointID.J6)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J6, -mech_lim[JointID.J6][1])
+    _hold_all(openarm, arm, grip, 0.5)
+
+    d_j7 = bump_to_limit(openarm, arm, grip, arm,  JointID.J7)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J7, -mech_lim[JointID.J7][1])
+    _hold_all(openarm, arm, grip, 0.5)
+
+    d_j2 = bump_to_limit(openarm, arm, grip, arm,  JointID.J2)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J2, -np.deg2rad(10),
+                interp_time=0.9, kp=180, kd=2.0)
+    _hold_all(openarm, arm, grip, 0.5)
+
+    d_j1 = bump_to_limit(openarm, arm, grip, arm,  JointID.J1, kp=180, kd=2.1)
+    _hold_all(openarm, arm, grip, 0.5)
+    interpolate(openarm, arm, grip, arm, JointID.J1, -np.deg2rad(80))
+    _hold_all(openarm, arm, grip, 0.5)
+
+    interpolate(openarm, arm, grip, arm, JointID.J4, -np.pi/2.0)
+    _hold_all(openarm, arm, grip, 2.5)
+
+    ideal = {
+        JointID.J7: np.pi/2.0,
+        JointID.J6: np.pi/4.0,
+        JointID.J5: np.pi/2.0,
+        JointID.J4: 0.0,
+        JointID.J3: np.pi/2.0,
+        JointID.J2: np.deg2rad(10),
+        JointID.J1: np.deg2rad(80),
+    }
+    deltas = [d_j1, d_j2, d_j3, d_j4, d_j5, d_j6, d_j7, d_grip]
+    return ideal, deltas
+
+# ---------- Main ----------
+
+
+def main():
+    global WORKSTATION_MAX_BUMP_DEG, WORKSTATION_MAX_BUMP_TIME_S
+    global WORKSTATION_BUMP_BASE_STEP_DEG, WORKSTATION_BUMP_DT_S
+    parser = argparse.ArgumentParser(
+        description='Zero-pos calibration (compact)')
+    parser.add_argument('--canport', type=str, default='can0')
+    parser.add_argument('--arm-side', '--arm_side', dest='arm_side', type=str,
+                        default='right_arm', choices=['right_arm', 'left_arm'])
+    parser.add_argument('--fd', action='store_true',
+                        help='Enable CAN-FD frames. Default is classic CAN 2.0 for the workstation.')
+    parser.add_argument('--verify-only', action='store_true',
+                        help='Verify feedback sync and low-gain hold, then disable before any limit-search motion.')
+    parser.add_argument('--skip-gripper-limit-search', action='store_true',
+                        help='Do not move the gripper during zero limit search. Factory workflow validates gripper motion in Demo instead.')
+    parser.add_argument('--restore-initial-pose', action='store_true',
+                        help='After zero is written, slowly return to the physical pose captured before calibration.')
+    parser.add_argument('--restore-max-deg', type=float, default=WORKSTATION_RESTORE_MAX_DEG,
+                        help='Maximum per-joint restore motion allowed after zero is written.')
+    parser.add_argument('--max-bump-deg', type=float, default=WORKSTATION_MAX_BUMP_DEG,
+                        help='Maximum motion allowed while searching one mechanical limit.')
+    parser.add_argument('--max-bump-time-s', type=float, default=WORKSTATION_MAX_BUMP_TIME_S,
+                        help='Maximum time allowed while searching one mechanical limit.')
+    parser.add_argument('--bump-step-deg', type=float, default=WORKSTATION_BUMP_BASE_STEP_DEG,
+                        help='Base step size for limit search before step scale is applied.')
+    parser.add_argument('--bump-dt-s', type=float, default=WORKSTATION_BUMP_DT_S,
+                        help='Delay between limit-search steps.')
+    args = parser.parse_args()
+    WORKSTATION_MAX_BUMP_DEG = max(1.0, float(args.max_bump_deg))
+    WORKSTATION_MAX_BUMP_TIME_S = max(1.0, float(args.max_bump_time_s))
+    WORKSTATION_BUMP_BASE_STEP_DEG = max(0.01, float(args.bump_step_deg))
+    WORKSTATION_BUMP_DT_S = max(0.001, float(args.bump_dt_s))
+    print(f"parser arg : {args}")
+    effective_bump_speed = WORKSTATION_BUMP_BASE_STEP_DEG * WORKSTATION_BUMP_STEP_SCALE / WORKSTATION_BUMP_DT_S
+    print(f"[WORKSTATION_SAFE] gain_scale={WORKSTATION_GAIN_SCALE} max_bump_deg={WORKSTATION_MAX_BUMP_DEG} "
+          f"max_bump_time_s={WORKSTATION_MAX_BUMP_TIME_S} bump_speed_deg_s={effective_bump_speed:.2f}")
+
+    # Init
+    openarm = oa.OpenArm(args.canport, args.fd)
+    send_can_ids, recv_can_ids, gripper_send_can_id, gripper_recv_can_id = _ids_for_side(args.arm_side)
+
+    openarm.init_arm_motors(
+        [oa.MotorType.DM8009, oa.MotorType.DM8009, oa.MotorType.DM4340, oa.MotorType.DM4340,
+         oa.MotorType.DM4310, oa.MotorType.DM4310, oa.MotorType.DM4310],
+        send_can_ids,
+        recv_can_ids
+    )
+    openarm.init_gripper_motor(oa.MotorType.DM4310, gripper_send_can_id, gripper_recv_can_id)
+    openarm.set_callback_mode_all(oa.CallbackMode.STATE)
+
+    arm = openarm.get_arm()
+    grip = openarm.get_gripper()
+    am = arm.get_motors()
+    gm = grip.get_motors()
+    initial_arm_q, initial_grip_q = _read_initial_positions_workbench(args.canport, args.arm_side)
+    print("[INFO] initial arm q:", [round(q, 6) for q in initial_arm_q], flush=True)
+    print("[INFO] initial gripper q:", [round(q, 6) for q in initial_grip_q], flush=True)
+
+    print("Enabling...")
+    _safe_enable_hold(openarm, arm, grip, initial_arm_q, initial_grip_q)
+    print("Enabled...")
+    _verify_openarm_position_sync(openarm, arm, grip, initial_arm_q, initial_grip_q)
+
+    for idx, motor in enumerate(am, start=1):
+        print(f"[ENABLE_CHECK] J{idx}: enabled={motor.is_enabled()} pos={motor.get_position():.6f}", flush=True)
+    print(f"[ENABLE_CHECK] GRIPPER: enabled={gm[0].is_enabled()} pos={gm[0].get_position():.6f}", flush=True)
+    print("[INFO] openarm_can Motor.is_enabled() is not updated by state feedback; raw status is verified by workstation checks.", flush=True)
+
+    try:
+        if args.verify_only:
+            print("[VERIFY_ONLY] Feedback sync verified; disabling before limit-search motion.", flush=True)
+            _safe_disable_all(openarm)
+            print("RESULT: VERIFY_ONLY_PASS", flush=True)
+            return
+
+        # Run side-specific calibration sequence
+        ideal, deltas = (_run_right_sequence if args.arm_side == 'right_arm'
+                         else _run_left_sequence)(
+            openarm,
+            arm,
+            grip,
+            include_gripper=not args.skip_gripper_limit_search,
+        )
+
+        # Compute ideal deltas per joint
+        joint_order = [JointID.J1, JointID.J2, JointID.J3, JointID.J4,
+                       JointID.J5, JointID.J6, JointID.J7, JointID.GRIPPER]
+        ideal_delta_map = {}
+        for j, d in zip(joint_order, deltas):
+            if j == JointID.GRIPPER:
+                print("ideal[GRIPPER] skipped")
+                continue
+            val = calc_delta_to_zero_pos_joint(
+                initial_rad=initial_arm_q[int(j)],
+                ideal_limit_rad=ideal[j],
+                delta_to_stop_rad=d,
+                joint_id=j
+            )
+            ideal_delta_map[j] = val
+            # print(f"ideal[{j.name}] : {val:.6f} rad")
+
+        # Absolute goal = initial + ideal_delta
+        arm_goal_abs = [initial_arm_q[i] +
+                        ideal_delta_map.get(JointID(i), 0.0) for i in range(7)]
+        # TODO: move_to_precise_home(openarm, arm_goal_abs)
+        pre_zero_arm_q = [motor.get_position() for motor in arm.get_motors()]
+        pre_zero_grip_q = [motor.get_position() for motor in grip.get_motors()]
+        print("[INFO] pre-zero arm q:", [round(q, 6) for q in pre_zero_arm_q], flush=True)
+        print("[INFO] pre-zero gripper q:", [round(q, 6) for q in pre_zero_grip_q], flush=True)
+        if args.restore_initial_pose:
+            restore_target_q = _restore_target_for_initial_pose(initial_arm_q, pre_zero_arm_q)
+            restore_target_grip_q = _restore_gripper_target_for_initial_pose(initial_grip_q, pre_zero_grip_q)
+            print("[RESTORE] target q in new zero frame:", [round(q, 6) for q in restore_target_q], flush=True)
+            print("[RESTORE] target gripper q in new zero frame:", [round(q, 6) for q in restore_target_grip_q], flush=True)
+            _assert_restore_target_allowed(restore_target_q, args.restore_max_deg, restore_target_grip_q)
+
+        # Zero must be written while the arm is still at the calibrated pose.
+        # Keep the disable window short to avoid backdrive/drift before set_zero_all.
+        _quick_disable_and_write_zero(openarm, arm, grip, canport=args.canport, arm_side=args.arm_side)
+        print("wrote zero positon to arm")
+        if args.restore_initial_pose:
+            restore_initial_pose_after_zero(
+                openarm,
+                arm,
+                grip,
+                initial_arm_q=initial_arm_q,
+                initial_grip_q=initial_grip_q,
+                pre_zero_arm_q=pre_zero_arm_q,
+                pre_zero_grip_q=pre_zero_grip_q,
+                max_deg=args.restore_max_deg,
+            )
+            print("[RESTORE] initial physical pose restored", flush=True)
+
+    except KeyboardInterrupt:
+        print("\n[INFO] Ctrl+C pressed → stopping safely")
+    finally:
+        _safe_disable_all(openarm)
+        print("[INFO] Motors disabled, exiting safely.")
+
+
+if __name__ == "__main__":
+    main()

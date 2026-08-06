@@ -1,0 +1,133 @@
+profile_id: openarm_v1
+name: OpenARM V1
+description: OpenARM 默认单臂配置模板
+mode: communication_primary
+joints:
+  - joint_name: J1
+    motor_type: DM-J8009P-2EC
+    target_esc_id: 1
+    target_mst_id: 17
+    target_ctrl_mode: MIT
+    target_timeout: 1000
+    target_can_br: 1000000
+    expected_ctrl_mode: MIT
+    expected_status:
+      - DISABLED
+      - ENABLED
+    required_online: true
+    allow_write: true
+    requires_zero: true
+    test_profile: safe_mit_ping
+    expected_bus: can0
+  - joint_name: J2
+    motor_type: DM-J8009P-2EC
+    target_esc_id: 2
+    target_mst_id: 18
+    target_ctrl_mode: MIT
+    target_timeout: 1000
+    target_can_br: 1000000
+    expected_ctrl_mode: MIT
+    expected_status:
+      - DISABLED
+      - ENABLED
+    required_online: true
+    allow_write: true
+    requires_zero: true
+    test_profile: safe_mit_ping
+    expected_bus: can0
+  - joint_name: J3
+    motor_type: DM-J4340P-2EC
+    target_esc_id: 3
+    target_mst_id: 19
+    target_ctrl_mode: MIT
+    target_timeout: 1000
+    target_can_br: 1000000
+    expected_ctrl_mode: MIT
+    expected_status:
+      - DISABLED
+      - ENABLED
+    required_online: true
+    allow_write: true
+    requires_zero: true
+    test_profile: safe_mit_ping
+    expected_bus: can0
+  - joint_name: J4
+    motor_type: DM-J4340-2EC
+    target_esc_id: 4
+    target_mst_id: 20
+    target_ctrl_mode: MIT
+    target_timeout: 1000
+    target_can_br: 1000000
+    expected_ctrl_mode: MIT
+    expected_status:
+      - DISABLED
+      - ENABLED
+    required_online: true
+    allow_write: true
+    requires_zero: true
+    test_profile: safe_mit_ping
+    expected_bus: can0
+  - joint_name: J5
+    motor_type: DM-J4310-2EC
+    target_esc_id: 5
+    target_mst_id: 21
+    target_ctrl_mode: MIT
+    target_timeout: 5000
+    target_can_br: 1000000
+    expected_ctrl_mode: MIT
+    expected_status:
+      - DISABLED
+      - ENABLED
+    required_online: true
+    allow_write: true
+    requires_zero: true
+    test_profile: safe_mit_ping
+    expected_bus: can0
+  - joint_name: J6
+    motor_type: DM-J4310-2EC
+    target_esc_id: 6
+    target_mst_id: 22
+    target_ctrl_mode: MIT
+    target_timeout: 5000
+    target_can_br: 1000000
+    expected_ctrl_mode: MIT
+    expected_status:
+      - DISABLED
+      - ENABLED
+    required_online: true
+    allow_write: true
+    requires_zero: true
+    test_profile: safe_mit_ping
+    expected_bus: can0
+  - joint_name: J7
+    motor_type: DM-J4310-2EC
+    target_esc_id: 7
+    target_mst_id: 23
+    target_ctrl_mode: MIT
+    target_timeout: 5000
+    target_can_br: 1000000
+    expected_ctrl_mode: MIT
+    expected_status:
+      - DISABLED
+      - ENABLED
+    required_online: true
+    allow_write: true
+    requires_zero: true
+    test_profile: safe_mit_ping
+    expected_bus: can0
+  - joint_name: J8
+    motor_type: DM-J4310-2EC
+    target_esc_id: 8
+    target_mst_id: 24
+    target_ctrl_mode: MIT
+    target_timeout: 5000
+    target_can_br: 1000000
+    expected_ctrl_mode: MIT
+    expected_status:
+      - DISABLED
+      - ENABLED
+    required_online: true
+    allow_write: true
+    requires_zero: true
+    test_profile: safe_mit_ping
+    expected_bus: can0

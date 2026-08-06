@@ -1,0 +1,30 @@
+# Python依赖库
+
+# 串口通信（damiao电机必需）
+pyserial>=3.5
+
+# CAN总线通信（备用）
+python-can>=4.0.0
+
+# 数据处理
+numpy>=1.21.0
+
+# 日志
+loguru>=0.6.0
+
+# 配置管理
+pyyaml>=6.0
+
+# PDF报告
+reportlab>=4.5.0
+
+# 测试
+pytest>=7.0.0
+pytest-cov>=3.0.0
+
+# 代码质量
+black>=22.0.0
+flake8>=4.0.0
+
+# 类型检查
+mypy>=0.950

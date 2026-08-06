@@ -1,0 +1,29 @@
+# Damiao电机配置文件
+
+# CAN总线配置
+can:
+  channel: can0
+  bitrate: 1000000  # 1Mbit/s
+
+# 电机配置
+motors:
+  - id: 1
+    name: "关节电机_1"
+    can_id: 0x01
+    enabled: true
+    
+  - id: 2
+    name: "关节电机_2"
+    can_id: 0x02
+    enabled: false
+
+# 控制参数
+control:
+  position_limit: 1000000  # 位置限值（单位待定）
+  velocity_limit: 3000     # 速度限值（RPM，待确认）
+  acceleration: 1000       # 加速度（单位待定）
+  
+# 日志配置
+logging:
+  level: INFO
+  file: logs/damiao_debug.log

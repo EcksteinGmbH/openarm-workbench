@@ -1,0 +1,96 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+tmp/
+.codex
+
+# Generated workstation artifacts and one-off scan outputs
+artifacts/
+scan_openarm_*/
+scan_*_arm_v*/
+
+# Local build products from vendored SDKs
+external/**/build/
+external/**/.git/
+
+# --- agent wiki wiring (init-agent-wiki) ---
+# .omc/ holds runtime state that stays ignored, but .omc/wiki must stay a
+# TRACKED symlink. A whole-directory ignore (".omc/") would make the negation
+# inert — git cannot re-include a path whose parent directory is excluded —
+# so the rule must be "/.omc/*". Nested .omc dirs need their own rule.
+/.omc/*
+!/.omc/wiki
+*/**/.omc/
+# runtime/ is unpromoted working state; session-log churn stays out of git.
+# (Multi-checkout teams that need runtime pages via git: rerun with --track-runtime.)
+agent_wiki/runtime/*
+!agent_wiki/runtime/README.md
+# Codex pre-compact checkpoints: rolling session logs written by the Codex
+# package PreCompact hook. Session logs are churn, not knowledge — the same
+# doctrine that keeps them out of agent_wiki/.
+.codex/checkpoints/
