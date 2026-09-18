@@ -77,6 +77,47 @@ def test_device_connect_job_and_single_scan_api(client):
     assert job["status"] == "device_connected"
 
 
+def test_single_commissioning_api_completes_with_saved_readback_without_zero(client):
+    session_id = _json(
+        client.post(
+            "/api/device/connect",
+            json={"transport": "socketcan", "connection": {"channel": "can0", "bitrate": 1000000}},
+        )
+    )["device_session_id"]
+    client.post("/api/device/scan", json={"device_session_id": session_id, "job_type": "single_commissioning"})
+    job_id = _json(
+        client.post(
+            "/api/jobs",
+            json={
+                "device_session_id": session_id,
+                "job_type": "single_commissioning",
+                "profile_id": "openarm_v1",
+                "target_joint": "J2",
+            },
+        )
+    )["job_id"]
+    target = _json(
+        client.post(f"/api/jobs/{job_id}/apply-profile", json={"target_joint": "J2", "profile_id": "openarm_v1"})
+    )["target_config"]
+    assert target["requires_zero"] is False
+    assert target["test_profile"] == "saved_readback"
+
+    assert client.post(f"/api/jobs/{job_id}/write-params", json={"target_config": target}).status_code == 200
+    assert client.post(f"/api/jobs/{job_id}/verify-params").status_code == 200
+    assert client.post(f"/api/jobs/{job_id}/save-flash").status_code == 200
+    allowed = _json(client.get(f"/api/jobs/{job_id}"))["allowed_actions"]
+    assert "test" in allowed
+    assert "zero" not in allowed
+
+    zero = client.post(f"/api/jobs/{job_id}/zero", json={"confirmed": True})
+    assert zero.status_code == 400
+    assert _json(zero)["success"] is False
+
+    tested = _json(client.post(f"/api/jobs/{job_id}/test", json={"confirmed": True}))
+    assert tested["tested"] is True
+    assert tested["metrics"]["motion"] is False
+    assert _json(client.get(f"/api/jobs/{job_id}"))["job"]["status"] == "passed"
+
 def test_api_errors_use_json_envelope(client):
     response = client.post(
         "/api/device/scan",
@@ -205,3 +246,67 @@ def test_vendor_maintenance_record_api(client, tmp_path, monkeypatch):
     response = client.get("/api/vendor/maintenance-records")
     records = _json(response)
     assert len(records["records"]) == 1
+
+
+def test_single_motor_wizard_api_flow_and_problem_envelope(client, monkeypatch):
+    monkeypatch.setattr(web_app.service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    options = _json(client.get("/api/single-motor/wizard/options"))
+    assert options["defaults"]["product_line"] == "openarm_2_0"
+    assert [arm["arm_side"] for arm in options["arms"]] == ["right_arm", "left_arm"]
+
+    identified = _json(client.post("/api/single-motor/wizard/identify", json={"arm_side": "right_arm", "joint": "J1"}))
+    assert identified["ok"] is True
+    job_id = identified["job_id"]
+    assert _json(client.post(f"/api/single-motor/wizard/{job_id}/write"))["ok"] is True
+    assert _json(client.post(f"/api/single-motor/wizard/{job_id}/save"))["ok"] is True
+    finished = _json(client.post(f"/api/single-motor/wizard/{job_id}/finish"))
+    assert finished["ok"] is True
+    assert finished["record"]["result"] == "PASS"
+    assert _json(client.get("/api/single-motor/records"))["total_records"] == 1
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("socket closed")
+
+    monkeypatch.setattr(web_app.service, "_inventory_scan", explode)
+    response = client.post("/api/single-motor/wizard/identify", json={})
+    payload = _json(response)
+    assert response.status_code == 200
+    assert payload["ok"] is False
+    assert payload["problem"]["code"] == "unknown_error"
+    assert "socket closed" in payload["problem"]["detail"]
+
+
+def test_single_motor_inspect_api_returns_rows_and_problem_envelope(client, monkeypatch):
+    monkeypatch.setattr(web_app.service, "_wizard_can_precheck", lambda channel, bitrate: None)
+
+    payload = _json(client.post("/api/single-motor/inspect", json={"channel": "can0", "bitrate": 1000000}))
+    assert payload["ok"] is True and payload["read_only"] is True
+    assert payload["scanned_range"] == "0x01-0x20"
+    motor = payload["motors"][0]
+    assert {"esc_id", "mst_id", "matched_joints", "rows", "status"} <= set(motor)
+    assert any(row["field"] == "SN" for row in motor["rows"])
+
+    def explode(*args, **kwargs):
+        raise RuntimeError("socket closed")
+
+    monkeypatch.setattr(web_app.service, "_inventory_scan", explode)
+    response = client.post("/api/single-motor/inspect", json={})
+    assert response.status_code == 200
+    assert _json(response)["problem"]["code"] == "unknown_error"
+
+
+def test_wizard_tabs_hide_task_rail_from_first_paint(client):
+    page = client.get("/").data.decode()
+    # The rails are hidden by CSS keyed on body[data-primary-flow]; nothing sets that
+    # attribute until a tab is clicked, so the markup must already carry the default tab.
+    assert '<body data-primary-flow="connectTab">' in page
+
+    css = client.get("/static/css/style.css").data.decode()
+    for selector in (
+        'body[data-primary-flow="connectTab"]:not(.link-advanced) .left-rail',
+        'body[data-primary-flow="motorWorkbenchTab"]:not(.motor-advanced) .left-rail',
+    ):
+        assert selector in css
+
+    app_js = client.get("/static/js/app.js").data.decode()
+    assert "switchPrimaryTab(currentPrimaryTab());" in app_js

@@ -27,6 +27,7 @@ from src.damiao_motor_driver import (
     DM_variable,
     DamiaoMotorDriver,
     DamiaoSocketCANDriver,
+    LIMIT_PARAM,
     Motor,
 )
 from src.formal_factory_report import render_formal_factory_report
@@ -144,6 +145,207 @@ HEALTH_REPORT_RIDS = [
     DM_variable.SN,
 ]
 TEMP_LIMITS = {"mos": 60.0, "rotor": 80.0}
+# Read-only motor inspection: everything an operator may need to see before assembly.
+# Order defines the display order; nothing here is ever written.
+SINGLE_INSPECT_FIELDS = [
+    ("ESC_ID", DM_variable.ESC_ID, "节点 ID (ESC_ID)", "identity"),
+    ("MST_ID", DM_variable.MST_ID, "反馈 ID (MST_ID)", "identity"),
+    ("CTRL_MODE", DM_variable.CTRL_MODE, "控制模式", "identity"),
+    ("can_br", DM_variable.can_br, "CAN 波特率", "identity"),
+    ("TIMEOUT", DM_variable.TIMEOUT, "通信看门狗 TIMEOUT", "identity"),
+    ("Gr", DM_variable.Gr, "减速比 Gr", "motor"),
+    ("KT_Value", DM_variable.KT_Value, "力矩常数 KT", "motor"),
+    ("PMAX", DM_variable.PMAX, "位置上限 PMAX", "motor"),
+    ("VMAX", DM_variable.VMAX, "速度上限 VMAX", "motor"),
+    ("TMAX", DM_variable.TMAX, "力矩上限 TMAX", "motor"),
+    ("UV_Value", DM_variable.UV_Value, "欠压保护值", "protection"),
+    ("OV_Value", DM_variable.OV_Value, "过压保护值", "protection"),
+    ("hw_ver", DM_variable.hw_ver, "硬件版本", "version"),
+    ("sw_ver", DM_variable.sw_ver, "固件版本", "version"),
+    ("sub_ver", DM_variable.sub_ver, "子版本", "version"),
+    ("SN", DM_variable.SN, "SN 寄存器（不唯一，仅作证据）", "version"),
+]
+SINGLE_INSPECT_RIDS = [rid for _, rid, _, _ in SINGLE_INSPECT_FIELDS]
+SINGLE_WIZARD_ARM_PROFILES = {
+    "right_arm": {"profile_id": "openarm_right_arm_v1", "prefix": "R", "label": "右臂"},
+    "left_arm": {"profile_id": "openarm_left_arm_v1", "prefix": "L", "label": "左臂"},
+}
+SINGLE_WIZARD_PRODUCT_LINES = {"openarm_2_0": "OpenArm 2.0", "openarm_1_0": "OpenArm 1.0"}
+# Operator-facing troubleshooting catalog for the beginner single-motor wizard.
+SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
+    "can_interface_missing": {
+        "title": "没有找到 USB-CAN 适配器",
+        "message": "电脑上没有检测到所选的 CAN 口。",
+        "solutions": [
+            "检查 USB-CAN 适配器（DM-USB2FDCAN）是否插好，指示灯是否亮。",
+            "换一个 USB 口重新插入，等待 3 秒后再点一次。",
+            "确认选择的 CAN 口名称正确（一般是 can0）。",
+        ],
+    },
+    "can_interface_down": {
+        "title": "CAN 口没有启动",
+        "message": "工作站尝试自动启动 CAN 口，但没有成功。",
+        "solutions": [
+            "请工程师在终端执行：sudo ip link set can0 type can bitrate 1000000 && sudo ip link set can0 up",
+            "执行完后回到这里再点一次。",
+        ],
+    },
+    "can_bus_error": {
+        "title": "CAN 总线通信异常",
+        "message": "CAN 口处于错误状态（BUS-OFF / ERROR-PASSIVE），通常是接线或波特率问题。",
+        "solutions": [
+            "检查 CAN 线 CANH / CANL 是否接反、是否松动。",
+            "检查总线两端是否有 120Ω 终端电阻。",
+            "确认电机已经上电。",
+            "处理后点「处理好了，再试一次」，工作站会重启 CAN 口。",
+        ],
+    },
+    "adapter_missing": {
+        "title": "没有检测到 USB-CAN 适配器",
+        "message": "电脑上一个 CAN 口都没有，说明适配器没插好或驱动没加载。",
+        "solutions": [
+            "确认 USB-CAN 适配器（DM-USB2FDCAN）已插入电脑，指示灯亮。",
+            "换一个 USB 口重新插入，等 3 秒后再点「检测适配器」。",
+            "达妙双路适配器必须刷 SocketCAN(gs_usb) 固件；刷成 DMTool 固件时 Linux 下不会出现 can0。",
+            "仍然没有时请工程师在终端执行：sudo modprobe gs_usb",
+        ],
+    },
+    "interface_prepare_failed": {
+        "title": "CAN 口配置失败",
+        "message": "工作站无法把这个 CAN 口配置成所需的波特率并启动。",
+        "solutions": [
+            "确认没有其他程序（DMTool、candump 脚本）正在占用这个 CAN 口。",
+            "请工程师在终端执行：sudo ip link set can0 down && sudo ip link set can0 type can bitrate 1000000 && sudo ip link set can0 up",
+            "执行完后回到这里再点一次「配置并启动」。",
+        ],
+    },
+    "bus_no_motor": {
+        "title": "CAN 口正常，但总线上没有电机",
+        "message": "工作站已经能使用这个 CAN 口，但扫描 ID 0x01–0x20 没有任何电机应答。",
+        "solutions": [
+            "确认电机已上电（24V），电源指示灯亮。",
+            "检查电机和 USB-CAN 之间的 CAN 线，CANH / CANL 不要接反。",
+            "检查总线两端是否有 120Ω 终端电阻。",
+            "双路适配器请确认电机接的是所选的这个通道（can0 / can1）。",
+            "处理后点「重新检查总线」。",
+        ],
+    },
+    "connect_failed": {
+        "title": "无法打开 CAN 口",
+        "message": "CAN 口存在，但工作站连接失败。",
+        "solutions": [
+            "确认没有其他程序（如 DMTool、candump 脚本）独占这个 CAN 口。",
+            "拔插 USB-CAN 适配器后再试。",
+        ],
+    },
+    "no_motor_found": {
+        "title": "没有找到电机",
+        "message": "总线上没有电机应答（已扫描 ID 0x01–0x20）。",
+        "solutions": [
+            "确认电机已上电（电源指示灯亮），供电电压正常。",
+            "检查电机和 USB-CAN 之间的 CAN 线是否接好。",
+            "新电机默认波特率是 1 Mbps；如果电机被改过波特率，请用达妙上位机 DMTool 查看并改回 1 Mbps。",
+            "如果电机 ID 被改成了 0x20 以上，请用 DMTool 查看当前 ID。",
+        ],
+    },
+    "multiple_motors": {
+        "title": "总线上有多颗电机",
+        "message": "为防止改错电机，一次只能配置一颗。",
+        "solutions": [
+            "断电，只保留要配置的这一颗电机连在 CAN 线上。",
+            "重新上电后点「处理好了，再试一次」。",
+        ],
+    },
+    "motor_fault": {
+        "title": "电机报故障",
+        "message": "电机状态里有故障码，不能继续写参数。",
+        "solutions": [
+            "断电等待 10 秒后重新上电，再点「处理好了，再试一次」。",
+            "检查供电电压是否在电机额定范围内。",
+            "如果故障一直存在，用 DMTool 查看具体故障码并交给工程师处理，这颗电机先不要装配。",
+        ],
+    },
+    "status_read_anomaly": {
+        "title": "电机状态无法识别",
+        "message": "电机返回了工作站不认识的状态码。",
+        "solutions": [
+            "断电重上电后再试一次。",
+            "如果仍然出现，暂停这颗电机，交给工程师用 DMTool 复核。",
+        ],
+    },
+    "motor_overtemp": {
+        "title": "电机温度过高",
+        "message": "MOS 或线圈温度超过安全阈值。",
+        "solutions": [
+            "断电让电机冷却 10 分钟后再试。",
+            "检查电机是否被外力卡住或长时间堵转。",
+        ],
+    },
+    "disable_failed": {
+        "title": "电机无法失能",
+        "message": "写参数/保存前必须先让电机失能，但没有成功。",
+        "solutions": [
+            "断电重上电（上电后电机默认是失能状态），再点「重新开始这颗电机」。",
+            "如果反复出现，停止操作并联系工程师。",
+        ],
+    },
+    "write_failed": {
+        "title": "参数写入失败",
+        "message": "电机没有确认参数写入。",
+        "solutions": [
+            "检查 CAN 线是否松动，电机是否掉电。",
+            "点「重新开始这颗电机」，重新识别后再写一次（已写入的部分会重新检查）。",
+            "如果连续失败两次，停止操作并联系工程师。",
+        ],
+    },
+    "param_mismatch": {
+        "title": "参数回读和目标不一致",
+        "message": "写入后读回来的参数和目标值不同。",
+        "solutions": [
+            "点「重新开始这颗电机」，重新识别后再写入一次。",
+            "如果仍不一致，可能是电机固件不支持该参数，先不要保存，联系工程师。",
+        ],
+    },
+    "save_failed": {
+        "title": "保存到 Flash 失败",
+        "message": "参数没能保存到电机内部存储，断电后会丢失。",
+        "solutions": [
+            "不要断电，直接点「处理好了，再试一次」。",
+            "如果仍失败，点「重新开始这颗电机」从写入参数重新做。",
+        ],
+    },
+    "readback_no_response": {
+        "title": "重新上电后电机没有应答",
+        "message": "按新 ID 读不到电机。",
+        "solutions": [
+            "确认电机已经重新上电，等待 3 秒后点「处理好了，再试一次」。",
+            "检查 CAN 线在断电重上电时有没有碰松。",
+            "如果一直没有应答，可能保存没有生效：点「重新开始这颗电机」重新识别。",
+        ],
+    },
+    "readback_mismatch": {
+        "title": "断电后参数没有保持",
+        "message": "重新上电后读到的参数和目标不一致，说明保存没有生效。",
+        "solutions": [
+            "点「重新开始这颗电机」，重新写入并保存一次。",
+            "保存后等待 2 秒再断电。",
+            "如果第二次仍然不保持，这颗电机先不要装配，联系工程师。",
+        ],
+    },
+    "job_state_invalid": {
+        "title": "步骤顺序不对",
+        "message": "当前步骤还不能执行这个操作。",
+        "solutions": ["按页面上亮起的按钮顺序操作；如果页面状态混乱，点「重新开始这颗电机」。"],
+    },
+    "unknown_error": {
+        "title": "发生未知错误",
+        "message": "工作站遇到了没有预料到的错误。",
+        "solutions": [
+            "点「重新开始这颗电机」再试一次。",
+            "如果仍出现，把下面的技术信息截图发给工程师。",
+        ],
+    },
+}
 PARAM_TARGET_FIELD_MAP = {
     "target_ctrl_mode": DM_variable.CTRL_MODE,
     "target_timeout": DM_variable.TIMEOUT,
@@ -805,6 +1007,43 @@ def _motor_type_from_name(name: str) -> DM_Motor_Type:
     return DM_Motor_Type[name]
 
 
+def _motor_family(motor_type: DM_Motor_Type) -> str:
+    return motor_type.name.replace("_48V", "")
+
+
+def _infer_motor_model(params: Dict[str, Any], expected_motor_type: Optional[str]) -> Dict[str, Any]:
+    """Infer the Damiao motor family from factory limit registers; motors expose no model register."""
+    evidence = {key: params.get(key) for key in ("PMAX", "VMAX", "TMAX", "Gr")}
+    try:
+        expected_family = _motor_family(_motor_type_from_name(expected_motor_type)) if expected_motor_type else None
+    except KeyError:
+        expected_family = None
+    limits = [evidence["PMAX"], evidence["VMAX"], evidence["TMAX"]]
+    families: List[str] = []
+    if all(value is not None for value in limits):
+        for motor_type in DM_Motor_Type:
+            if all(abs(float(actual) - float(reference)) < 1e-3 for actual, reference in zip(limits, LIMIT_PARAM[int(motor_type)])):
+                family = _motor_family(motor_type)
+                if family not in families:
+                    families.append(family)
+    if not families:
+        verdict = "unknown"
+    elif expected_family and expected_family in families:
+        verdict = "match"
+    elif expected_family:
+        verdict = "mismatch"
+    else:
+        verdict = "unknown"
+    return {
+        "method": "limit_registers",
+        "families": families,
+        "expected_motor_type": expected_motor_type,
+        "expected_family": expected_family,
+        "verdict": verdict,
+        "evidence": evidence,
+    }
+
+
 def _official_motor_type_map() -> Dict[str, str]:
     return {
         "J1": "DM-J8009P-2EC",
@@ -925,6 +1164,7 @@ class JobRecord:
     started_at: str = field(default_factory=_now_iso)
     finished_at: Optional[str] = None
     failure_reason: Optional[str] = None
+    product_line: Optional[str] = None
 
 
 class ProfileManager:
@@ -4797,7 +5037,12 @@ class WorkstationService:
             if not self._disable_for_parameter_write(session, motor):
                 self._fail_job(job, "disable 失败，禁止写入参数")
                 raise RuntimeError("disable failed before parameter write")
-            self._write_single_target(session, motor, target_config)
+            self._write_single_target(
+                session,
+                motor,
+                target_config,
+                allow_service_params=job.expert_mode,
+            )
             job.target_config = target_config
             job.status = "params_written"
             job.current_step = "params_written"
@@ -4812,32 +5057,7 @@ class WorkstationService:
             motor = self._motor_from_candidate(job.candidate)
             verify_rids = [DM_variable.ESC_ID] + list(PARAM_TARGET_FIELD_MAP.values())
             verification = self._read_params(session, motor, verify_rids)
-            mismatches = []
-            expected = {"ESC_ID": int(job.target_config["target_esc_id"])}
-            for target_key, rid in PARAM_TARGET_FIELD_MAP.items():
-                if target_key not in job.target_config:
-                    continue
-                raw_value = job.target_config[target_key]
-                if rid == DM_variable.CTRL_MODE:
-                    expected[rid.name] = int(_control_from_value(raw_value))
-                elif rid == DM_variable.can_br:
-                    expected[rid.name] = int(_normalize_can_br(raw_value) or 0)
-                elif rid in {DM_variable.KT_Value, DM_variable.Gr, DM_variable.PMAX, DM_variable.VMAX, DM_variable.TMAX}:
-                    expected[rid.name] = float(raw_value)
-                else:
-                    expected[rid.name] = int(raw_value)
-            for key, value in expected.items():
-                actual = verification.get(key)
-                if actual is None:
-                    mismatches.append({"field": key, "expected": value, "actual": actual})
-                    continue
-                if key == DM_variable.can_br.name:
-                    actual = _normalize_can_br(actual)
-                if isinstance(value, float):
-                    if abs(float(actual) - value) > 1e-6:
-                        mismatches.append({"field": key, "expected": value, "actual": actual})
-                elif int(actual) != int(value):
-                    mismatches.append({"field": key, "expected": value, "actual": actual})
+            mismatches = self._single_param_mismatches(job.target_config, verification)
 
             job.motors.setdefault("commissioned_motor", {}).setdefault("verification", verification)
             job.motors["commissioned_motor"]["mismatches"] = mismatches
@@ -4878,6 +5098,8 @@ class WorkstationService:
             self._require_capability(session, "zero")
             if not confirmed:
                 raise ValueError("zero requires confirmed=true")
+            if job.job_type != "single_id_config" or not job.expert_mode:
+                raise ValueError("loose-motor zero save requires an expert single_id_config job")
             if job.status != "params_saved":
                 raise ValueError("zero requires params_saved state")
             motor = self._motor_from_candidate(job.candidate)
@@ -4914,23 +5136,30 @@ class WorkstationService:
             job = self._job(job_id)
             session = self._session(job.device_session_id)
             if job.job_type == "single_id_config":
-                self._require_capability(session, "test")
                 if not confirmed:
                     raise ValueError("test requires confirmed=true")
-                if job.status not in ["zeroed", "params_saved"]:
+                if job.status == "zeroed":
+                    # Motion ping targets absolute q=0, so it is only meaningful after an expert zero save.
+                    self._require_capability(session, "test")
+                    result = self._safe_mit_ping(session, self._motor_from_candidate(job.candidate))
+                    failure_reason = "测试未通过"
+                elif job.status == "params_saved":
+                    result = self._single_saved_readback(job, session)
+                    failure_reason = "测试未通过: 保存后只读复核失败"
+                else:
                     raise ValueError("single test requires zeroed or params_saved state")
-                result = self._safe_mit_ping(session, self._motor_from_candidate(job.candidate))
                 job.motors["commissioned_motor"]["test"] = result
                 if not result["passed"]:
-                    self._fail_job(job, "测试未通过")
-                    return {"tested": False, "metrics": result}
+                    self._fail_job(job, failure_reason)
+                    record = self._save_single_motor_record(job, result)
+                    return {"tested": False, "metrics": result, "record": record}
                 job.status = "passed"
                 job.current_step = "tested"
                 job.finished_at = _now_iso()
-                self._log_event(job, "info", "tested", "测试通过")
+                self._log_event(job, "info", "tested", "测试通过，单电机记录已保存")
                 self._persist_job(job)
-                self._write_report(job)
-                return {"tested": True, "metrics": result}
+                record = self._save_single_motor_record(job, result)
+                return {"tested": True, "metrics": result, "record": record}
 
             if job.job_type == "single_param_config":
                 if job.status != "params_saved":
@@ -5084,6 +5313,582 @@ class WorkstationService:
             self._persist_job(job)
             return {"cancelled": True}
 
+    # ---- Single-motor records (consumed later by whole-arm factory reporting) ----
+
+    def _single_motor_records_dir(self) -> Path:
+        return FACTORY_DIR / "single_motor_records"
+
+    def _save_single_motor_record(self, job: JobRecord, result: Dict[str, Any]) -> Dict[str, Any]:
+        motor_payload = job.motors.get("commissioned_motor", {})
+        before = dict(motor_payload.get("current", {}).get("params", {}) or {})
+        after = dict(result.get("readback") or {})
+        target = job.target_config
+        status = result.get("final_status") or {}
+        record = {
+            "record_id": f"smr_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{job.job_id}",
+            "record_type": "single_motor_commissioning",
+            "created_at": _now_iso(),
+            "workstation_version": WORKSTATION_VERSION,
+            "result": "PASS" if result.get("passed") else "FAIL",
+            # Damiao's SN register is not unique per motor (live batch 2026-09-17 read the same value on
+            # different motors), so it is kept only as raw evidence, never as a motor identity key.
+            "sn_register": after.get("SN") if after.get("SN") is not None else before.get("SN"),
+            "motor_type": target.get("motor_type"),
+            "model_check": _infer_motor_model(before, target.get("motor_type")),
+            "product_line": job.product_line,
+            "product_line_label": SINGLE_WIZARD_PRODUCT_LINES.get(job.product_line or "", job.product_line),
+            "arm_side": target.get("arm_side"),
+            "joint_name": target.get("joint_name") or job.target_joint,
+            "profile_id": job.profile_id,
+            "job_id": job.job_id,
+            "job_artifact_dir": job.artifact_dir,
+            "check_mode": result.get("mode"),
+            "motion_performed": bool(result.get("motion", "peak_position" in result)),
+            "zero_saved": "zero" in motor_payload,
+            "target": {
+                "ESC_ID": target.get("target_esc_id"),
+                "MST_ID": target.get("target_mst_id"),
+                "CTRL_MODE": target.get("target_ctrl_mode"),
+                "can_br": target.get("target_can_br"),
+            },
+            "before": before,
+            "after": after,
+            # Human-readable values actually read back from the motor after save (not the targets).
+            "verified": {
+                "ESC_ID": after.get("ESC_ID"),
+                "MST_ID": after.get("MST_ID"),
+                "CTRL_MODE": _control_name(after["CTRL_MODE"]) if after.get("CTRL_MODE") is not None else None,
+                "can_br": _normalize_can_br(after.get("can_br")),
+                "can_br_code": after.get("can_br"),
+                "can_mode": "CAN 2.0",
+            },
+            "timeout_recorded": after.get("TIMEOUT", before.get("TIMEOUT")),
+            "firmware": {"sw_ver": before.get("sw_ver"), "sub_ver": before.get("sub_ver")},
+            "final_status": {
+                key: status.get(key)
+                for key in ("status", "status_code", "has_error", "is_enabled", "t_mos", "t_rotor")
+            },
+            "mismatches": result.get("mismatches", []),
+            "issues": result.get("issues", []),
+            "failure_reason": job.failure_reason,
+        }
+        records_dir = self._single_motor_records_dir()
+        records_dir.mkdir(parents=True, exist_ok=True)
+        _atomic_json(records_dir / f"{_safe_name(record['record_id'])}.json", record)
+        return record
+
+    def _migrate_legacy_single_motor_records(self, records_dir: Path):
+        # 0.8.0 grouped records by the (non-unique) SN register; split them into one file per record.
+        legacy_dir = records_dir / "_legacy_by_sn"
+        for path in sorted(records_dir.glob("*.json")):
+            payload = _load_json(path, {}) or {}
+            if "history" not in payload:
+                continue
+            for record in payload.get("history", []):
+                target_path = records_dir / f"{_safe_name(record['record_id'])}.json"
+                if target_path.exists():
+                    continue
+                migrated = dict(record)
+                migrated["sn_register"] = migrated.pop("motor_hw_sn", None)
+                migrated.pop("sn_available", None)
+                migrated.setdefault("model_check", _infer_motor_model(migrated.get("before") or {}, migrated.get("motor_type")))
+                migrated["migrated_from"] = f"_legacy_by_sn/{path.name}"
+                _atomic_json(target_path, migrated)
+            legacy_dir.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(path), str(legacy_dir / path.name))
+
+    def _load_single_motor_records(self) -> List[Dict[str, Any]]:
+        records_dir = self._single_motor_records_dir()
+        if not records_dir.exists():
+            return []
+        self._migrate_legacy_single_motor_records(records_dir)
+        records = [_load_json(path, {}) or {} for path in records_dir.glob("*.json")]
+        records = [item for item in records if item.get("record_type") == "single_motor_commissioning"]
+        records.sort(key=lambda item: (item.get("created_at") or "", item.get("record_id") or ""), reverse=True)
+        return records
+
+    def list_single_motor_records(self, limit: int = 50) -> Dict[str, Any]:
+        with self._lock:
+            records = self._load_single_motor_records()
+            joints: Dict[str, Dict[str, Any]] = {}
+            for record in records:
+                if record.get("result") != "PASS":
+                    continue
+                key = f"{record.get('product_line')}:{record.get('joint_name')}"
+                joints.setdefault(key, record)
+            return {
+                "records": records[: max(1, int(limit))],
+                "total_records": len(records),
+                "configured_joints": sorted(
+                    ({"product_line": item.get("product_line"), "joint_name": item.get("joint_name"), "record_id": item.get("record_id"), "created_at": item.get("created_at")} for item in joints.values()),
+                    key=lambda item: (item["product_line"] or "", item["joint_name"] or ""),
+                ),
+            }
+
+    def _joints_matching_ids(self, esc_id: Any, mst_id: Any) -> List[str]:
+        if esc_id is None or mst_id is None or int(mst_id) == 0:
+            return []
+        names = []
+        for meta in SINGLE_WIZARD_ARM_PROFILES.values():
+            for joint in self.profile_manager.get_profile(meta["profile_id"])["joints"]:
+                if int(joint["target_esc_id"]) == int(esc_id) and int(joint["target_mst_id"]) == int(mst_id):
+                    names.append(joint["joint_name"])
+        return names
+
+    # ---- Beginner single-motor wizard ----
+
+    def single_wizard_options(self) -> Dict[str, Any]:
+        arms = []
+        for arm_side, meta in SINGLE_WIZARD_ARM_PROFILES.items():
+            profile = self.profile_manager.get_profile(meta["profile_id"])
+            arms.append(
+                {
+                    "arm_side": arm_side,
+                    "label": meta["label"],
+                    "joints": [
+                        {
+                            "joint": str(joint["joint_name"]).split("-", 1)[-1],
+                            "joint_name": joint["joint_name"],
+                            "motor_type": joint.get("motor_type"),
+                            "target_esc_id": int(joint["target_esc_id"]),
+                            "target_mst_id": int(joint["target_mst_id"]),
+                            "target_ctrl_mode": joint.get("target_ctrl_mode"),
+                            "target_can_br": int(joint.get("target_can_br") or 1000000),
+                        }
+                        for joint in profile["joints"]
+                    ],
+                }
+            )
+        return {
+            "arms": arms,
+            "product_lines": [{"id": key, "label": label} for key, label in SINGLE_WIZARD_PRODUCT_LINES.items()],
+            "defaults": {"channel": "can0", "bitrate": 1000000, "arm_side": "right_arm", "joint": "J1", "product_line": "openarm_2_0"},
+        }
+
+    # ---- Beginner link wizard (tab 01) ----
+
+    def link_wizard_detect(self) -> Dict[str, Any]:
+        """Step 1: list the CAN ports this machine has, with beginner-readable health."""
+        with self._lock:
+            payload = self.system_can_interfaces()
+            interfaces = payload.get("interfaces") or []
+            if not interfaces:
+                return self._wizard_problem("adapter_missing", "no socketcan interface in /sys/class/net")
+            return {
+                "ok": True,
+                "interfaces": [self._link_interface_view(item) for item in interfaces],
+                "recommended_channel": payload.get("recommended_channel"),
+                "detected_at": _now_iso(),
+            }
+
+    def link_wizard_prepare(self, channel: str = "can0", mode: str = "can20", bitrate: int = 1000000, dbitrate: Optional[int] = None) -> Dict[str, Any]:
+        """Step 2: configure the port to the requested mode/bitrate and bring it up."""
+        with self._lock:
+            try:
+                self._require_interface(channel)
+            except Exception as error:
+                return self._wizard_problem("can_interface_missing", str(error))
+            try:
+                self.configure_can_interface(name=channel, mode=mode, bitrate=int(bitrate), dbitrate=dbitrate, fd_enabled=mode == "canfd")
+                self.can_interface_up(channel)
+            except Exception as error:
+                return self._wizard_problem("interface_prepare_failed", str(error))
+            iface = self._interface_snapshot(channel)
+            can_state = str(iface.get("can_state") or "").upper()
+            if can_state in {"BUS-OFF", "ERROR-PASSIVE"}:
+                return self._wizard_problem("can_bus_error", f"can_state={can_state}")
+            return {"ok": True, "interface": self._link_interface_view(iface), "prepared_at": _now_iso()}
+
+    def link_wizard_connect(self, channel: str = "can0", bitrate: int = 1000000) -> Dict[str, Any]:
+        """Step 3: open the workstation device session on the prepared port."""
+        with self._lock:
+            problem = self._wizard_can_precheck(channel, int(bitrate))
+            if problem:
+                return problem
+            try:
+                session = self._wizard_session(channel, int(bitrate))
+            except Exception as error:
+                return self._wizard_problem("connect_failed", str(error))
+            return {
+                "ok": True,
+                "device_session_id": session.session_id,
+                "channel": channel,
+                "bitrate": int(bitrate),
+                "capabilities": asdict(session.capabilities),
+                "interface": self._link_interface_view(self._interface_snapshot(channel)),
+                "connected_at": _now_iso(),
+            }
+
+    def link_wizard_bus_check(self, channel: str = "can0", bitrate: int = 1000000) -> Dict[str, Any]:
+        """Step 4: read-only bus inventory so the operator sees who answers before any test."""
+        with self._lock:
+            problem = self._wizard_can_precheck(channel, int(bitrate))
+            if problem:
+                return problem
+            try:
+                session = self._wizard_session(channel, int(bitrate))
+            except Exception as error:
+                return self._wizard_problem("connect_failed", str(error))
+            candidates, duplicate_ids = self._inventory_scan(session, DEFAULT_ARM_SCAN_IDS)
+            if not candidates:
+                return self._wizard_problem("bus_no_motor", f"channel={channel}")
+            motors = []
+            for candidate in candidates:
+                params = candidate.get("params") or {}
+                status = candidate.get("status") or {}
+                motors.append(
+                    {
+                        "esc_id": candidate.get("detected_esc_id"),
+                        "mst_id": candidate.get("detected_mst_id"),
+                        "matched_joints": self._joints_matching_ids(params.get("ESC_ID"), params.get("MST_ID")),
+                        "factory_default_ids": int(params.get("MST_ID") or 0) == 0,
+                        "status": status.get("status"),
+                        "has_error": bool(status.get("has_error")),
+                        "t_mos": status.get("t_mos"),
+                        "t_rotor": status.get("t_rotor"),
+                    }
+                )
+            faulted = [item["esc_id"] for item in motors if item["has_error"]]
+            return {
+                "ok": True,
+                "read_only": True,
+                "channel": channel,
+                "scanned_range": "0x01-0x20",
+                "motors": motors,
+                "duplicate_esc_ids": sorted(duplicate_ids),
+                "faulted_esc_ids": faulted,
+                "checked_at": _now_iso(),
+            }
+
+    def link_wizard_disconnect(self, channel: str = "can0") -> Dict[str, Any]:
+        with self._lock:
+            closed = []
+            for session in list(self.sessions.values()):
+                if session.transport == "socketcan" and session.connection.get("channel") == channel and session.connection_state != "disconnected":
+                    self.disconnect_device(session.session_id)
+                    closed.append(session.session_id)
+            return {"ok": True, "closed_sessions": closed}
+
+    def _link_interface_view(self, iface: Dict[str, Any]) -> Dict[str, Any]:
+        state = str(iface.get("state") or "").upper()
+        can_state = str(iface.get("can_state") or "").upper()
+        # Any adapter Linux exposes as SocketCAN works here; the driver is shown as
+        # information, not as a requirement.
+        healthy = state == "UP" and can_state == "ERROR-ACTIVE"
+        if state != "UP":
+            health_text = "未启动"
+        elif can_state and can_state != "ERROR-ACTIVE":
+            health_text = f"总线状态 {can_state}"
+        else:
+            health_text = "正常"
+        return {
+            **iface,
+            "healthy": healthy,
+            "health_text": health_text,
+            "bitrate_text": f"{int(iface['bitrate']) / 1000000:g} Mbps" if iface.get("bitrate") else "未设置",
+            "mode_text": "CAN FD" if iface.get("fd_enabled") else "CAN 2.0",
+        }
+
+    def single_motor_inspect(self, channel: str = "can0", bitrate: int = 1000000) -> Dict[str, Any]:
+        """Read-only view of every motor answering on one CAN port.
+
+        Sends parameter reads and status refreshes only: no enable, no parameter
+        write, no Flash save, no zero. Safe to run at any time, including on an
+        already commissioned motor.
+        """
+        with self._lock:
+            problem = self._wizard_can_precheck(channel, int(bitrate))
+            if problem:
+                return problem
+            try:
+                session = self._wizard_session(channel, int(bitrate))
+            except Exception as error:
+                return self._wizard_problem("connect_failed", str(error))
+
+            candidates, duplicate_ids = self._inventory_scan(session, DEFAULT_ARM_SCAN_IDS)
+            if not candidates:
+                return self._wizard_problem("no_motor_found")
+
+            motors = []
+            for candidate in candidates:
+                motor = self._motor_from_candidate(candidate)
+                params = self._read_params(session, motor, SINGLE_INSPECT_RIDS, ignore_errors=True)
+                status = self._refresh_and_snapshot(session, motor, ignore_errors=True)
+                motors.append(
+                    {
+                        "esc_id": params.get("ESC_ID") if params.get("ESC_ID") is not None else candidate.get("detected_esc_id"),
+                        "mst_id": params.get("MST_ID") if params.get("MST_ID") is not None else candidate.get("detected_mst_id"),
+                        "matched_joints": self._joints_matching_ids(params.get("ESC_ID"), params.get("MST_ID")),
+                        "factory_default_ids": int(params.get("MST_ID") or 0) == 0,
+                        "model_check": _infer_motor_model(params, None),
+                        "rows": self._inspect_rows(params),
+                        "raw_params": params,
+                        "status": status,
+                    }
+                )
+            return {
+                "ok": True,
+                "read_only": True,
+                "channel": channel,
+                "bitrate": int(bitrate),
+                "scanned_range": "0x01-0x20",
+                "duplicate_esc_ids": sorted(duplicate_ids),
+                "inspected_at": _now_iso(),
+                "motors": motors,
+            }
+
+    def _inspect_rows(self, params: Dict[str, Any]) -> List[Dict[str, Any]]:
+        rows = []
+        for field, _rid, label, group in SINGLE_INSPECT_FIELDS:
+            value = params.get(field)
+            rows.append(
+                {
+                    "field": field,
+                    "label": label,
+                    "group": group,
+                    "value": value,
+                    "display": self._inspect_display(field, value),
+                }
+            )
+        return rows
+
+    def _inspect_display(self, field: str, value: Any) -> Optional[str]:
+        if value is None:
+            return None
+        if field in {"ESC_ID", "MST_ID"}:
+            return f"0x{int(value):02X}（{int(value)}）"
+        if field == "CTRL_MODE":
+            return f"{_control_name(value)}（{int(value)}）"
+        if field == "can_br":
+            # Motors answer with the register code (e.g. 4); some drivers already decode it.
+            bitrate = _normalize_can_br(value)
+            if not bitrate:
+                return str(value)
+            decoded = f"{bitrate / 1000000:g} Mbps"
+            return decoded if int(value) == int(bitrate) else f"{decoded}（代码 {int(value)}）"
+        if field == "TIMEOUT":
+            return "0（未启用）" if int(value) == 0 else str(int(value))
+        return str(value)
+
+    def _wizard_problem(self, code: str, detail: Optional[str] = None, **extra: Any) -> Dict[str, Any]:
+        meta = SINGLE_MOTOR_PROBLEMS.get(code) or SINGLE_MOTOR_PROBLEMS["unknown_error"]
+        return {"ok": False, "problem": {"code": code, **meta, "detail": detail, **extra}}
+
+    def _wizard_error_code(self, error: Exception, default: str) -> str:
+        text = str(error).lower()
+        if "disable" in text:
+            return "disable_failed"
+        if "failed to write" in text:
+            return "write_failed"
+        if "save flash" in text:
+            return "save_failed"
+        if "requires" in text and "state" in text:
+            return "job_state_invalid"
+        return default
+
+    def _wizard_can_precheck(self, channel: str, bitrate: int) -> Optional[Dict[str, Any]]:
+        interfaces = {item["name"]: item for item in self._list_socketcan_interfaces()}
+        iface = interfaces.get(channel)
+        if iface is None:
+            return self._wizard_problem("can_interface_missing", f"{channel} not in {sorted(interfaces)}")
+        state = str(iface.get("state") or "").upper()
+        can_state = str(iface.get("can_state") or "").upper()
+        needs_restart = state != "UP" or int(iface.get("bitrate") or 0) != int(bitrate) or can_state in {"BUS-OFF", "STOPPED"}
+        if needs_restart:
+            try:
+                for cmd in (
+                    ["ip", "link", "set", channel, "down"],
+                    ["ip", "link", "set", channel, "type", "can", "bitrate", str(int(bitrate))],
+                    ["ip", "link", "set", channel, "up"],
+                ):
+                    self._run_system_command(["sudo", "-n", *cmd])
+            except Exception as error:
+                return self._wizard_problem("can_interface_down", str(error))
+            iface = self._interface_snapshot(channel)
+            can_state = str(iface.get("can_state") or "").upper()
+        if can_state in {"BUS-OFF", "ERROR-PASSIVE"}:
+            return self._wizard_problem("can_bus_error", f"can_state={can_state}")
+        return None
+
+    def _wizard_session(self, channel: str, bitrate: int) -> DeviceSession:
+        for session in self.sessions.values():
+            if (
+                session.transport == "socketcan"
+                and session.connection_state != "disconnected"
+                and session.connection.get("channel") == channel
+                and int(session.connection.get("bitrate", 0)) == int(bitrate)
+            ):
+                return session
+        payload = self.connect_device("socketcan", {"channel": channel, "bitrate": int(bitrate)})
+        return self._session(payload["device_session_id"])
+
+    def single_wizard_identify(
+        self,
+        channel: str = "can0",
+        bitrate: int = 1000000,
+        arm_side: str = "right_arm",
+        joint: str = "J1",
+        product_line: str = "openarm_2_0",
+    ) -> Dict[str, Any]:
+        with self._lock:
+            if arm_side not in SINGLE_WIZARD_ARM_PROFILES:
+                raise ValueError("arm_side must be right_arm or left_arm")
+            if product_line not in SINGLE_WIZARD_PRODUCT_LINES:
+                raise ValueError("unsupported product_line")
+            arm_meta = SINGLE_WIZARD_ARM_PROFILES[arm_side]
+            profile_id = arm_meta["profile_id"]
+            joint_name = f"{arm_meta['prefix']}-{joint}"
+            self.profile_manager.get_joint(profile_id, joint_name)
+
+            problem = self._wizard_can_precheck(channel, int(bitrate))
+            if problem:
+                return problem
+            try:
+                session = self._wizard_session(channel, int(bitrate))
+            except Exception as error:
+                return self._wizard_problem("connect_failed", str(error))
+
+            candidates, duplicate_ids = self._inventory_scan(session, DEFAULT_ARM_SCAN_IDS)
+            if not candidates:
+                return self._wizard_problem("no_motor_found")
+            if len(candidates) > 1 or duplicate_ids:
+                found = sorted(int(item["detected_esc_id"]) for item in candidates)
+                return self._wizard_problem("multiple_motors", f"found ESC_IDs {found}", found_esc_ids=found)
+            session.last_scan = {
+                "candidates": candidates,
+                "conflicts": [],
+                "summary": {"detected": 1, "conflicts": 0, "passed": True},
+                "scan_mode": "single_safe_scan",
+            }
+            status = candidates[0].get("status") or {}
+            if status.get("has_error"):
+                return self._wizard_problem("motor_fault", f"status={status.get('status')}")
+            if str(status.get("status", "")).startswith("UNKNOWN"):
+                return self._wizard_problem("status_read_anomaly", f"status={status.get('status')}")
+            if float(status.get("t_mos") or 0.0) >= TEMP_LIMITS["mos"] or float(status.get("t_rotor") or 0.0) >= TEMP_LIMITS["rotor"]:
+                return self._wizard_problem("motor_overtemp", f"t_mos={status.get('t_mos')} t_rotor={status.get('t_rotor')}")
+
+            created = self.create_job("single_id_config", session.session_id, profile_id, joint_name)
+            job = self._job(created["job_id"])
+            job.product_line = product_line
+            try:
+                applied = self.apply_profile(job.job_id, joint_name, profile_id)
+            except Exception as error:
+                self._fail_job(job, f"识别后读取参数失败: {error}")
+                return self._wizard_problem("write_failed" if "write" in str(error).lower() else "unknown_error", str(error))
+            return {"ok": True, **self._single_wizard_state(job)}
+
+    def _single_wizard_state(self, job: JobRecord) -> Dict[str, Any]:
+        motor_payload = job.motors.get("commissioned_motor", {})
+        current = motor_payload.get("current", {}) or {}
+        params = current.get("params", {}) or {}
+        status = current.get("status", {}) or {}
+        target = job.target_config
+        rows = []
+        for field_name, target_key in (("ESC_ID", "target_esc_id"), ("MST_ID", "target_mst_id"), ("CTRL_MODE", "target_ctrl_mode"), ("can_br", "target_can_br")):
+            current_value = params.get(field_name)
+            target_value = target.get(target_key)
+            if field_name == "CTRL_MODE" and current_value is not None:
+                display_current = _control_name(current_value)
+                same = display_current == _control_name(target_value)
+            elif field_name == "can_br" and current_value is not None:
+                display_current = _normalize_can_br(current_value)
+                same = display_current == _normalize_can_br(target_value)
+            else:
+                display_current = current_value
+                same = current_value is not None and int(current_value) == int(target_value)
+            rows.append({"field": field_name, "current": display_current, "target": target_value, "changes": not same, "written": True})
+        rows.append({"field": "TIMEOUT", "current": params.get("TIMEOUT"), "target": "只记录", "changes": False, "written": False})
+        joint_name = target.get("joint_name") or job.target_joint
+        # Motors have no unique readable serial, so "already configured" is judged from the IDs the motor carries now.
+        configured_as = self._joints_matching_ids(params.get("ESC_ID"), params.get("MST_ID"))
+        joint_taken_by = []
+        if joint_name not in configured_as:
+            joint_taken_by = [
+                {"record_id": item.get("record_id"), "created_at": item.get("created_at")}
+                for item in self._load_single_motor_records()
+                if item.get("result") == "PASS"
+                and item.get("joint_name") == joint_name
+                and item.get("product_line") == job.product_line
+            ][:1]
+        return {
+            "job_id": job.job_id,
+            "status": job.status,
+            "model_check": _infer_motor_model(params, target.get("motor_type")),
+            "joint_taken_by": joint_taken_by,
+            "joint_name": joint_name,
+            "motor_type": target.get("motor_type"),
+            "product_line": job.product_line,
+            "configured_as": configured_as,
+            "factory_default_ids": params.get("MST_ID") == 0,
+            "motor": {
+                "firmware": params.get("sw_ver"),
+                "status": status.get("status"),
+                "t_mos": status.get("t_mos"),
+                "t_rotor": status.get("t_rotor"),
+            },
+            "param_rows": rows,
+            "needs_write": any(row["changes"] for row in rows),
+        }
+
+    def single_wizard_write(self, job_id: str) -> Dict[str, Any]:
+        with self._lock:
+            job = self._job(job_id)
+            if job.status != "profile_selected":
+                return self._wizard_problem("job_state_invalid", f"status={job.status}")
+            try:
+                self.write_params(job_id, dict(job.target_config))
+            except Exception as error:
+                if job.status != "failed":
+                    self._fail_job(job, f"参数写入失败: {error}")
+                return self._wizard_problem(self._wizard_error_code(error, "write_failed"), str(error))
+            try:
+                verification = self.verify_params(job_id)
+            except Exception as error:
+                if job.status != "failed":
+                    self._fail_job(job, f"参数回读失败: {error}")
+                return self._wizard_problem("param_mismatch", str(error))
+            if not verification["verified"]:
+                return self._wizard_problem("param_mismatch", None, mismatches=verification["mismatches"])
+            return {"ok": True, **self._single_wizard_state(job)}
+
+    def single_wizard_save(self, job_id: str) -> Dict[str, Any]:
+        with self._lock:
+            job = self._job(job_id)
+            if job.status != "params_verified":
+                return self._wizard_problem("job_state_invalid", f"status={job.status}")
+            try:
+                self.save_flash(job_id)
+            except Exception as error:
+                return self._wizard_problem(self._wizard_error_code(error, "save_failed"), str(error))
+            return {"ok": True, **self._single_wizard_state(job)}
+
+    def single_wizard_finish(self, job_id: str) -> Dict[str, Any]:
+        with self._lock:
+            job = self._job(job_id)
+            if job.job_type != "single_id_config" or job.status != "params_saved":
+                return self._wizard_problem("job_state_invalid", f"status={job.status}")
+            session = self._session(job.device_session_id)
+            motor = self._motor_from_candidate(job.candidate)
+            probe = self._read_params(session, motor, [DM_variable.ESC_ID], ignore_errors=True)
+            if probe.get("ESC_ID") is None:
+                # Motor may still be booting after the power cycle; keep the job retryable.
+                return self._wizard_problem("readback_no_response", f"ESC_ID {motor.SlaveID} did not answer")
+            result = self.test(job_id, confirmed=True)
+            metrics = result["metrics"]
+            if not result["tested"]:
+                issues = metrics.get("issues", [])
+                if "motor_error" in issues:
+                    code = "motor_fault"
+                elif "mos_overtemp" in issues or "rotor_overtemp" in issues:
+                    code = "motor_overtemp"
+                elif "motor_enabled" in issues:
+                    code = "disable_failed"
+                else:
+                    code = "readback_mismatch"
+                return self._wizard_problem(code, None, mismatches=metrics.get("mismatches", []), record=result.get("record"))
+            return {"ok": True, **self._single_wizard_state(job), "record": result.get("record")}
+
     def _session(self, session_id: str) -> DeviceSession:
         if session_id not in self.sessions:
             raise KeyError("session not found")
@@ -5106,9 +5911,11 @@ class WorkstationService:
                 actions.append("verify_params")
             if job.status == "params_verified" and session.capabilities.save_flash:
                 actions.append("save_flash")
-            if job.status == "params_saved" and session.capabilities.zero:
+            if job.status == "params_saved" and job.expert_mode and session.capabilities.zero:
                 actions.append("zero")
-            if job.status in ["zeroed", "params_saved"] and session.capabilities.test:
+            if job.status == "params_saved":
+                actions.append("test")
+            if job.status == "zeroed" and session.capabilities.test:
                 actions.append("test")
             if job.status in ["device_connected", "profile_selected", "params_written", "params_verified", "params_saved"] and session.capabilities.communication_check:
                 actions.append("run_comm_check")
@@ -5558,10 +6365,76 @@ class WorkstationService:
         base["target_kt_value"] = float(current_params.get("KT_Value") or 0)
         base["target_gr"] = float(current_params.get("Gr") or 0)
         base["task_kind"] = job_type
+        if job_type in {"single_id_config", "single_param_config"}:
+            current_timeout = current_params.get("TIMEOUT")
+            base["target_timeout"] = int(current_timeout) if current_timeout is not None else None
+            base["timeout_write_policy"] = "read_only_during_single_motor_commissioning"
+        if job_type == "single_id_config":
+            base["requires_zero"] = False
+            base["test_profile"] = "saved_readback"
         if job_type == "single_param_config":
             base["requires_zero"] = False
             base["test_profile"] = "comm_ping"
         return base
+
+    def _single_param_mismatches(self, target_config: Dict[str, Any], readback: Dict[str, Any]) -> List[Dict[str, Any]]:
+        expected: Dict[str, Any] = {"ESC_ID": int(target_config["target_esc_id"])}
+        for target_key, rid in PARAM_TARGET_FIELD_MAP.items():
+            if target_key not in target_config:
+                continue
+            raw_value = target_config[target_key]
+            if rid == DM_variable.CTRL_MODE:
+                expected[rid.name] = int(_control_from_value(raw_value))
+            elif rid == DM_variable.can_br:
+                expected[rid.name] = int(_normalize_can_br(raw_value) or 0)
+            elif rid in {DM_variable.KT_Value, DM_variable.Gr, DM_variable.PMAX, DM_variable.VMAX, DM_variable.TMAX}:
+                expected[rid.name] = float(raw_value)
+            else:
+                expected[rid.name] = int(raw_value)
+        mismatches = []
+        for key, value in expected.items():
+            actual = readback.get(key)
+            if actual is None:
+                mismatches.append({"field": key, "expected": value, "actual": actual})
+                continue
+            if key == DM_variable.can_br.name:
+                actual = _normalize_can_br(actual)
+            if isinstance(value, float):
+                if abs(float(actual) - value) > 1e-6:
+                    mismatches.append({"field": key, "expected": value, "actual": actual})
+            elif int(actual) != int(value):
+                mismatches.append({"field": key, "expected": value, "actual": actual})
+        return mismatches
+
+    def _single_saved_readback(self, job: JobRecord, session: DeviceSession) -> Dict[str, Any]:
+        """No-motion completion check after save_flash: never enables or commands the motor."""
+        motor = self._motor_from_candidate(job.candidate)
+        readback_rids = [DM_variable.ESC_ID] + list(PARAM_TARGET_FIELD_MAP.values()) + [DM_variable.SN, DM_variable.sw_ver]
+        readback = self._read_params(session, motor, readback_rids, ignore_errors=True)
+        status = self._refresh_and_snapshot(session, motor, ignore_errors=True)
+        mismatches = self._single_param_mismatches(job.target_config, readback)
+        issues = []
+        if mismatches:
+            issues.append("param_mismatch")
+        if status.get("has_error"):
+            issues.append("motor_error")
+        if status.get("is_enabled"):
+            issues.append("motor_enabled")
+        if float(status.get("t_mos", 0.0)) >= TEMP_LIMITS["mos"]:
+            issues.append("mos_overtemp")
+        if float(status.get("t_rotor", 0.0)) >= TEMP_LIMITS["rotor"]:
+            issues.append("rotor_overtemp")
+        if mismatches:
+            job.motors["commissioned_motor"]["mismatches"] = mismatches
+        return {
+            "mode": "saved_readback",
+            "motion": False,
+            "readback": readback,
+            "final_status": status,
+            "mismatches": mismatches,
+            "issues": issues,
+            "passed": not issues,
+        }
 
     def _read_params(
         self,
@@ -5589,17 +6462,25 @@ class WorkstationService:
                 raise
         return motor.snapshot()
 
-    def _write_single_target(self, session: DeviceSession, motor: Motor, target: Dict[str, Any]):
+    def _write_single_target(
+        self,
+        session: DeviceSession,
+        motor: Motor,
+        target: Dict[str, Any],
+        *,
+        allow_service_params: bool = False,
+    ):
         snapshot = self._refresh_and_snapshot(session, motor)
         if snapshot.get("is_enabled"):
             raise RuntimeError("motor must be disabled before parameter write")
         motor.MotorType = _motor_type_from_name(target["motor_type"])
         writes = [
             (DM_variable.CTRL_MODE, int(_control_from_value(target["target_ctrl_mode"]))),
-            (DM_variable.TIMEOUT, int(target["target_timeout"])),
             (DM_variable.can_br, _encode_can_br_for_motor(target["target_can_br"])),
             (DM_variable.MST_ID, int(target["target_mst_id"])),
         ]
+        if allow_service_params and target.get("target_timeout") is not None:
+            writes.insert(1, (DM_variable.TIMEOUT, int(target["target_timeout"])))
         optional_writes = [
             ("target_kt_value", DM_variable.KT_Value, float),
             ("target_gr", DM_variable.Gr, float),
@@ -5607,9 +6488,10 @@ class WorkstationService:
             ("target_vmax", DM_variable.VMAX, float),
             ("target_tmax", DM_variable.TMAX, float),
         ]
-        for key, rid, caster in optional_writes:
-            if key in target and target[key] is not None:
-                writes.append((rid, caster(target[key])))
+        if allow_service_params:
+            for key, rid, caster in optional_writes:
+                if key in target and target[key] is not None:
+                    writes.append((rid, caster(target[key])))
         for rid, value in writes:
             if not session.driver.change_motor_param(motor, rid, value):
                 raise RuntimeError(f"failed to write {rid.name}")
@@ -6233,6 +7115,7 @@ class WorkstationService:
                 "profile_id": job.profile_id,
                 "target_joint": job.target_joint,
                 "expert_mode": job.expert_mode,
+                "product_line": job.product_line,
                 "status": job.status,
                 "current_step": job.current_step,
                 "started_at": job.started_at,

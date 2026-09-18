@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.6.16-left-timeout-unification`
+Current workstation version: `0.10.2-wizard-rail-fix`
 
 ## Versioning Rule
 
@@ -13,6 +13,165 @@ Current workstation version: `0.6.16-left-timeout-unification`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.10.2-wizard-rail-fix - 2026-09-18
+
+Summary: fixed the task rail reappearing on the wizard tabs after a page load or refresh.
+
+Changes:
+
+- The rails are hidden by CSS keyed on `body[data-primary-flow]`, but nothing set that attribute until the operator clicked a tab, so a fresh load of the default 准备建链 tab showed the engineer task rail next to the wizard. The template now ships `<body data-primary-flow="connectTab">`, so the wizard owns the full width from first paint.
+- Boot now also calls `switchPrimaryTab(currentPrimaryTab())` so the attribute always matches the active tab, including when the active tab is restored by other code.
+- Asset cache keys bumped so browsers pick up the corrected template and script.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 103 passed, including a new regression test that asserts the served page carries the default `data-primary-flow`, that both wizard rail-hiding selectors exist in the stylesheet, and that boot syncs the attribute.
+- Server restarted; the served page and script contain both fixes.
+
+Operational Notes:
+
+- The task rail and live monitor remain available under 高级工具（工程师）on both wizard tabs.
+
+### 0.10.1-advanced-tools-layout - 2026-09-18
+
+Summary: reordered the engineer advanced tools into labelled sections that follow the actual work order; no behaviour change.
+
+Changes:
+
+- The single-motor advanced page is now five titled sections in workflow order: 参数写入与保存 (the existing step subtabs), 参数核对 (target vs. measured), 单关节诊断 (the joint test buttons together with their recent-result summary, previously split between the body and the side rail), 官方命令 (motor-check and baudrate change) and 报告与厂商维护 (motor report, DMTool, maintenance records).
+- Each section header carries a one-line purpose note; the diagnostics header states that 参数诊断/链路测试 are read-only while 极小幅响应 moves the motor.
+- The side rail keeps only the two cards that are context rather than tools: 电机工站建议 and 关联整臂任务.
+- The link advanced page labels its manual connection area and marks the two transport forms (串口桥参数 / SocketCAN 参数).
+- Any adapter Linux exposes as SocketCAN is reported by its real state; the previous "非 gs_usb 驱动" text no longer overrides a healthy non-gs_usb adapter (e.g. peak_usb).
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 102 passed, including a new assertion that a healthy `peak_usb` CAN FD interface is reported as 正常.
+- Markup check after the restructure: HTML tags balanced, no element id lost, added or duplicated (compared against the pre-change template), so all existing JS bindings keep working.
+- Server restarted; the reordered sections render under 高级工具（工程师）.
+
+Operational Notes:
+
+- No tool was removed. Zero save, safe_mit_ping, 极小幅响应 and 受控执行 remain engineer-only and still move or write to the motor.
+
+### 0.10.0-link-wizard - 2026-09-18
+
+Summary: tab 01 is now a beginner link wizard with the same layout and troubleshooting behaviour as the single-motor wizard.
+
+Changes:
+
+- The connection tab leads with a four-step wizard (detect adapter -> configure and start the CAN port -> connect the workstation -> read-only bus check -> done), one primary button per step, a step rail, a per-step help panel and a live connection status chip.
+- New backend endpoints `POST /api/link/wizard/detect|prepare|connect|bus-check|disconnect` and the matching `WorkstationService.link_wizard_*` methods. Detect lists every SocketCAN port with beginner-readable health, mode and bitrate text; prepare configures the port (CAN 2.0 1 Mbps by default, CAN FD 1M/5M optional) and brings it up; connect reuses an open session for the same port instead of stacking CAN sockets; the bus check is a read-only inventory of ESC IDs 0x01-0x20 that reports matched Profile joints, factory-default IDs, duplicate ESC IDs and faulted motors.
+- Every failure returns a structured problem (title, cause, ordered fix steps, technical detail) and can be retried at the step that produced it. New catalog entries: `adapter_missing` (no CAN port at all, including the gs_usb firmware hint), `interface_prepare_failed` (with the exact `ip link` commands) and `bus_no_motor` (power, wiring, termination, wrong channel).
+- No step writes motor parameters, enables a motor or sends a motion command.
+- The previous manual connection form, interface list and system CAN configuration remain unchanged under "高级工具（工程师）".
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 102 passed, including detect with no adapter, interface health text for an UP/DOWN port, prepare issuing the `ip link` sequence, connect reusing an existing session, disconnect closing it, a permission-denied prepare failure, an empty-bus check and joint matching on a populated bus.
+- Live, 2026-09-18: with the adapter unplugged, all four endpoints returned the `adapter_missing` problem with operator guidance instead of a raw error. The happy path could not be re-run live because the adapter was disconnected; it remains to be walked through on hardware.
+
+Operational Notes:
+
+- Operators start here before any test; after re-plugging the adapter or restarting a CAN port, run the wizard again so the workstation opens a fresh CAN socket.
+- The bus check is the fastest way to see whether a motor answers at all before opening the single-motor or whole-arm workflow.
+
+### 0.9.0-single-motor-inspect - 2026-09-18
+
+Summary: added a read-only motor parameter viewer to the single-motor page, so operators can look at what a motor carries without starting a commissioning job.
+
+Changes:
+
+- New "查看电机参数" button in the single-motor wizard header opens a read-only dialog: it scans ESC IDs 0x01-0x20 on the selected CAN port and shows, per answering motor, the communication identity (ESC_ID, MST_ID, control mode, bitrate, TIMEOUT), motor parameters (Gr, KT, PMAX, VMAX, TMAX), protection thresholds, versions and the raw SN register, plus live status, position and temperatures.
+- New backend `POST /api/single-motor/inspect` and `WorkstationService.single_motor_inspect()`. The call only reads parameters and refreshes status: it never enables, writes, saves Flash or zeroes, and it creates no job and no record.
+- The viewer reports the matched Profile joint for the motor's current ID pair, marks factory-default IDs, infers the motor family from the limit registers, and lists every motor on the bus instead of blocking when more than one answers; duplicate ESC IDs are called out.
+- Failures reuse the operator troubleshooting catalog (missing adapter, interface down, bus error, connect failure, no motor found), so a read attempt explains the cause and the fix instead of failing silently.
+- `can_br` display accepts both the raw register code and an already decoded bitrate; `TIMEOUT=0` is shown as not enabled.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 99 passed, including a service-level test asserting no write/enable/zero call and no job is created during inspection, ID-to-joint matching, display formatting, the multi-motor listing, and the API-level rows and problem envelope.
+- Live hardware, 2026-09-18: read back a right-arm J8 motor on can0 (ESC 0x08 / MST 0x18, MIT, can_br code 4 = 1 Mbps, TIMEOUT 0, Gr 10.0, PMAX/VMAX/TMAX 12.5/30/10, DISABLED, no fault) using the same read path.
+
+Operational Notes:
+
+- The viewer is safe to use at any time, including on an already commissioned motor; it sends no motion or write command.
+- Use it before commissioning to confirm which joint a motor is currently configured as, and after assembly to check a joint without creating a job.
+
+### 0.8.0-single-motor-wizard - 2026-09-17
+
+Summary: the single-motor page is now a beginner wizard with built-in troubleshooting, and loose-motor commissioning saves a traceable record instead of generating a per-motor report.
+
+Changes:
+
+- New operator wizard on the single-motor tab: choose product line (OpenArm 2.0 default / 1.0), arm side, joint and CAN port -> identify -> review current vs target parameters -> write and verify -> save Flash -> power cycle -> saved readback -> PASS. One primary button per step; the page never offers zero save or motion commands.
+- New backend endpoints `GET /api/single-motor/wizard/options`, `POST /api/single-motor/wizard/identify`, `POST /api/single-motor/wizard/<job_id>/write|save|finish`, and `GET /api/single-motor/records`.
+- Identify auto-starts the selected SocketCAN port at the requested bitrate when it is down or misconfigured (`sudo -n ip link`), scans ESC IDs 0x01-0x20, and blocks on no motor, multiple motors, fault status, unknown status codes or over-temperature before any job is created.
+- Every wizard failure returns a structured problem (title, explanation, ordered fix steps, technical detail) from a single troubleshooting catalog; hardware exceptions are converted to an `unknown_error` problem instead of a raw 502. Retryable problems (CAN, identification, save, no answer after power cycle) can be retried in place; the finish step keeps the job retryable when the motor has not answered yet after the power cycle.
+- A completed single-motor ID test (pass or fail) no longer writes `report.html`; it saves one immutable single-motor commissioning record per run under `artifacts/factory/single_motor_records/<record_id>.json` (target IDs, before/after readback, recorded TIMEOUT, firmware, final status, product line, joint, job reference, workstation version). These records are inputs for the later whole-arm factory report.
+- The Damiao `SN` register is not unique per motor: during the 2026-09-17 live batch, four different factory-new motors all read `SN=1412444213`. It is stored only as raw `sn_register` evidence and never used as a motor identity. "Already configured" is judged from the IDs the motor currently carries (factory default MST_ID 0x00 vs. a Profile joint's ESC/MST pair). Legacy SN-grouped record files are split automatically into per-record files and the original is kept under `_legacy_by_sn/`.
+- The wizard lists recent saved records. The completion card and records table show the post-power-cycle readback (ESC_ID, MST_ID, control mode, bitrate with raw `can_br` code, bus mode, TIMEOUT); new records also store these under `verified`.
+- Identify shows the motor model check: Damiao motors expose no model register, so the family is inferred from the factory limit registers (PMAX/VMAX/TMAX, matched against the driver's `LIMIT_PARAM` table; Gr shown as evidence) and compared with the joint's Profile motor type. A mismatch or unknown result shows a warning and keeps "写入并校验" disabled until the operator confirms the nameplate. J3 (DM-J4340P) and J4 (DM-J4340) share limits and must be distinguished by nameplate. The check is stored in the record as `model_check`.
+- "配置下一颗电机" advances to the next joint, and identify warns when the selected joint already has a PASS record from a different motor SN.
+- The previous single-motor controls, official commands, diagnostics and vendor maintenance tools remain available unchanged under "高级工具（工程师）"; the left task rail and live monitor rail are hidden while the wizard is shown.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 96 passed, including two motors sharing an SN register value producing two separate records, legacy SN-grouped record migration, including motor model inference (DM8009 match, DM4310-on-J1 mismatch, DM4340 match, unreadable limits), wizard happy path (ID change, no motion/zero/write/save during finish, record content, no report.html, previous-record lookup), no-motor / multiple-motor blocking, fault blocking, retryable no-answer readback, readback drift failure record, and the API-level wizard flow with problem envelope.
+- Headless Chromium walkthrough against a fake-driver server on port 5055: all five steps, the parameter-change highlight, the problem panel and the advanced-tools view rendered without page errors.
+- Live hardware, 2026-09-17: R-J1, R-J2, L-J1 and L-J2 (four factory-new DM8009-family motors, all reporting SN register 1412444213) configured PASS; migrated to four separate records. First motor on can0 (CAN 2.0, 1 Mbps). MST_ID changed 0x00 -> 0x11, ESC_ID stayed 0x01, CTRL_MODE MIT, `can_br` code 4 (1 Mbps), TIMEOUT 0 recorded; saved readback after power cycle PASS with no motion.
+
+Operational Notes:
+
+- Operators should use the wizard; engineers use the advanced tools. Neither path saves a loose-motor zero by default.
+- The whole-arm factory report does not yet read `single_motor_records`; linking those records into the final report is a follow-up.
+
+### 0.7.0-single-saved-readback - 2026-09-17
+
+Summary: loose-motor ID commissioning now completes with a no-motion saved-parameter readback instead of zero save and a motion ping.
+
+Changes:
+
+- Default (non-expert) single-motor ID jobs no longer offer `zero`; the backend rejects zero save unless the job is an expert `single_id_config` job, enforcing `single_motor_zero_save_default=False`.
+- After `save_flash`, the `test` action runs a `saved_readback` check: it reads back ESC_ID, MST_ID, CTRL_MODE, can_br and the other target fields plus motor status, never enables the motor or sends motion frames, and passes the job with a report only when readback matches and the motor is fault-free, disabled and within temperature limits.
+- `safe_mit_ping` (absolute `q=0.05 -> 0` MIT command) is only reachable from the `zeroed` state of an expert job, so an un-zeroed motor is never driven toward absolute zero.
+- A failed single-motor test now also writes the job report for traceability.
+- `run_comm_check` on a saved single-motor ID job previously dispatched to the motion ping; it now resolves to the same no-motion saved readback.
+- Single-motor ID target configs report `requires_zero=False` and `test_profile=saved_readback`.
+- UI: the single-motor step bar, execute panel, primary workflow action and confirmation dialog show the saved-readback step (with a power-cycle-before-readback hint); the zero button is hidden for non-expert jobs; the write-params hint no longer claims TIMEOUT is written.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 90 passed, including new coverage for the no-motion default flow (no enable/MIT/zero/write/save calls during readback), the expert zero plus motion ping flow, a readback MST_ID drift failure, and the API-level flow (zero rejected, saved readback passes).
+- `node --check web/static/js/app.js`: passed.
+- Not yet verified on live hardware (no USB-CAN adapter attached on 2026-09-17).
+
+Operational Notes:
+
+- Loose-motor commissioning flow: write params -> readback verify -> save Flash -> (power cycle recommended) -> saved readback -> report. No zero is saved and no motion command is sent.
+- Operational zero remains an assembled-arm step (official dynamic zero calibration). Expert zero on a loose motor is only for documented service fixtures with a known mechanical reference.
+
+### 0.6.18-esc-id-ack-transition - 2026-09-01
+
+Summary: eliminated false ESC ID write failures when a motor acknowledges with its newly assigned ID.
+
+Changes:
+
+- Serial and SocketCAN drivers temporarily recognize both the old and target ESC IDs while waiting for the parameter-write acknowledgement.
+- A successful acknowledgement atomically updates the driver's motor mapping; a timeout removes the temporary target mapping and preserves the original identity.
+- Added regression coverage for new-ID acknowledgements on both transports.
+
+### 0.6.17-single-timeout-stage-guard - 2026-09-01
+
+Summary: enforced the existing rule that operational TIMEOUT standardization belongs to assembled-arm acceptance, not loose-motor commissioning.
+
+Changes:
+
+- Non-expert single-motor ID/parameter jobs now keep the measured `TIMEOUT` as read-only evidence instead of inheriting the assembled-arm Profile target.
+- Default single-motor writes are limited to communication identity fields; `TIMEOUT`, `Gr`, `KT_Value`, `PMAX`, `VMAX`, and `TMAX` require an explicit expert parameter-service job.
+- The single-motor comparison UI labels `TIMEOUT` as a read-only record.
+- Restored the live R-J1 under test from the mistakenly applied `TIMEOUT=5000` to its pre-test measured value `0`, with Flash save and readback verification.
 
 ### 0.6.16-left-timeout-unification - 2026-08-05
 

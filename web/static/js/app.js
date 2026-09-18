@@ -35,6 +35,8 @@ import { bindEvents } from './event-bindings.js';
 import { initSocket } from './socket-client.js';
 import { kvRow, setButtonDisabled, updateActionStatus } from './ui-helpers.js';
 import { state } from './store.js';
+import { initSingleMotorWizard } from './single-motor-wizard.js?v=20260918-smw-inspect';
+import { initLinkWizard } from './link-wizard.js?v=20260918-link-wizard2';
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, character => ({
@@ -198,10 +200,18 @@ function renderScopeAssumptions() {
     renderExecuteMode();
 }
 
+function singleCommissioningExpert() {
+    const jobExpert = state.currentJob?.job?.expert_mode;
+    if (typeof jobExpert === 'boolean') return jobExpert;
+    return Boolean(document.getElementById('expertMode')?.checked);
+}
+
 function renderSteps() {
     const jobType = document.getElementById('jobType').value;
     const steps = isSingleCommissioning(jobType)
-        ? ['连接', '识别', '选择 Joint', '写入参数', '回读校验', '保存 Flash', '零位', '测试', '报告']
+        ? (singleCommissioningExpert()
+            ? ['连接', '识别', '选择 Joint', '写入参数', '回读校验', '保存 Flash', '零位(专家)', '复核/测试', '报告']
+            : ['连接', '识别', '选择 Joint', '写入参数', '回读校验', '保存 Flash', '保存后复核', '报告'])
         : isSingleParamConfig(jobType)
             ? ['连接', '识别', '加载参数基线', '写入参数', '回读校验', '保存 Flash', '报告']
         : isSingleCommCheck(jobType)
@@ -218,8 +228,9 @@ function renderSteps() {
             '写入参数': ['params_written'],
             '回读校验': ['params_verified'],
             '保存 Flash': ['params_saved'],
-            '零位': ['zeroed'],
-            '测试': ['tested', 'passed'],
+            '零位(专家)': ['zeroed'],
+            '复核/测试': ['tested', 'passed'],
+            '保存后复核': ['tested', 'passed'],
             '报告': ['passed', 'failed', 'cancelled']
         }
         : isSingleParamConfig(jobType)
@@ -322,8 +333,8 @@ function renderExecuteMode() {
         if (!commissioningMode) {
             switchExecuteTab('testPanel');
         }
-        if (commissioningMode) {
-            executeSummary.textContent = '当前任务按达妙上位机习惯分成 参数 / 保存 / 零位 / 测试 四个工步。';
+        if (commissioningMode && state.currentJob?.job?.status === 'zeroed') {
+            executeSummary.textContent = '专家任务：零位已保存，可执行 safe_mit_ping 小幅动作测试。';
             testInfoTitle.textContent = 'safe_mit_ping';
             testInfo.innerHTML = [
                 '<li>`q=+0.05 rad`，`kp=10`，`kd=0.2`</li>',
@@ -332,6 +343,21 @@ function renderExecuteMode() {
             ].join('');
             testActionTitle.textContent = '执行测试';
             testButton.textContent = '执行测试';
+        } else if (commissioningMode) {
+            executeSummary.textContent = singleCommissioningExpert()
+                ? '专家任务：参数 / 保存 / (可选)零位 / 复核。零位仅限有文档化夹具基准时使用。'
+                : '装配前单电机 ID 配置：参数 / 保存 / 保存后复核。不保存零位、不发送动作帧。';
+            testInfoTitle.textContent = '保存后只读复核';
+            testInfo.innerHTML = [
+                '<li>建议先断电重上电，再回读 ESC_ID / MST_ID / CTRL_MODE / can_br</li>',
+                '<li>检查状态无故障、未使能、温度未越限</li>',
+                '<li>不使能、不发送动作帧；通过后生成报告</li>'
+            ].join('');
+            testActionTitle.textContent = '保存后复核';
+            testButton.textContent = '复核并完成';
+            if (!singleCommissioningExpert()) {
+                zeroBtn.textContent = '装配前不零位';
+            }
         } else if (paramConfigMode) {
             executeSummary.textContent = '当前任务聚焦参数配置，流程为 参数编辑 / 保存 / 完成归档。';
             testInfoTitle.textContent = '参数配置完成';
@@ -1024,7 +1050,7 @@ function renderComparison() {
         ['目标 ESC_ID', target.target_esc_id],
         ['目标 MST_ID', target.target_mst_id],
         ['目标 CTRL_MODE', target.target_ctrl_mode],
-        ['目标 TIMEOUT', target.target_timeout],
+        [target.timeout_write_policy ? '记录 TIMEOUT（单电机只读）' : '目标 TIMEOUT', target.target_timeout ?? '-'],
         ['目标 can_br', target.target_can_br],
         ['目标 KT_Value', target.target_kt_value ?? '-'],
         ['目标 Gr', target.target_gr ?? '-'],
@@ -1122,7 +1148,7 @@ function workflowActionDescriptor() {
             title: isSingleParamConfig(jobType) ? '步骤 1：写入配置参数' : '步骤 1：写入参数',
             detail: isSingleParamConfig(jobType)
                 ? '将编辑后的 CTRL_MODE、TIMEOUT、can_br 与关键电机参数写入当前电机。'
-                : '将目标 ESC_ID、MST_ID、CTRL_MODE、TIMEOUT 和 can_br 写入当前电机。',
+                : '将目标 ESC_ID、MST_ID、CTRL_MODE 和 can_br 写入当前电机；TIMEOUT 仅记录不写入。',
             buttonText: isSingleParamConfig(jobType) ? '写入配置参数' : '写入参数',
             tone: 'ready',
             tab: 'motorWorkbenchTab',
@@ -1164,11 +1190,24 @@ function workflowActionDescriptor() {
             subtab: 'testPanel'
         };
     }
+    if (isSingleCommissioning(jobType) && allowed.includes('test') && state.currentJob?.job?.status === 'params_saved') {
+        return {
+            id: 'test',
+            title: '步骤 4：保存后只读复核',
+            detail: allowed.includes('zero')
+                ? '建议断电重上电后回读参数并完成任务；专家任务如有夹具基准，也可先执行零位再做动作测试。'
+                : '建议断电重上电后回读参数与状态，确认 Flash 已生效并生成报告；不零位、不发送动作帧。',
+            buttonText: '复核并完成',
+            tone: 'ready',
+            tab: 'motorWorkbenchTab',
+            subtab: 'testPanel'
+        };
+    }
     if (allowed.includes('zero')) {
         return {
             id: 'zero',
-            title: '步骤 4：执行零位',
-            detail: '确认机械基准对齐后写入零位，作为后续控制和校验的基准点。',
+            title: '步骤 4：执行零位（专家）',
+            detail: '仅限有文档化夹具机械基准时使用；装配前电机不应保存整臂零点。',
             buttonText: '执行零位',
             tone: 'ready',
             tab: 'motorWorkbenchTab',
@@ -1505,8 +1544,8 @@ function renderActionStates() {
             button: 'zeroBtn',
             state: 'zeroState',
             allowedAction: 'zero',
-            relevant: isSingleCommissioning(jobType),
-            doneStatuses: ['zeroed', 'tested', 'passed'],
+            relevant: isSingleCommissioning(jobType) && singleCommissioningExpert(),
+            doneStatuses: ['zeroed'],
             readyText: '当前步骤可执行',
             waitingText: '等待参数保存完成'
         },
@@ -1529,7 +1568,7 @@ function renderActionStates() {
                     ? '等待进入整臂扫描阶段'
                     : isSingleCommCheck(jobType)
                         ? '等待进入通信校验阶段'
-                        : isSingleParamConfig(jobType)
+                        : isSingleParamConfig(jobType) || isSingleCommissioning(jobType)
                             ? '等待参数保存完成'
                         : '等待进入测试阶段'
         }
@@ -1660,17 +1699,20 @@ async function executeWorkflowPrimaryAction() {
         const scanOnly = isArmVerification(jobType);
         const commCheckOnly = isSingleCommCheck(jobType);
         const paramConfigOnly = isSingleParamConfig(jobType);
+        const readbackOnly = isSingleCommissioning(jobType) && state.currentJob?.job?.status === 'params_saved';
         showModal(
             isArmAcceptance(jobType) ? '确认执行整臂 CAN2.0 验收'
                 : scanOnly ? '确认执行 CAN2.0 通信扫描'
                 : commCheckOnly ? '确认执行通信校验'
                 : paramConfigOnly ? '确认完成参数配置'
+                : readbackOnly ? '确认执行保存后复核'
                 : '确认执行 safe_mit_ping',
             isArmAcceptance(jobType)
                 ? '将进行整臂总线盘点、参数一致性校验，并给出 PASS / HOLD 放行结论。'
                 : scanOnly ? '将只进行总线扫描、参数读取和 ID 对账，不会发送动作控制帧。'
                 : commCheckOnly ? '将只进行参数读取和状态校验，不会发送动作控制帧。'
                 : paramConfigOnly ? '将结束参数配置任务，生成报告与问题清单，不会发送动作控制帧。'
+                : readbackOnly ? '将只回读参数和状态并生成报告，不会使能或发送动作控制帧。建议先断电重上电再执行，以确认 Flash 已生效。'
                 : '请确认机械无遮挡且可以安全完成小幅动作测试。',
             () => handleAction(runTest)
         );
@@ -3263,6 +3305,7 @@ async function refreshCurrentJob() {
     await refreshIssues();
     renderMeta();
     renderSteps();
+    renderExecuteMode();
     renderComparison();
     renderActionStates();
     renderReport();
@@ -3551,6 +3594,11 @@ export async function startApp() {
         updateLiveStatus,
     });
     renderLog();
+    // Keep body[data-primary-flow] in sync from first paint: the wizard layout
+    // (hidden task rail) depends on it, and nothing else sets it until a tab click.
+    switchPrimaryTab(currentPrimaryTab());
+    initSingleMotorWizard();
+    initLinkWizard();
     try {
         await loadConfig();
         renderMeta();

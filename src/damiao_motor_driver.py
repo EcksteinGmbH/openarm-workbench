@@ -552,6 +552,10 @@ class DamiaoMotorDriver(_BaseDamiaoDriver):
     def change_motor_param(self, motor: Motor, rid: DM_variable, data: float | int) -> bool:
         with self._lock:
             self.ensure_motor(motor)
+            original_slave_id = motor.SlaveID
+            target_slave_id = int(data) if int(rid) == int(DM_variable.ESC_ID) else None
+            if target_slave_id is not None and target_slave_id != original_slave_id:
+                self.motors_map[target_slave_id] = motor
             self._write_param_frame(motor, rid, data)
             for _ in range(20):
                 time.sleep(0.05)
@@ -559,8 +563,18 @@ class DamiaoMotorDriver(_BaseDamiaoDriver):
                 if int(rid) in motor.temp_param_dict:
                     value = motor.temp_param_dict[int(rid)]
                     if _rid_is_uint32(int(rid)):
-                        return int(value) == int(data)
-                    return abs(float(value) - float(data)) < 0.1
+                        matched = int(value) == int(data)
+                    else:
+                        matched = abs(float(value) - float(data)) < 0.1
+                    if matched and target_slave_id is not None:
+                        if self.motors_map.get(original_slave_id) is motor:
+                            del self.motors_map[original_slave_id]
+                        motor.SlaveID = target_slave_id
+                        self.motors_map[target_slave_id] = motor
+                    return matched
+            if target_slave_id is not None and target_slave_id != original_slave_id:
+                if self.motors_map.get(target_slave_id) is motor:
+                    del self.motors_map[target_slave_id]
             return False
 
     def save_motor_param(self, motor: Motor) -> bool:
@@ -699,8 +713,12 @@ class DamiaoSocketCANDriver(_BaseDamiaoDriver):
     def change_motor_param(self, motor: Motor, rid: DM_variable, data: float | int) -> bool:
         with self._lock:
             self.ensure_motor(motor)
+            original_slave_id = motor.SlaveID
             original_master_id = motor.MasterID
+            target_slave_id = int(data) if int(rid) == int(DM_variable.ESC_ID) else None
             target_master_id = int(data) if int(rid) == int(DM_variable.MST_ID) else None
+            if target_slave_id is not None and target_slave_id != original_slave_id:
+                self.motors_map[target_slave_id] = motor
             if target_master_id and target_master_id != original_master_id:
                 self.motors_map[target_master_id] = motor
             payload = [motor.SlaveID & 0xFF, (motor.SlaveID >> 8) & 0xFF, 0x55, int(rid), 0, 0, 0, 0]
@@ -721,7 +739,15 @@ class DamiaoSocketCANDriver(_BaseDamiaoDriver):
                                 del self.motors_map[original_master_id]
                         motor.MasterID = target_master_id
                         self.motors_map[target_master_id] = motor
+                    if matched and target_slave_id is not None:
+                        if self.motors_map.get(original_slave_id) is motor:
+                            del self.motors_map[original_slave_id]
+                        motor.SlaveID = target_slave_id
+                        self.motors_map[target_slave_id] = motor
                     return matched
+            if target_slave_id is not None and target_slave_id != original_slave_id:
+                if self.motors_map.get(target_slave_id) is motor:
+                    del self.motors_map[target_slave_id]
             if target_master_id and target_master_id != original_master_id:
                 if self.motors_map.get(target_master_id) is motor:
                     del self.motors_map[target_master_id]

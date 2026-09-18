@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import copy
 import shutil
 import uuid
 
 import pytest
 
 from src.formal_factory_report import (
+    _passed_command,
     _parse_zero_stdout,
     _latest_low_gain_record,
     _report_person,
@@ -15,7 +17,14 @@ from src.formal_factory_report import (
     render_formal_factory_report,
 )
 import src.workstation as workstation
-from src.damiao_motor_driver import DM_Motor_Type, DM_variable, DamiaoSocketCANDriver, Motor, Motor_Status
+from src.damiao_motor_driver import (
+    DM_Motor_Type,
+    DM_variable,
+    DamiaoMotorDriver,
+    DamiaoSocketCANDriver,
+    Motor,
+    Motor_Status,
+)
 
 
 class _FakeBaseDriver:
@@ -234,16 +243,65 @@ def test_single_commissioning_flow():
     assert verify["verified"] is True
 
     service.save_flash(job_info["job_id"])
-    zero = service.zero(job_info["job_id"], confirmed=True)
-    assert zero["zeroed"] is True
+    saved_actions = service.get_job(job_info["job_id"])["allowed_actions"]
+    assert "zero" not in saved_actions
+    assert "test" in saved_actions
+    with pytest.raises(ValueError):
+        service.zero(job_info["job_id"], confirmed=True)
 
+    calls_before_readback = len(driver.calls)
     test_result = service.test(job_info["job_id"], confirmed=True)
     assert test_result["tested"] is True
+    assert test_result["metrics"]["mode"] == "saved_readback"
+    assert test_result["metrics"]["motion"] is False
+    readback_calls = {call[0] for call in driver.calls[calls_before_readback:]}
+    assert not readback_calls & {"enable", "controlMIT", "set_zero_position", "change_motor_param", "save_motor_param"}
 
     report = service.report(job_info["job_id"])
     assert "job.json" in report["files"]
     assert Path(report["artifact_dir"]).exists()
     assert service.get_job(job_info["job_id"])["job"]["status"] == "passed"
+
+
+def test_single_commissioning_expert_zero_then_motion_ping():
+    service = workstation.WorkstationService()
+    session = service.connect_device("serial_bridge", {"serial_port": "/dev/fake", "baudrate": 115200})
+    service.scan_device(session["device_session_id"], "single_commissioning", expert_mode=True)
+    job_info = service.create_job("single_commissioning", session["device_session_id"], "openarm_v1", "J4", expert_mode=True)
+    applied = service.apply_profile(job_info["job_id"], "J4", "openarm_v1")
+    service.write_params(job_info["job_id"], applied["target_config"])
+    service.verify_params(job_info["job_id"])
+    service.save_flash(job_info["job_id"])
+    assert {"zero", "test"} <= set(service.get_job(job_info["job_id"])["allowed_actions"])
+
+    zero = service.zero(job_info["job_id"], confirmed=True)
+    assert zero["zeroed"] is True
+    test_result = service.test(job_info["job_id"], confirmed=True)
+    assert test_result["tested"] is True
+    assert "peak_position" in test_result["metrics"]
+    assert service.get_job(job_info["job_id"])["job"]["status"] == "passed"
+
+
+def test_single_commissioning_saved_readback_fails_on_param_drift():
+    service = workstation.WorkstationService()
+    session = service.connect_device("serial_bridge", {"serial_port": "/dev/fake", "baudrate": 115200})
+    service.scan_device(session["device_session_id"], "single_commissioning")
+    job_info = service.create_job("single_commissioning", session["device_session_id"], "openarm_v1", "J4")
+    applied = service.apply_profile(job_info["job_id"], "J4", "openarm_v1")
+    service.write_params(job_info["job_id"], applied["target_config"])
+    service.verify_params(job_info["job_id"])
+    service.save_flash(job_info["job_id"])
+
+    driver = service.sessions[session["device_session_id"]].driver
+    esc_id = int(applied["target_config"]["target_esc_id"])
+    driver.registry[esc_id]["params"][int(DM_variable.MST_ID)] = 0x7F
+
+    test_result = service.test(job_info["job_id"], confirmed=True)
+    assert test_result["tested"] is False
+    assert test_result["metrics"]["issues"] == ["param_mismatch"]
+    job = service.get_job(job_info["job_id"])
+    assert job["job"]["status"] == "failed"
+    assert job["issues_summary"]["has_blocking"] is True
 
 
 def test_line_inventory_can_seed_single_motor_candidate(monkeypatch):
@@ -465,6 +523,46 @@ def test_driver_ensure_motor_replaces_stale_id_mapping():
     assert int(DM_variable.CTRL_MODE) not in old_motor.temp_param_dict
 
 
+def test_socketcan_esc_id_write_accepts_ack_from_new_id(monkeypatch):
+    driver = DamiaoSocketCANDriver("can0")
+    motor = Motor(DM_Motor_Type.DM4340, 1, 0x1C)
+    driver.addMotor(motor)
+    monkeypatch.setattr(driver, "_send_frame", lambda arbitration_id, data: None)
+    monkeypatch.setattr(
+        driver,
+        "_drain",
+        lambda timeout: driver._process_param_payload(
+            [0x0C, 0x00, 0x55, int(DM_variable.ESC_ID), 0x0C, 0x00, 0x00, 0x00],
+            0x1C,
+        ),
+    )
+
+    assert driver.change_motor_param(motor, DM_variable.ESC_ID, 0x0C) is True
+    assert motor.SlaveID == 0x0C
+    assert driver.motors_map.get(0x0C) is motor
+    assert 0x01 not in driver.motors_map
+
+
+def test_serial_esc_id_write_accepts_ack_from_new_id(monkeypatch):
+    driver = DamiaoMotorDriver("/dev/fake")
+    motor = Motor(DM_Motor_Type.DM4340, 1, 0x1C)
+    driver.addMotor(motor)
+    monkeypatch.setattr(driver, "_write_param_frame", lambda target, rid, data: None)
+    monkeypatch.setattr(
+        driver,
+        "recv",
+        lambda: driver._process_param_payload(
+            [0x0C, 0x00, 0x55, int(DM_variable.ESC_ID), 0x0C, 0x00, 0x00, 0x00],
+            0x1C,
+        ),
+    )
+
+    assert driver.change_motor_param(motor, DM_variable.ESC_ID, 0x0C) is True
+    assert motor.SlaveID == 0x0C
+    assert driver.motors_map.get(0x0C) is motor
+    assert 0x01 not in driver.motors_map
+
+
 def test_socketcan_single_commissioning_flow():
     service = workstation.WorkstationService()
     session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
@@ -479,11 +577,9 @@ def test_socketcan_single_commissioning_flow():
     assert verify["verified"] is True
 
     service.save_flash(job_info["job_id"])
-    zero = service.zero(job_info["job_id"], confirmed=True)
-    assert zero["zeroed"] is True
-
     test_result = service.test(job_info["job_id"], confirmed=True)
     assert test_result["tested"] is True
+    assert test_result["metrics"]["mode"] == "saved_readback"
     assert service.get_job(job_info["job_id"])["job"]["status"] == "passed"
 
 
@@ -493,7 +589,7 @@ def test_single_param_config_flow_and_issues_artifact():
     scan = service.scan_device(session["device_session_id"], "single_param_config")
     assert scan["summary"]["detected"] == 1
 
-    job_info = service.create_job("single_param_config", session["device_session_id"], "openarm_v1", "J5")
+    job_info = service.create_job("single_param_config", session["device_session_id"], "openarm_v1", "J5", expert_mode=True)
     applied = service.apply_profile(job_info["job_id"], "J5", "openarm_v1")
     target = dict(applied["target_config"])
     target["target_ctrl_mode"] = "VEL"
@@ -517,6 +613,33 @@ def test_single_param_config_flow_and_issues_artifact():
     issues_payload = service.issues(job_info["job_id"])
     assert issues_payload["summary"]["total"] == 0
     assert service.get_job(job_info["job_id"])["job"]["status"] == "passed"
+
+
+def test_single_param_config_keeps_timeout_and_motor_constants_read_only_by_default():
+    service = workstation.WorkstationService()
+    session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
+    session_id = session["device_session_id"]
+    service.scan_device(session_id, "single_param_config")
+    driver = service.sessions[session_id].driver
+    before = dict(driver.registry[1]["params"])
+
+    job_info = service.create_job("single_param_config", session_id, "openarm_right_arm_v1", "R-J1")
+    applied = service.apply_profile(job_info["job_id"], "R-J1", "openarm_right_arm_v1")
+    target = applied["target_config"]
+
+    assert target["target_timeout"] == before[int(DM_variable.TIMEOUT)]
+    assert target["timeout_write_policy"] == "read_only_during_single_motor_commissioning"
+
+    service.write_params(job_info["job_id"], target)
+    written_rids = [call[2] for call in driver.calls if call[0] == "change_motor_param"]
+
+    assert int(DM_variable.TIMEOUT) not in written_rids
+    assert int(DM_variable.Gr) not in written_rids
+    assert int(DM_variable.KT_Value) not in written_rids
+    assert int(DM_variable.PMAX) not in written_rids
+    assert int(DM_variable.VMAX) not in written_rids
+    assert int(DM_variable.TMAX) not in written_rids
+    assert driver.registry[1]["params"][int(DM_variable.TIMEOUT)] == before[int(DM_variable.TIMEOUT)]
 
 
 def test_write_params_requires_successful_disable():
@@ -762,7 +885,7 @@ def test_left_arm_scan_uses_delivery_id_range():
     service = workstation.WorkstationService()
     session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
     driver = service.sessions[session["device_session_id"]].driver
-    driver.registry = _openarm_arm_registry(position=0.0, start_esc_id=9)
+    driver.registry = _openarm_arm_registry(position=0.0, start_esc_id=9, right_arm_timeout_policy=True)
 
     scan = service.scan_device(session["device_session_id"], "arm_comm_scan", profile_id="openarm_left_arm_v1")
     assert scan["summary"]["passed"] is True
@@ -1119,7 +1242,6 @@ def test_report_html_uses_official_openarm_model_names():
     service.write_params(job_info["job_id"], applied["target_config"])
     service.verify_params(job_info["job_id"])
     service.save_flash(job_info["job_id"])
-    service.zero(job_info["job_id"], confirmed=True)
     service.test(job_info["job_id"], confirmed=True)
 
     report = service.report(job_info["job_id"])
@@ -2231,6 +2353,38 @@ def test_formal_factory_report_does_not_fallback_to_reportlab_pdf(tmp_path):
     assert (Path(report["report_dir"]) / "pdf_error.txt").exists()
 
 
+def test_passed_command_selects_latest_passed_run_for_requested_side():
+    arm = {
+        "command_run_history": [
+            {
+                "kind": "official_demo_validation",
+                "command": ["openarm-can-demo", "--arm_side", "left_arm"],
+                "status": "passed",
+                "finished_at": "2026-09-03T09:08:14Z",
+                "run_id": "latest-left",
+            },
+            {
+                "kind": "official_demo_validation",
+                "command": ["openarm-can-demo", "--arm_side", "left_arm"],
+                "status": "passed",
+                "finished_at": "2026-09-03T09:07:18Z",
+                "run_id": "older-left",
+            },
+            {
+                "kind": "official_demo_validation",
+                "command": ["openarm-can-demo", "--arm_side", "right_arm"],
+                "status": "passed",
+                "finished_at": "2026-09-03T09:09:00Z",
+                "run_id": "newer-other-side",
+            },
+        ]
+    }
+
+    selected = _passed_command(arm, "official_demo_validation", "left_arm")
+
+    assert selected["run_id"] == "latest-left"
+
+
 def test_timeout_adjustments_accept_powercycle_evidence_and_prefer_latest(tmp_path):
     evidence_dir = (
         tmp_path
@@ -2281,3 +2435,301 @@ def test_latest_low_gain_record_is_same_side_passed_and_fully_disabled(tmp_path)
 
     assert record["keepalive_frames_sent"] == 432
     assert record["_evidence_path"] == str(right_path)
+
+
+def test_infer_motor_model_from_limit_registers():
+    j8009 = workstation._infer_motor_model({"PMAX": 12.5, "VMAX": 45.0, "TMAX": 54.0, "Gr": 9.0}, "DM-J8009P-2EC")
+    assert j8009["families"] == ["DM8009"] and j8009["verdict"] == "match"
+
+    wrong_joint = workstation._infer_motor_model({"PMAX": 12.5, "VMAX": 30.0, "TMAX": 10.0}, "DM-J8009P-2EC")
+    assert wrong_joint["families"] == ["DM4310"] and wrong_joint["verdict"] == "mismatch"
+
+    j4340 = workstation._infer_motor_model({"PMAX": 12.5, "VMAX": 10.0, "TMAX": 28.0}, "DM-J4340P-2EC")
+    assert j4340["verdict"] == "match"
+
+    unreadable = workstation._infer_motor_model({"PMAX": None, "VMAX": 45.0, "TMAX": 54.0}, "DM-J8009P-2EC")
+    assert unreadable["verdict"] == "unknown"
+
+
+def _wizard_service(monkeypatch):
+    service = workstation.WorkstationService()
+    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
+    driver = service.sessions[session["device_session_id"]].driver
+    return service, driver
+
+
+def test_single_wizard_happy_path_saves_record_without_report(monkeypatch):
+    service, driver = _wizard_service(monkeypatch)
+    driver.registry[1]["params"][int(DM_variable.PMAX)] = 12.5
+
+    identified = service.single_wizard_identify(arm_side="left_arm", joint="J2", product_line="openarm_2_0")
+    assert identified["ok"] is True
+    assert identified["joint_name"] == "L-J2"
+    assert identified["configured_as"] == ["R-J1"]
+    rows = {row["field"]: row for row in identified["param_rows"]}
+    assert rows["ESC_ID"]["target"] == 0x0A and rows["ESC_ID"]["changes"] is True
+    assert rows["TIMEOUT"]["written"] is False
+    # Fake motor limits (12.5/30/10) are DM4310 while L-J2 expects DM-J8009P-2EC.
+    assert identified["model_check"]["families"] == ["DM4310"]
+    assert identified["model_check"]["verdict"] == "mismatch"
+    assert len(service.sessions) == 1
+
+    job_id = identified["job_id"]
+    written = service.single_wizard_write(job_id)
+    assert written["ok"] is True and written["status"] == "params_verified"
+    saved = service.single_wizard_save(job_id)
+    assert saved["ok"] is True and saved["status"] == "params_saved"
+
+    calls_before_finish = len(driver.calls)
+    finished = service.single_wizard_finish(job_id)
+    assert finished["ok"] is True
+    assert not {call[0] for call in driver.calls[calls_before_finish:]} & {"enable", "controlMIT", "set_zero_position", "change_motor_param", "save_motor_param"}
+    record = finished["record"]
+    assert record["result"] == "PASS"
+    assert record["sn_register"] == 123456
+    assert record["product_line"] == "openarm_2_0"
+    assert record["joint_name"] == "L-J2"
+    assert record["target"]["ESC_ID"] == 0x0A
+    assert record["verified"] == {
+        "ESC_ID": 0x0A,
+        "MST_ID": 0x1A,
+        "CTRL_MODE": "MIT",
+        "can_br": 1000000,
+        "can_br_code": 4,
+        "can_mode": "CAN 2.0",
+    }
+    assert record["motion_performed"] is False and record["zero_saved"] is False
+
+    job = service.jobs[job_id]
+    assert not (Path(job.artifact_dir) / "report.html").exists()
+    listed = service.list_single_motor_records()
+    assert listed["total_records"] == 1
+    assert listed["records"][0]["record_id"] == record["record_id"]
+    assert listed["configured_joints"][0]["joint_name"] == "L-J2"
+
+    again = service.single_wizard_identify(arm_side="left_arm", joint="J2")
+    assert again["ok"] is True
+    assert again["configured_as"] == ["L-J2"]
+    assert again["needs_write"] is False
+    assert again["joint_taken_by"] == []
+
+    # A second factory-new motor reports the same SN register value; it must not be merged or treated as the same motor.
+    entry = driver.registry.pop(0x0A)
+    entry["params"][int(DM_variable.ESC_ID)] = 1
+    entry["params"][int(DM_variable.MST_ID)] = 0
+    driver.registry[1] = entry
+    other_motor = service.single_wizard_identify(arm_side="left_arm", joint="J2")
+    assert other_motor["configured_as"] == []
+    assert other_motor["factory_default_ids"] is True
+    assert other_motor["joint_taken_by"] == [{"record_id": record["record_id"], "created_at": record["created_at"]}]
+    assert service.single_wizard_write(other_motor["job_id"])["ok"] is True
+    assert service.single_wizard_save(other_motor["job_id"])["ok"] is True
+    second = service.single_wizard_finish(other_motor["job_id"])["record"]
+    assert second["sn_register"] == record["sn_register"]
+    assert service.list_single_motor_records()["total_records"] == 2
+
+
+def test_single_motor_records_migrate_legacy_sn_grouped_file(monkeypatch):
+    service, _driver = _wizard_service(monkeypatch)
+    records_dir = service._single_motor_records_dir()
+    records_dir.mkdir(parents=True, exist_ok=True)
+    history = [
+        {"record_id": f"smr_legacy_{joint}", "record_type": "single_motor_commissioning", "created_at": f"2026-09-17T07:0{index}:00Z",
+         "result": "PASS", "motor_hw_sn": "1412444213", "sn_available": True, "joint_name": joint, "product_line": "openarm_2_0",
+         "motor_type": "DM-J8009P-2EC", "before": {"PMAX": 12.5, "VMAX": 45.0, "TMAX": 54.0}}
+        for index, joint in enumerate(["R-J2", "R-J1"])
+    ]
+    workstation._atomic_json(records_dir / "1412444213.json", {"motor_hw_sn": "1412444213", "latest": history[0], "history": history})
+
+    listed = service.list_single_motor_records()
+    assert [item["joint_name"] for item in listed["records"]] == ["R-J1", "R-J2"]
+    assert listed["records"][0]["sn_register"] == "1412444213"
+    assert listed["records"][0]["model_check"]["verdict"] == "match"
+    assert not (records_dir / "1412444213.json").exists()
+    assert (records_dir / "_legacy_by_sn" / "1412444213.json").exists()
+    assert service.list_single_motor_records()["total_records"] == 2
+
+
+def test_single_wizard_reports_no_motor_and_multiple_motors(monkeypatch):
+    service, driver = _wizard_service(monkeypatch)
+    motor_entry = driver.registry.pop(1)
+    empty = service.single_wizard_identify()
+    assert empty["ok"] is False
+    assert empty["problem"]["code"] == "no_motor_found"
+    assert empty["problem"]["solutions"]
+
+    driver.registry[1] = motor_entry
+    second = copy.deepcopy(motor_entry)
+    second["params"][int(DM_variable.ESC_ID)] = 3
+    second["params"][int(DM_variable.MST_ID)] = 0x13
+    driver.registry[3] = second
+    multiple = service.single_wizard_identify()
+    assert multiple["problem"]["code"] == "multiple_motors"
+    assert multiple["problem"]["found_esc_ids"] == [1, 3]
+    assert not service.jobs
+
+
+def test_single_wizard_blocks_faulted_motor_and_retries_unanswered_readback(monkeypatch):
+    service, driver = _wizard_service(monkeypatch)
+    driver.registry[1]["status"] = Motor_Status.OVERCURRENT
+    faulted = service.single_wizard_identify()
+    assert faulted["problem"]["code"] == "motor_fault"
+
+    driver.registry[1]["status"] = Motor_Status.DISABLED
+    identified = service.single_wizard_identify()
+    job_id = identified["job_id"]
+    assert service.single_wizard_write(job_id)["ok"] is True
+    assert service.single_wizard_save(job_id)["ok"] is True
+
+    entry = driver.registry.pop(1)
+    no_answer = service.single_wizard_finish(job_id)
+    assert no_answer["problem"]["code"] == "readback_no_response"
+    assert service.jobs[job_id].status == "params_saved"
+
+    driver.registry[1] = entry
+    entry["params"][int(DM_variable.MST_ID)] = 0x7F
+    drifted = service.single_wizard_finish(job_id)
+    assert drifted["problem"]["code"] == "readback_mismatch"
+    assert drifted["problem"]["record"]["result"] == "FAIL"
+    assert service.single_wizard_write(job_id)["problem"]["code"] == "job_state_invalid"
+
+
+def test_single_motor_inspect_reads_without_writing(monkeypatch):
+    service, driver = _wizard_service(monkeypatch)
+    driver.registry[1]["params"][int(DM_variable.ESC_ID)] = 0x08
+    driver.registry[1]["params"][int(DM_variable.MST_ID)] = 0x18
+    driver.registry[0x08] = driver.registry.pop(1)
+    writes = []
+    monkeypatch.setattr(type(driver), "change_motor_param", lambda self, *a, **k: writes.append(a) or True)
+    monkeypatch.setattr(type(driver), "save_motor_param", lambda self, *a, **k: writes.append("save") or True)
+    monkeypatch.setattr(type(driver), "enable", lambda self, *a, **k: writes.append("enable") or True)
+    monkeypatch.setattr(type(driver), "set_zero_position", lambda self, *a, **k: writes.append("zero") or True)
+
+    payload = service.single_motor_inspect(channel="can0", bitrate=1000000)
+
+    assert payload["ok"] is True and payload["read_only"] is True
+    assert writes == []  # inspection never writes, enables or zeroes
+    assert not service.jobs  # inspection creates no job
+    motor = payload["motors"][0]
+    assert motor["esc_id"] == 0x08 and motor["mst_id"] == 0x18
+    assert motor["matched_joints"] == ["R-J8"]
+    rows = {row["field"]: row for row in motor["rows"]}
+    assert rows["ESC_ID"]["display"] == "0x08（8）"
+    assert rows["can_br"]["display"] == "1 Mbps"  # fake driver reports the decoded bitrate
+    assert service._inspect_display("can_br", 4) == "1 Mbps（代码 4）"  # real motors report the register code
+    assert rows["TIMEOUT"]["display"] == "500"
+    assert service._inspect_display("TIMEOUT", 0) == "0（未启用）"
+    assert rows["CTRL_MODE"]["display"] == "MIT（1）"
+    assert {row["group"] for row in motor["rows"]} == {"identity", "motor", "protection", "version"}
+    assert motor["status"]["status"] == "DISABLED"
+
+
+def test_single_motor_inspect_reports_problems_and_lists_every_motor(monkeypatch):
+    service, driver = _wizard_service(monkeypatch)
+    entry = driver.registry.pop(1)
+    empty = service.single_motor_inspect()
+    assert empty["ok"] is False
+    assert empty["problem"]["code"] == "no_motor_found"
+    assert empty["problem"]["solutions"]
+
+    driver.registry[1] = entry
+    second = copy.deepcopy(entry)
+    second["params"][int(DM_variable.ESC_ID)] = 9
+    second["params"][int(DM_variable.MST_ID)] = 0x19
+    driver.registry[9] = second
+    both = service.single_motor_inspect()
+    # Unlike commissioning, viewing parameters stays useful with several motors on the bus.
+    assert both["ok"] is True
+    assert sorted(item["esc_id"] for item in both["motors"]) == [1, 9]
+    assert both["motors"][1]["matched_joints"] == ["L-J1"]
+
+
+def _link_service(monkeypatch, interfaces=None):
+    service = workstation.WorkstationService()
+    snapshot = interfaces if interfaces is not None else [
+        {"name": "can0", "driver": "gs_usb", "adapter_kind": "gs_usb", "is_gs_usb": True, "bitrate": 1000000,
+         "dbitrate": None, "fd_enabled": False, "can_state": "ERROR-ACTIVE", "state": "UP"}
+    ]
+    monkeypatch.setattr(service, "_list_socketcan_interfaces", lambda: [dict(item) for item in snapshot])
+    return service
+
+
+def test_link_wizard_detect_reports_missing_adapter_and_interface_health(monkeypatch):
+    empty = _link_service(monkeypatch, interfaces=[])
+    problem = empty.link_wizard_detect()
+    assert problem["ok"] is False
+    assert problem["problem"]["code"] == "adapter_missing"
+    assert problem["problem"]["solutions"]
+
+    service = _link_service(monkeypatch)
+    detected = service.link_wizard_detect()
+    assert detected["ok"] is True
+    iface = detected["interfaces"][0]
+    assert iface["healthy"] is True and iface["health_text"] == "正常"
+    assert iface["bitrate_text"] == "1 Mbps" and iface["mode_text"] == "CAN 2.0"
+
+    down = _link_service(monkeypatch, interfaces=[
+        {"name": "can1", "driver": "gs_usb", "is_gs_usb": True, "bitrate": None, "fd_enabled": False,
+         "can_state": "STOPPED", "state": "DOWN"}
+    ])
+    stopped = down.link_wizard_detect()["interfaces"][0]
+    assert stopped["healthy"] is False and stopped["health_text"] == "未启动"
+
+    # Any adapter Linux exposes as SocketCAN is usable, not only gs_usb ones.
+    peak = _link_service(monkeypatch, interfaces=[
+        {"name": "can0", "driver": "peak_usb", "is_gs_usb": False, "bitrate": 1000000, "fd_enabled": True,
+         "dbitrate": 5000000, "can_state": "ERROR-ACTIVE", "state": "UP"}
+    ])
+    other = peak.link_wizard_detect()["interfaces"][0]
+    assert other["healthy"] is True and other["health_text"] == "正常"
+    assert other["mode_text"] == "CAN FD"
+
+
+def test_link_wizard_prepare_and_connect_flow(monkeypatch):
+    service = _link_service(monkeypatch)
+    commands = []
+    monkeypatch.setattr(service, "_run_system_command", lambda cmd, **kwargs: commands.append(cmd))
+
+    prepared = service.link_wizard_prepare(channel="can0", mode="can20", bitrate=1000000)
+    assert prepared["ok"] is True
+    assert prepared["interface"]["healthy"] is True
+    assert ["ip", "link", "set", "can0", "up"] in commands
+
+    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    connected = service.link_wizard_connect(channel="can0", bitrate=1000000)
+    assert connected["ok"] is True
+    assert connected["capabilities"]["read_params"] is True
+    session_id = connected["device_session_id"]
+    # Connecting twice reuses the open session instead of stacking CAN sockets.
+    assert service.link_wizard_connect(channel="can0")["device_session_id"] == session_id
+
+    closed = service.link_wizard_disconnect(channel="can0")
+    assert closed["closed_sessions"] == [session_id]
+
+
+def test_link_wizard_prepare_failure_and_bus_check(monkeypatch):
+    service = _link_service(monkeypatch)
+
+    def refuse(cmd, **kwargs):
+        raise RuntimeError("RTNETLINK answers: Operation not permitted")
+
+    monkeypatch.setattr(service, "_run_system_command", refuse)
+    failed = service.link_wizard_prepare(channel="can0")
+    assert failed["problem"]["code"] == "interface_prepare_failed"
+    assert "Operation not permitted" in failed["problem"]["detail"]
+
+    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
+    driver = service.sessions[session["device_session_id"]].driver
+    entry = driver.registry.pop(1)
+    empty_bus = service.link_wizard_bus_check(channel="can0")
+    assert empty_bus["problem"]["code"] == "bus_no_motor"
+
+    entry["params"][int(DM_variable.ESC_ID)] = 0x08
+    entry["params"][int(DM_variable.MST_ID)] = 0x18
+    driver.registry[0x08] = entry
+    checked = service.link_wizard_bus_check(channel="can0")
+    assert checked["ok"] is True and checked["read_only"] is True
+    assert checked["motors"][0]["matched_joints"] == ["R-J8"]
+    assert checked["faulted_esc_ids"] == []

@@ -144,12 +144,14 @@ def _passed_command(arm: Dict[str, Any], kind: str, side: str) -> Dict[str, Any]
     candidates = []
     for run in _command_runs(arm, kind):
         command = " ".join(str(part) for part in run.get("command") or [])
-        if side in command or not command:
+        if (side in command or not command) and run.get("status") == "passed":
             candidates.append(run)
-    for run in reversed(candidates):
-        if run.get("status") == "passed":
-            return run
-    return {}
+    if not candidates:
+        return {}
+    return max(
+        candidates,
+        key=lambda run: str(run.get("finished_at") or run.get("started_at") or ""),
+    )
 
 
 def _latest_job_payload(arm: Dict[str, Any], profile_id: str) -> Dict[str, Any]:

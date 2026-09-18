@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenARM 机械臂测试工作台</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=20260918-advanced-sections">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
-<body>
+<body data-primary-flow="connectTab">
     <div class="app-shell">
         <header class="topbar">
             <div>
@@ -80,9 +80,37 @@
 
             <section class="center-stage">
                 <section class="tab-panel active" id="connectTab">
+                    <div class="panel smw-panel" id="linkWizard">
+                        <header class="smw-header">
+                            <div class="smw-title">
+                                <h2>建立连接 <span class="group-kicker">开始测试前的第一步</span></h2>
+                                <p class="muted">按顺序点亮起的按钮即可。全程只读取接口和电机状态，不写参数、电机不会转动。</p>
+                            </div>
+                            <div class="smw-header-side">
+                                <div class="smw-can-status" id="lwStatus">正在检查 USB-CAN…</div>
+                                <button class="btn btn-secondary slim" id="lwAdvancedBtn" type="button">高级工具（工程师）</button>
+                            </div>
+                        </header>
+                        <ol class="smw-steps" id="lwSteps"></ol>
+                        <div class="smw-body">
+                            <div class="smw-main" id="lwMain"></div>
+                            <aside class="smw-help" id="lwHelp"></aside>
+                        </div>
+                    </div>
+                    <div class="smw-advanced hidden" id="linkAdvancedTools">
+                    <div class="smw-advanced-bar">
+                        <strong>高级工具（工程师使用）</strong>
+                        <span class="muted">手动串口 / SocketCAN 连接与系统 CAN 配置；操作员请使用建联向导。</span>
+                        <button class="btn btn-primary slim" id="lwBackBtn" type="button">返回建联向导</button>
+                    </div>
                     <div class="panel split-panel">
                         <div class="panel-body">
-                            <h2>设备连接</h2>
+                            <div class="panel-heading">
+                                <div>
+                                    <h2>手动连接（工程师）</h2>
+                                    <p class="muted">按 Transport 选择串口桥或 SocketCAN；系统 CAN 配置在右侧。</p>
+                                </div>
+                            </div>
                             <div class="workflow-command-card">
                                 <div class="workflow-command-meta">
                                     <div class="group-kicker">下一步</div>
@@ -95,6 +123,7 @@
                                 </div>
                             </div>
                             <div id="serialConnectionForm" class="connection-form">
+                                <div class="group-kicker">串口桥参数</div>
                                 <div class="form-grid">
                                     <label class="field">
                                         <span>串口</span>
@@ -107,6 +136,7 @@
                                 </div>
                             </div>
                             <div id="socketcanConnectionForm" class="connection-form hidden">
+                                <div class="group-kicker">SocketCAN 参数</div>
                                 <div class="form-grid">
                                     <label class="field">
                                         <span>Channel</span>
@@ -180,9 +210,41 @@
                             </div>
                         </div>
                     </div>
+                    </div>
                 </section>
 
                 <section class="tab-panel" id="motorWorkbenchTab">
+                    <div class="panel smw-panel" id="singleMotorWizard">
+                        <header class="smw-header">
+                            <div class="smw-title">
+                                <h2>单电机配置 <span class="group-kicker">装配前 · 一次一颗电机</span></h2>
+                                <p class="muted">按顺序点亮起的按钮即可。全程电机不会转动，不设置零位。</p>
+                            </div>
+                            <div class="smw-header-side">
+                                <div class="smw-can-status" id="smwCanStatus">正在检查 USB-CAN…</div>
+                                <button class="btn btn-secondary slim" id="smwInspectBtn" type="button">查看电机参数</button>
+                                <button class="btn btn-secondary slim" id="smwAdvancedBtn" type="button">高级工具（工程师）</button>
+                            </div>
+                        </header>
+                        <ol class="smw-steps" id="smwSteps"></ol>
+                        <div class="smw-body">
+                            <div class="smw-main" id="smwMain"></div>
+                            <aside class="smw-help" id="smwHelp"></aside>
+                        </div>
+                        <section class="smw-records">
+                            <div class="smw-records-heading">
+                                <h3>已保存的单电机记录</h3>
+                                <span class="muted">整条机械臂测试完成后，这些记录会用于生成出厂报告</span>
+                            </div>
+                            <div id="smwRecords" class="smw-records-list">加载中…</div>
+                        </section>
+                    </div>
+                    <div class="smw-advanced hidden" id="motorAdvancedTools">
+                    <div class="smw-advanced-bar">
+                        <strong>高级工具（工程师使用）</strong>
+                        <span class="muted">需要在左侧手动创建任务；操作员请使用新手向导。</span>
+                        <button class="btn btn-primary slim" id="smwBackToWizardBtn" type="button">返回新手向导</button>
+                    </div>
                     <div class="panel split-panel wide-side">
                         <div class="panel-body">
                             <div class="panel-heading">
@@ -216,7 +278,7 @@
                             <div class="section-title-row">
                                 <div>
                                     <span class="group-kicker">MOTOR MAIN</span>
-                                    <h3>主流程：一步一命令</h3>
+                                    <h3>第 1 步 · 参数写入与保存</h3>
                                 </div>
                                 <p class="muted">主按钮会根据当前任务状态自动切换，避免操作员同时看到多个危险命令。</p>
                             </div>
@@ -363,20 +425,56 @@
                             </div>
                             <div class="section-title-row">
                                 <div>
-                                    <span class="group-kicker">MOTOR TOOLS</span>
-                                    <h3>辅助工具：官方命令、诊断与报告</h3>
+                                    <span class="group-kicker">STEP 2</span>
+                                    <h3>第 2 步 · 参数核对</h3>
+                                    <p class="muted">对照目标值与电机实际读数，确认写入结果。</p>
                                 </div>
                             </div>
-                            <div class="command-band single-column-band">
-                                <div class="command-group">
-                                    <div class="group-kicker">电机测试报告</div>
-                                    <div class="command-inline">
-                                        <div>
-                                            <strong>导出电机参数报告</strong>
-                                            <p class="muted">包含 SN、型号、关节、ESC/MST、运行模式、波特率、限位、KT、减速比和固件信息。</p>
-                                        </div>
-                                        <button class="btn btn-primary slim" id="generateMotorReportBtn">导出报告</button>
+                            <div class="testing-workbench-grid">
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>当前参数 / 目标参数</h3>
                                     </div>
+                                    <div id="comparisonCard" class="comparison-card empty-state">创建任务后显示</div>
+                                </div>
+                            </div>
+                            <div class="section-title-row">
+                                <div>
+                                    <span class="group-kicker">STEP 3</span>
+                                    <h3>第 3 步 · 单关节诊断</h3>
+                                    <p class="muted">参数诊断和链路测试只读；「极小幅响应」会让电机小幅转动，执行前确认工作空间安全。</p>
+                                </div>
+                            </div>
+                            <div class="testing-workbench-grid">
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>单关节安全测试</h3>
+                                    </div>
+                                    <div class="form-grid compact-grid">
+                                        <label class="field">
+                                            <span>目标关节</span>
+                                            <select id="diagnosticJointSelect"></select>
+                                        </label>
+                                    </div>
+                                    <div class="button-row compact-button-row">
+                                        <button class="btn btn-secondary slim" id="probeJointBtn">参数诊断</button>
+                                        <button class="btn btn-secondary slim" id="jointLinkTestBtn">链路测试</button>
+                                        <button class="btn btn-warning slim" id="jointMicroTestBtn">极小幅响应</button>
+                                    </div>
+                                    <div id="jointDiagnosticDetail" class="result-list compact-results empty-state">尚未执行单关节测试</div>
+                                </div>
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>最近单关节测试</h3>
+                                    </div>
+                                    <div id="jointDiagnosticSummary" class="summary-grid empty-state">先执行参数诊断、链路测试或极小幅响应。</div>
+                                </div>
+                            </div>
+                            <div class="section-title-row">
+                                <div>
+                                    <span class="group-kicker">OFFICIAL</span>
+                                    <h3>官方命令（生成 / 受控执行）</h3>
+                                    <p class="muted">OpenARM 官方 motor-check 与波特率变更。受控执行会真实操作电机。</p>
                                 </div>
                             </div>
                             <div class="command-band">
@@ -446,50 +544,26 @@
                                     <div id="officialBaudrateResult" class="comparison-card empty-state">尚未生成官方波特率命令</div>
                                 </div>
                             </div>
-                            <div class="testing-workbench-grid">
-                                <div class="side-card">
-                                    <div class="panel-heading compact-heading">
-                                        <h3>当前参数 / 目标参数</h3>
-                                    </div>
-                                    <div id="comparisonCard" class="comparison-card empty-state">创建任务后显示</div>
-                                </div>
-                                <div class="side-card">
-                                    <div class="panel-heading compact-heading">
-                                        <h3>单关节安全测试</h3>
-                                    </div>
-                                    <div class="form-grid compact-grid">
-                                        <label class="field">
-                                            <span>目标关节</span>
-                                            <select id="diagnosticJointSelect"></select>
-                                        </label>
-                                    </div>
-                                    <div class="button-row compact-button-row">
-                                        <button class="btn btn-secondary slim" id="probeJointBtn">参数诊断</button>
-                                        <button class="btn btn-secondary slim" id="jointLinkTestBtn">链路测试</button>
-                                        <button class="btn btn-warning slim" id="jointMicroTestBtn">极小幅响应</button>
-                                    </div>
-                                    <div id="jointDiagnosticDetail" class="result-list compact-results empty-state">尚未执行单关节测试</div>
+                            <div class="section-title-row">
+                                <div>
+                                    <span class="group-kicker">OUTPUT</span>
+                                    <h3>报告与厂商维护</h3>
+                                    <p class="muted">导出单电机参数报告；打开达妙 DMTool 并登记人工维护记录。</p>
                                 </div>
                             </div>
-                        </div>
-                        <div class="panel-side">
-                            <div class="stacked-card-list">
-                                <div class="side-card">
-                                    <div class="panel-heading compact-heading">
-                                        <h3>最近单关节测试</h3>
+                            <div class="command-band single-column-band">
+                                <div class="command-group">
+                                    <div class="group-kicker">电机测试报告</div>
+                                    <div class="command-inline">
+                                        <div>
+                                            <strong>导出电机参数报告</strong>
+                                            <p class="muted">包含 SN、型号、关节、ESC/MST、运行模式、波特率、限位、KT、减速比和固件信息。</p>
+                                        </div>
+                                        <button class="btn btn-primary slim" id="generateMotorReportBtn">导出报告</button>
                                     </div>
-                                    <div id="jointDiagnosticSummary" class="summary-grid empty-state">先执行参数诊断、链路测试或极小幅响应。</div>
                                 </div>
-                                <div class="side-card">
-                                    <div class="panel-heading compact-heading">
-                                        <h3>电机工站建议</h3>
-                                    </div>
-                                    <ul class="info-list compact">
-                                        <li>官方主线先配 ID，再做 CAN 建链与通信检查。</li>
-                                        <li>波特率改写前保持 CAN 2.0，确认后再切目标模式。</li>
-                                        <li>只有在链路、参数和状态正常时再做微动。</li>
-                                    </ul>
-                                </div>
+                            </div>
+                            <div class="testing-workbench-grid">
                                 <div class="side-card">
                                     <div class="panel-heading compact-heading">
                                         <h3>达妙维护工具</h3>
@@ -556,6 +630,20 @@
                                     </div>
                                     <div id="vendorMaintenanceRecords" class="artifact-list empty-state">尚无维护记录</div>
                                 </div>
+                            </div>
+                        </div>
+                        <div class="panel-side">
+                            <div class="stacked-card-list">
+                                <div class="side-card">
+                                    <div class="panel-heading compact-heading">
+                                        <h3>电机工站建议</h3>
+                                    </div>
+                                    <ul class="info-list compact">
+                                        <li>官方主线先配 ID，再做 CAN 建链与通信检查。</li>
+                                        <li>波特率改写前保持 CAN 2.0，确认后再切目标模式。</li>
+                                        <li>只有在链路、参数和状态正常时再做微动。</li>
+                                    </ul>
+                                </div>
                                 <div class="side-card">
                                     <div class="panel-heading compact-heading">
                                         <h3>关联整臂任务</h3>
@@ -565,6 +653,7 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
                     </div>
                 </section>
 
@@ -1231,6 +1320,22 @@
         </div>
     </div>
 
-    <script type="module" src="{{ url_for('static', filename='js/main.js') }}?v=20260509-arm-runtime-2"></script>
+    <div class="modal hidden" id="smwInspectModal">
+        <div class="modal-card smw-inspect-card">
+            <header class="smw-inspect-head">
+                <div>
+                    <h3>当前电机参数</h3>
+                    <p class="muted" id="smwInspectMeta">只读查看，不会写入任何参数，电机不会转动。</p>
+                </div>
+                <button class="btn btn-secondary slim" id="smwInspectCloseBtn" type="button">关闭</button>
+            </header>
+            <div id="smwInspectBody" class="smw-inspect-body"></div>
+            <div class="button-row">
+                <button class="btn btn-primary" id="smwInspectRefreshBtn" type="button">重新读取</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}?v=20260918-rail-fix"></script>
 </body>
 </html>

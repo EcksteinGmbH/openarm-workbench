@@ -741,6 +741,106 @@ def run_test(job_id: str):
     return _json_ok(service.test(job_id, confirmed=bool(data.get("confirmed"))))
 
 
+def _wizard_call(func, *args, **kwargs):
+    try:
+        return _json_ok(func(*args, **kwargs))
+    except (KeyError, ValueError):
+        raise
+    except Exception as error:  # hardware/driver errors become operator guidance, not a raw 502
+        return _json_ok(service._wizard_problem("unknown_error", str(error)))
+
+
+@app.get("/api/single-motor/wizard/options")
+def single_wizard_options():
+    return _json_ok(service.single_wizard_options())
+
+
+@app.post("/api/link/wizard/detect")
+def link_wizard_detect():
+    return _wizard_call(service.link_wizard_detect)
+
+
+@app.post("/api/link/wizard/prepare")
+def link_wizard_prepare():
+    data = _body()
+    return _wizard_call(
+        service.link_wizard_prepare,
+        channel=str(data.get("channel", "can0")),
+        mode=str(data.get("mode", "can20")),
+        bitrate=int(data.get("bitrate", 1000000)),
+        dbitrate=int(data["dbitrate"]) if data.get("dbitrate") else None,
+    )
+
+
+@app.post("/api/link/wizard/connect")
+def link_wizard_connect():
+    data = _body()
+    return _wizard_call(
+        service.link_wizard_connect,
+        channel=str(data.get("channel", "can0")),
+        bitrate=int(data.get("bitrate", 1000000)),
+    )
+
+
+@app.post("/api/link/wizard/bus-check")
+def link_wizard_bus_check():
+    data = _body()
+    return _wizard_call(
+        service.link_wizard_bus_check,
+        channel=str(data.get("channel", "can0")),
+        bitrate=int(data.get("bitrate", 1000000)),
+    )
+
+
+@app.post("/api/link/wizard/disconnect")
+def link_wizard_disconnect():
+    data = _body()
+    return _wizard_call(service.link_wizard_disconnect, channel=str(data.get("channel", "can0")))
+
+
+@app.post("/api/single-motor/inspect")
+def single_motor_inspect():
+    data = _body()
+    return _wizard_call(
+        service.single_motor_inspect,
+        channel=str(data.get("channel", "can0")),
+        bitrate=int(data.get("bitrate", 1000000)),
+    )
+
+
+@app.post("/api/single-motor/wizard/identify")
+def single_wizard_identify():
+    data = _body()
+    return _wizard_call(
+        service.single_wizard_identify,
+        channel=str(data.get("channel", "can0")),
+        bitrate=int(data.get("bitrate", 1000000)),
+        arm_side=str(data.get("arm_side", "right_arm")),
+        joint=str(data.get("joint", "J1")),
+        product_line=str(data.get("product_line", "openarm_2_0")),
+    )
+
+
+@app.post("/api/single-motor/wizard/<job_id>/write")
+def single_wizard_write(job_id: str):
+    return _wizard_call(service.single_wizard_write, job_id)
+
+
+@app.post("/api/single-motor/wizard/<job_id>/save")
+def single_wizard_save(job_id: str):
+    return _wizard_call(service.single_wizard_save, job_id)
+
+
+@app.post("/api/single-motor/wizard/<job_id>/finish")
+def single_wizard_finish(job_id: str):
+    return _wizard_call(service.single_wizard_finish, job_id)
+
+
+@app.get("/api/single-motor/records")
+def single_motor_records():
+    return _json_ok(service.list_single_motor_records(limit=int(request.args.get("limit", 50))))
+
+
 @app.post("/api/jobs/<job_id>/run-comm-check")
 def run_comm_check(job_id: str):
     data = _body()
