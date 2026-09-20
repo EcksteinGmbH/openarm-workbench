@@ -205,27 +205,30 @@ function renderSteps() {
     let index = arm.status.steps.findIndex(step => step.group === active);
     body.innerHTML = `
         <p class="aw-phase-purpose">${esc(view.purpose)}</p>
-        <div class="aw-steps">${view.steps.map(step => renderStep(step, index++)).join('')}</div>`;
+        <ol class="aw-timeline">${view.steps.map(step => renderStep(step, index++)).join('')}</ol>`;
 }
 
 function renderStep(step, index) {
     const state = STATE_TEXT[step.state] || STATE_TEXT.pending;
     const tag = stepTag(step);
-    const expanded = arm.open === step.id || (arm.open === null && step.state === 'current');
-    const canRun = step.state !== 'skipped' && step.state !== 'locked';
+    const runnable = step.state !== 'skipped' && step.state !== 'locked';
+    // With a phase on screen at a time there are at most five steps, so nothing is
+    // hidden behind a click. "Armed" only decides which step shows its safety checks
+    // and its confirm button - otherwise fifteen checkboxes would fight for attention.
+    const armed = arm.open === step.id || (arm.open === null && step.state === 'current');
+    const repeat = step.state === 'done' || step.state === 'no_record';
 
     return `
-        <article class="aw-step ${state.cls} ${expanded ? 'open' : ''}" data-step="${esc(step.id)}">
-            <button class="aw-step-head" data-toggle="${esc(step.id)}">
-                <span class="aw-step-mark">${state.mark}</span>
-                <span class="aw-step-no">${String(index + 1).padStart(2, '0')}</span>
-                <span class="aw-step-name">${esc(step.label)}</span>
-                <span class="aw-step-state">${state.label}</span>
-                <span class="aw-tag ${tag.cls}">${tag.text}</span>
-            </button>
-            ${expanded ? `
-            <div class="aw-step-body">
-                <p>${esc(step.purpose)}</p>
+        <li class="aw-node ${state.cls} ${armed ? 'armed' : ''}">
+            <span class="aw-node-dot" aria-hidden="true">${state.mark || index + 1}</span>
+            <div class="aw-node-card">
+                <div class="aw-node-title">
+                    <h4>${esc(step.label)}</h4>
+                    <span class="aw-node-state">${state.label}</span>
+                </div>
+                <p class="aw-node-purpose">${esc(step.purpose)}</p>
+                ${runnable ? `<span class="aw-tag ${tag.cls}">${tag.text}</span>` : ''}
+
                 ${step.locked ? `
                     <div class="aw-lock">
                         <strong>为什么做不了</strong>
@@ -234,8 +237,9 @@ function renderStep(step, index) {
                     </div>` : ''}
                 ${step.state === 'no_record' ? `
                     <div class="smw-note">这台臂是在工作站开始记录这一步之前测的。<strong>不代表没做过</strong>，放行门和出厂报告都不受影响；需要留证可以重测一次。</div>` : ''}
-                ${step.state === 'skipped' ? '<p class="muted">这一步只有另一个产品版本需要。</p>' : ''}
-                ${canRun && step.motion ? `
+                ${step.state === 'skipped' ? '<p class="muted aw-node-skip">这一步只有另一个产品版本需要。</p>' : ''}
+
+                ${runnable && armed && step.motion ? `
                     <div class="aw-safety">
                         <strong>这一步机械臂会动，逐条确认后才能开始</strong>
                         ${SAFETY_CHECKS.map(check => `
@@ -245,17 +249,21 @@ function renderStep(step, index) {
                                 <span>${esc(check.label)}</span>
                             </label>`).join('')}
                     </div>` : ''}
-                ${canRun ? `
-                    <div class="smw-actions">
-                        <button class="btn ${step.state === 'done' ? 'btn-secondary' : 'btn-primary'}"
-                            data-run="${esc(step.id)}"
-                            ${arm.busy || !safetyReady(step) ? 'disabled' : ''}>
-                            ${step.state === 'done' || step.state === 'no_record' ? '重新测这一步' : `开始「${esc(step.label)}」`}
-                        </button>
-                        ${step.motion && !safetyReady(step) ? '<span class="muted">勾选完上面三条才能开始</span>' : ''}
+
+                ${runnable ? `
+                    <div class="aw-node-actions">
+                        ${armed ? `
+                            <button class="btn ${repeat ? 'btn-secondary' : 'btn-primary'}"
+                                data-run="${esc(step.id)}" ${arm.busy || !safetyReady(step) ? 'disabled' : ''}>
+                                ${repeat ? '重新测这一步' : `开始「${esc(step.label)}」`}
+                            </button>
+                            ${step.motion && !safetyReady(step) ? '<span class="muted">勾选完上面三条才能开始</span>' : ''}`
+                        : `<button class="btn btn-ghost slim" data-toggle="${esc(step.id)}" ${arm.busy ? 'disabled' : ''}>
+                                ${repeat ? '重测这一步' : '改做这一步'}
+                           </button>`}
                     </div>` : ''}
-            </div>` : ''}
-        </article>`;
+            </div>
+        </li>`;
 }
 
 // ---- 3. motor records ------------------------------------------------------------
@@ -536,7 +544,7 @@ function handleClick(event) {
     }
     const toggle = event.target.closest('[data-toggle]');
     if (toggle) {
-        arm.open = arm.open === toggle.dataset.toggle ? '' : toggle.dataset.toggle;
+        arm.open = toggle.dataset.toggle;
         render();
         return;
     }

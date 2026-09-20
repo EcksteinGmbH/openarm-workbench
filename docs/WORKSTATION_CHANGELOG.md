@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.21.1-motor-records-explained`
+Current workstation version: `0.21.2-step-timeline`
 
 ## Versioning Rule
 
@@ -13,6 +13,36 @@ Current workstation version: `0.21.1-motor-records-explained`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.21.2-step-timeline - 2026-09-20
+
+Summary: the steps are drawn as a timeline with everything visible, instead of rows
+that had to be clicked open.
+
+The accordion was a leftover from when all twelve steps shared one page. Since 0.21.0 a
+phase holds at most five, so hiding their contents bought nothing and cost a click to
+read what a step even does.
+
+Changes:
+
+- Each step is a numbered node on a vertical rail with its name, what it does, and
+  whether the arm moves - all visible without clicking. The rail runs green behind
+  completed steps, so progress reads at a glance.
+- The node marker carries the state: a filled green tick for done, a filled accent
+  circle for the step you are on, an amber outline with a lock for a step that is not
+  yet available, a dashed outline for one this product skips.
+- Only the step you are about to run gets a surface - a bordered card with its safety
+  checks and confirm button. The others stay flat, so the eye lands on one. Fifteen
+  safety checkboxes on screen at once would be ticked without being read.
+- Any other step can be armed with 改做这一步 or 重测这一步, which moves the card to it.
+- Lock reasons and the "no record" note render inside the node rather than in a drawer.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 228 passed.
+- Restarted and confirmed the stylesheet and module served carry the timeline rules;
+  `.aw-tag`, `.aw-lock` and `.aw-safety` were briefly dropped with the accordion block
+  and are restored, which the page test caught.
 
 ### 0.21.1-motor-records-explained - 2026-09-20
 

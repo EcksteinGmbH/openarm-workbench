@@ -1864,80 +1864,6 @@ body[data-primary-flow="connectTab"]:not(.link-advanced) .right-rail {
 .aw-arm-cn { font-weight: 800; font-size: 15px; }
 .aw-arm-meta { color: var(--muted); font-size: 12px; }
 
-/* --- the steps --- */
-.aw-steps { display: flex; flex-direction: column; gap: 8px; }
-
-.aw-step {
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    overflow: hidden;
-}
-
-.aw-step.current { border-color: var(--accent); }
-.aw-step.locked { border-color: var(--warning, #d69e2e); }
-.aw-step.skipped { opacity: 0.55; }
-
-.aw-step-head {
-    display: grid;
-    grid-template-columns: 24px 28px minmax(0, 1fr) auto auto;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 12px 14px;
-    background: transparent;
-    border: none;
-    color: var(--text);
-    cursor: pointer;
-    text-align: left;
-    font-size: 14px;
-}
-
-.aw-step.open .aw-step-head { background: var(--panel-strong); }
-.aw-step-mark { text-align: center; font-weight: 800; }
-.aw-step.done .aw-step-mark { color: var(--ok, #38a169); }
-.aw-step.locked .aw-step-mark { color: var(--warning, #d69e2e); }
-.aw-step-no { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
-.aw-step-name { font-weight: 700; }
-.aw-step.current .aw-step-name { color: var(--accent); }
-.aw-step-state { color: var(--muted); font-size: 12px; }
-.aw-step.current .aw-step-state { color: var(--accent); font-weight: 700; }
-.aw-step.locked .aw-step-state { color: var(--warning, #d69e2e); }
-
-.aw-tag {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--line);
-    white-space: nowrap;
-}
-.aw-tag.motion { color: var(--danger); border-color: var(--danger); }
-.aw-tag.writes { color: var(--warning, #d69e2e); border-color: var(--warning, #d69e2e); }
-.aw-tag.readonly { color: var(--muted); }
-
-.aw-step-body {
-    padding: 4px 14px 16px 62px;
-    border-top: 1px solid var(--line);
-}
-.aw-step-body > p { margin: 10px 0; color: var(--muted); }
-
-.aw-lock {
-    border: 1px solid var(--warning, #d69e2e);
-    border-radius: 8px;
-    padding: 10px 12px;
-    margin: 10px 0;
-}
-.aw-lock strong { color: var(--warning, #d69e2e); display: block; margin-bottom: 4px; }
-.aw-lock p { margin: 4px 0; }
-
-.aw-safety {
-    border: 1px solid var(--danger);
-    border-radius: 8px;
-    padding: 12px 14px;
-    margin: 12px 0;
-}
-.aw-safety strong { display: block; margin-bottom: 8px; color: var(--danger); }
-
 /* --- motor records --- */
 .aw-motor-grid {
     display: grid;
@@ -1958,12 +1884,6 @@ body[data-primary-flow="connectTab"]:not(.link-advanced) .right-rail {
 .aw-motor small { color: var(--muted); font-size: 11px; }
 .aw-motor-state { font-size: 12px; color: var(--ok, #38a169); font-weight: 700; }
 .aw-motor-state.missing { color: var(--muted); font-weight: 400; }
-
-@media (max-width: 720px) {
-    .aw-step-head { grid-template-columns: 24px 28px minmax(0, 1fr); row-gap: 4px; }
-    .aw-step-state, .aw-tag { grid-column: 3; }
-    .aw-step-body { padding-left: 14px; }
-}
 
 /* The wizard owns the full width until the engineer tools are opened. */
 body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .workspace {
@@ -2090,7 +2010,6 @@ body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .right-rail {
     font-size: 13px;
 }
 
-.aw-steps { display: flex; flex-direction: column; gap: 8px; }
 
 /* --- delete: keeping the record and erasing it are different decisions --- */
 .aw-delete-options {
@@ -2136,3 +2055,181 @@ body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .right-rail {
 
 .aw-motor-count { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
 .aw-motor-count strong { color: var(--text); font-size: 15px; }
+
+/* --- the steps, as a timeline -----------------------------------------------------
+   A phase holds at most five steps, so nothing hides behind a click: every step shows
+   its name, what it does and whether the arm moves. Only the step you are about to run
+   opens its safety checks and confirm button - fifteen checkboxes at once would read
+   as noise and get ticked without being read. */
+.aw-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.aw-node {
+    position: relative;
+    padding: 0 0 18px 42px;
+}
+
+/* The rail, drawn between the dots rather than through them. */
+.aw-node::before {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: 28px;
+    bottom: 0;
+    width: 2px;
+    background: var(--line);
+}
+
+.aw-node:last-child { padding-bottom: 0; }
+.aw-node:last-child::before { display: none; }
+.aw-node.done::before { background: var(--ok, #38a169); opacity: 0.45; }
+
+.aw-node-dot {
+    position: absolute;
+    left: 0;
+    top: 2px;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.aw-node.done .aw-node-dot {
+    border-color: var(--ok, #38a169);
+    background: var(--ok, #38a169);
+    color: #fff;
+}
+
+.aw-node.current .aw-node-dot,
+.aw-node.armed .aw-node-dot {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+.aw-node.locked .aw-node-dot {
+    border-color: var(--warning, #d69e2e);
+    color: var(--warning, #d69e2e);
+    font-size: 12px;
+}
+
+.aw-node.skipped .aw-node-dot { border-style: dashed; opacity: 0.6; }
+.aw-node.no-record .aw-node-dot { border-color: var(--muted); }
+
+.aw-node-card {
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 2px 0 0;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+/* Only the armed step gets a surface; the rest stay flat so the eye lands on one. */
+.aw-node.armed .aw-node-card {
+    border-color: var(--accent);
+    background: var(--panel-strong);
+    padding: 12px 14px;
+}
+
+.aw-node.skipped .aw-node-card { opacity: 0.5; }
+
+.aw-node-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.aw-node-title h4 { margin: 0; font-size: 15px; }
+.aw-node.current .aw-node-title h4,
+.aw-node.armed .aw-node-title h4 { color: var(--accent); }
+.aw-node.done .aw-node-title h4 { color: var(--text); }
+
+.aw-node-state { font-size: 12px; color: var(--muted); }
+.aw-node.current .aw-node-state { color: var(--accent); font-weight: 700; }
+.aw-node.locked .aw-node-state { color: var(--warning, #d69e2e); font-weight: 700; }
+.aw-node.done .aw-node-state { color: var(--ok, #38a169); }
+
+.aw-node-purpose {
+    margin: 5px 0 8px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.aw-node-skip { font-size: 12px; margin: 0; }
+
+.aw-node-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.btn-ghost {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--muted);
+}
+
+.btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+
+@media (max-width: 720px) {
+    .aw-node { padding-left: 36px; }
+    .aw-node-dot { width: 24px; height: 24px; }
+    .aw-node::before { left: 11px; }
+}
+
+/* --- what a step does to the hardware, said before it is pressed --- */
+.aw-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+}
+
+.aw-tag.motion { color: var(--danger); border-color: var(--danger); }
+.aw-tag.writes { color: var(--warning, #d69e2e); border-color: var(--warning, #d69e2e); }
+
+.aw-lock {
+    border: 1px solid var(--warning, #d69e2e);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 10px 0 0;
+}
+
+.aw-lock strong {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--warning, #d69e2e);
+    font-size: 13px;
+}
+
+.aw-lock p { margin: 4px 0; font-size: 12px; line-height: 1.6; }
+
+.aw-safety {
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 12px 0 0;
+}
+
+.aw-safety strong {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--danger);
+    font-size: 13px;
+}
