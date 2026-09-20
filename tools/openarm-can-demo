@@ -84,6 +84,24 @@ def command_all(openarm, arm_params, gripper_param=None, duration_s: float = 0.2
         time.sleep(0.005)
 
 
+# `DMDeviceCollection::get_motors()` builds `std::vector<Motor>` with push_back, so
+# every call returns fresh COPIES of the motors, not handles on the live ones. A copy
+# captured before a loop is a snapshot that never updates again - which is why every
+# demo log ever recorded shows `travel=0.000000` with min == max == start == end for
+# all ~600 samples of a phase. The gripper really did move; the script kept re-reading
+# one frozen number. Always take the reading through a fresh call.
+def _gripper_position(gripper) -> float:
+    return float(gripper.get_motors()[0].get_position())
+
+
+# Fraction of the requested travel the gripper must have covered by the midpoint of
+# the ramp. Every arm on record reached 90-98% of its target, so it is ~48% at the
+# midpoint; 15% leaves a 3x margin and cannot trip on a healthy gripper.
+GRIPPER_PROGRESS_MIN_FRACTION = 0.15
+# Below this the move is too small for the check to mean anything.
+GRIPPER_PROGRESS_MIN_DELTA_RAD = 0.2
+
+
 def command_gripper_position(
     openarm,
     target_position: float,
@@ -95,12 +113,16 @@ def command_gripper_position(
 ):
     arm_component = openarm.get_arm()
     gripper = openarm.get_gripper()
-    motor = gripper.get_motors()[0]
-    start = float(motor.get_position())
+    # Read once at entry, as before: the ramp interpolates from where the phase began,
+    # so `start` must NOT be re-read. The command stream is unchanged by this function.
+    start = _gripper_position(gripper)
     observed = [start]
     print(f"{label} gripper: target={target_position:.6f} start={start:.6f}")
     if arm_hold_q is None:
         arm_hold_q = [float(arm_motor.get_position()) for arm_motor in arm_component.get_motors()]
+    requested_delta = float(target_position) - start
+    checked_progress = False
+    aborted = False
     deadline = time.time() + float(duration_s)
     while time.time() < deadline:
         alpha = 1.0 - max(0.0, deadline - time.time()) / max(float(duration_s), 0.001)
@@ -111,21 +133,43 @@ def command_gripper_position(
         arm_component.mit_control_all(arm_params)
         gripper.mit_control_all([oa.MITParam(kp, kd, target, 0.0, 0.0)])
         openarm.recv_all()
-        observed.append(float(motor.get_position()))
+        position = _gripper_position(gripper)
+        observed.append(position)
+        # Halfway through the ramp, stop if the gripper has not followed. Commanding a
+        # gripper the wrong way holds it against its own hard stop for the rest of the
+        # phase, which is the sustained-force case that overheats a DM4310.
+        if (
+            not checked_progress
+            and alpha >= 0.5
+            and abs(requested_delta) >= GRIPPER_PROGRESS_MIN_DELTA_RAD
+        ):
+            checked_progress = True
+            progress = (position - start) / requested_delta
+            if progress < GRIPPER_PROGRESS_MIN_FRACTION:
+                aborted = True
+                print(
+                    f"GRIPPER_ABORT: {label} covered {progress * 100:.1f}% of the requested "
+                    f"{requested_delta:+.6f} rad by the midpoint (minimum "
+                    f"{GRIPPER_PROGRESS_MIN_FRACTION * 100:.0f}%); stopping to avoid holding "
+                    f"against a stop. Check the gripper open direction and that nothing blocks it."
+                )
+                break
         time.sleep(0.005)
-    for _ in range(20):
-        arm_component.mit_control_all([oa.MITParam(1.5, 0.4, q, 0.0, 0.0) for q in arm_hold_q])
-        gripper.mit_control_all([oa.MITParam(kp, kd, float(target_position), 0.0, 0.0)])
-        openarm.recv_all()
-        observed.append(float(motor.get_position()))
-        time.sleep(0.005)
-    end = float(motor.get_position())
+    if not aborted:
+        for _ in range(20):
+            arm_component.mit_control_all([oa.MITParam(1.5, 0.4, q, 0.0, 0.0) for q in arm_hold_q])
+            gripper.mit_control_all([oa.MITParam(kp, kd, float(target_position), 0.0, 0.0)])
+            openarm.recv_all()
+            observed.append(_gripper_position(gripper))
+            time.sleep(0.005)
+    end = _gripper_position(gripper)
     min_pos = min(observed)
     max_pos = max(observed)
     travel = max_pos - min_pos
     print(
         f"{label} gripper result: start={start:.6f} end={end:.6f} "
         f"delta={end - start:.6f} min={min_pos:.6f} max={max_pos:.6f} travel={travel:.6f}"
+        f"{' aborted=True' if aborted else ''}"
     )
     return start, end
 

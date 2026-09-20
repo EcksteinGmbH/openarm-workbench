@@ -2897,3 +2897,43 @@ def test_every_profile_agrees_with_the_commissioning_timeout_policy():
         profile = service.profile_manager.get_profile(profile_id)
         timeouts = {int(joint["target_timeout"]) for joint in profile["joints"]}
         assert timeouts == {workstation.WHOLE_ARM_TARGET_TIMEOUT}, f"{profile_id}: {sorted(timeouts)}"
+
+
+def test_demo_parse_blocks_on_a_gripper_progress_abort():
+    # The demo stops a gripper phase when the gripper is not following, most likely
+    # because the open direction is wrong for this arm. The report has to say so
+    # rather than only showing a short travel.
+    stdout = (
+        "arm_side: right_arm\n"
+        "OPEN gripper: target=-1.047200 start=0.000000\n"
+        "GRIPPER_ABORT: OPEN covered -0.0% of the requested -1.047200 rad by the midpoint "
+        "(minimum 15%); stopping to avoid holding against a stop.\n"
+        "OPEN gripper result: start=0.000000 end=0.000000 delta=0.000000 min=0.000000 "
+        "max=0.000000 travel=0.000000 aborted=True\n"
+        "Demo completed successfully; motors disabled.\n"
+    )
+    summary = workstation._parse_official_demo_stdout(stdout)
+    assert summary["passed"] is False
+    assert "gripper_progress_aborted" in summary["blocking_items"]
+    assert summary["gripper_abort_messages"] and "midpoint" in summary["gripper_abort_messages"][0]
+
+
+def test_a_normal_demo_has_no_gripper_abort():
+    # Taken from a real Follower run: the phase-internal travel really is 0.000000
+    # because `get_motors()` handed the script a frozen copy; the endpoint values
+    # carry the truth. This must keep parsing as it always did.
+    stdout = (
+        "arm_side: right_arm\n"
+        "OPEN gripper: target=-1.047200 start=-0.000191\n"
+        "OPEN gripper result: start=-0.000191 end=-0.000191 delta=0.000000 min=-0.000191 "
+        "max=-0.000191 travel=0.000000\n"
+        "CLOSE gripper: target=0.000000 start=-1.008812\n"
+        "CLOSE gripper result: start=-1.008812 end=-1.008812 delta=0.000000 min=-1.008812 "
+        "max=-1.008812 travel=0.000000\n"
+        "Gripper Motor 8 recv=24 position=-0.041772 velocity=-0.007326 torque=-0.002442 tmos=30 trotor=29\n"
+        "Demo completed successfully; motors disabled.\n"
+    )
+    summary = workstation._parse_official_demo_stdout(stdout)
+    assert summary["gripper_abort_messages"] == []
+    assert "gripper_progress_aborted" not in summary["blocking_items"]
+    assert summary["gripper_travel_rad"] == pytest.approx(abs(-0.041772 - -1.008812), abs=1e-6)

@@ -818,9 +818,14 @@ def _parse_official_demo_stdout(stdout: str) -> Dict[str, Any]:
     close_final = float(final_grip[-1].group(1)) if final_grip else None
     open_observed = float(close_start.group(2)) if close_start else None
     travel = abs(close_final - open_observed) if close_final is not None and open_observed is not None else None
+    aborts = re.findall(r"GRIPPER_ABORT: ([^\n]+)", text)
     blocking = []
     warnings = []
     expects_id16_special = "arm_side: left_arm" in text or "0x10" in text
+    if aborts:
+        # The demo stopped a gripper phase because the gripper was not following. Most
+        # likely the open direction is wrong for this arm, or something blocks it.
+        blocking.append("gripper_progress_aborted")
     if "COMM_LOST" in text:
         blocking.append("comm_lost_reported")
     if "Demo completed successfully; motors disabled." not in text:
@@ -846,6 +851,7 @@ def _parse_official_demo_stdout(stdout: str) -> Dict[str, Any]:
         "close_final": close_final,
         "gripper_travel_rad": travel,
         "gripper_travel_threshold_rad": OFFICIAL_DEMO_MIN_GRIPPER_TRAVEL_RAD,
+        "gripper_abort_messages": aborts,
         "blocking_items": blocking,
         "warning_items": warnings,
         "passed": not blocking,

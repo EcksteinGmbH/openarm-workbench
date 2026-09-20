@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.13.0-product-version-registry`
+Current workstation version: `0.14.0-gripper-sampling-and-progress-check`
 
 ## Versioning Rule
 
@@ -13,6 +13,59 @@ Current workstation version: `0.13.0-product-version-registry`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.14.0-gripper-sampling-and-progress-check - 2026-09-20
+
+Summary: the demo's gripper position sampling read a frozen copy for the whole of
+every phase, in every run ever recorded. Fixed, and a midpoint progress check now
+stops a gripper that is not following instead of holding it against a stop.
+
+Root cause: `DMDeviceCollection::get_motors()` builds a `std::vector<Motor>` with
+push_back and returns it by value, so each call yields fresh COPIES of the motors,
+not handles on the live ones. `command_gripper_position()` captured one copy before
+its control loop and then re-read that snapshot ~600 times per phase. Every demo log
+in this repo - 15 arm-sides, Follower and Leader, 2026-05 through 2026-09 - shows
+`travel=0.000000` with min == max == start == end, without a single exception. The
+gripper moved exactly as the operator observed; only the measurement was blind. The
+script is the only one of ten `get_motors()` call sites that cached the result.
+
+Changes:
+
+- `tools/openarm-can-demo` reads the gripper through a fresh `get_motors()` call on
+  every sample. `start` is still read once at entry, because the ramp interpolates
+  from where the phase began - so the commanded targets are unchanged.
+- A midpoint progress check: halfway through the ramp, if the gripper has covered
+  less than 15% of the requested travel (and the move is at least 0.2 rad), the phase
+  stops and prints `GRIPPER_ABORT: ...`. Commanding a gripper the wrong way otherwise
+  holds it against its own hard stop for the rest of the phase, which is the
+  sustained-force case that overheats a DM4310 (openarm_can#81). Every arm on record
+  reached 90-98% of target, so it sits near 48% at the midpoint: 15% is a 3x margin.
+- `_parse_official_demo_stdout()` collects `gripper_abort_messages` and raises the
+  blocking item `gripper_progress_aborted`, so an aborted phase is reported as its own
+  cause rather than only as short travel.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 163 passed. Six new tests run the real
+  `command_gripper_position` against a fake OpenArm that reproduces the C++ copy
+  semantics, including one that asserts the fake really does freeze a captured motor -
+  without that, the other tests would prove nothing.
+- The command stream is proven unchanged: with the clock pinned to a deterministic
+  fake, a gripper that follows perfectly and one that does not move at all receive a
+  byte-identical sequence of targets, up to the point the check stops the second.
+- The progress check does not trip on a gripper that only closes 20% of the remaining
+  gap per cycle, nor on moves below 0.2 rad.
+- Parsing a real recorded Follower run is unchanged, including its `travel=0.000000`.
+- Not exercised on hardware: none is attached.
+
+Operational Notes:
+
+- Phase-internal `travel=` in demo logs will now show real motion instead of
+  0.000000. The pass criterion still uses the endpoint values
+  (`open_observed_at_close_start` and `close_final`), so verdicts are unchanged.
+- This matters most for 2.0, whose gripper acceptance thresholds are still undecided:
+  any criterion beyond endpoint-to-endpoint needs the per-sample data that was
+  previously unavailable.
 
 ### 0.13.0-product-version-registry - 2026-09-20
 
