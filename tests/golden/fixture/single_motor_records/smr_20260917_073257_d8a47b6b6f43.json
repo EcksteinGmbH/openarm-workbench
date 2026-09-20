@@ -1,0 +1,93 @@
+{
+  "record_id": "smr_20260917_073257_d8a47b6b6f43",
+  "record_type": "single_motor_commissioning",
+  "created_at": "2026-09-17T07:32:57Z",
+  "workstation_version": "0.8.0-single-motor-wizard",
+  "result": "PASS",
+  "sn_register": 1412444213,
+  "motor_type": "DM-J4310-2EC",
+  "model_check": {
+    "method": "limit_registers",
+    "families": [
+      "DM4310"
+    ],
+    "expected_motor_type": "DM-J4310-2EC",
+    "expected_family": "DM4310",
+    "verdict": "match",
+    "evidence": {
+      "PMAX": 12.5,
+      "VMAX": 30.0,
+      "TMAX": 10.0,
+      "Gr": 10.0
+    }
+  },
+  "product_line": "openarm_2_0",
+  "product_line_label": "OpenArm 2.0",
+  "arm_side": "right_arm",
+  "joint_name": "R-J5",
+  "profile_id": "openarm_right_arm_v1",
+  "job_id": "d8a47b6b6f43",
+  "job_artifact_dir": "/home/ubuntu/Projects/OpenARM/artifacts/jobs/20260917_073221_d8a47b6b6f43",
+  "check_mode": "saved_readback",
+  "motion_performed": false,
+  "zero_saved": false,
+  "target": {
+    "ESC_ID": 5,
+    "MST_ID": 21,
+    "CTRL_MODE": "MIT",
+    "can_br": 1000000
+  },
+  "before": {
+    "ESC_ID": 1,
+    "MST_ID": 0,
+    "CTRL_MODE": 1,
+    "TIMEOUT": 0,
+    "can_br": 4,
+    "sw_ver": 942747703,
+    "sub_ver": 57,
+    "SN": 1412444213,
+    "Gr": 10.0,
+    "KT_Value": 0.0,
+    "PMAX": 12.5,
+    "VMAX": 30.0,
+    "TMAX": 10.0
+  },
+  "after": {
+    "ESC_ID": 5,
+    "CTRL_MODE": 1,
+    "TIMEOUT": 0,
+    "can_br": 4,
+    "MST_ID": 21,
+    "KT_Value": 0.0,
+    "Gr": 10.0,
+    "PMAX": 12.5,
+    "VMAX": 30.0,
+    "TMAX": 10.0,
+    "SN": 1412444213,
+    "sw_ver": 942747703
+  },
+  "verified": {
+    "ESC_ID": 5,
+    "MST_ID": 21,
+    "CTRL_MODE": "MIT",
+    "can_br": 1000000,
+    "can_br_code": 4,
+    "can_mode": "CAN 2.0"
+  },
+  "timeout_recorded": 0,
+  "firmware": {
+    "sw_ver": 942747703,
+    "sub_ver": 57
+  },
+  "final_status": {
+    "status": "DISABLED",
+    "status_code": 0,
+    "has_error": false,
+    "is_enabled": false,
+    "t_mos": 29.0,
+    "t_rotor": 27.0
+  },
+  "mismatches": [],
+  "issues": [],
+  "failure_reason": null
+}

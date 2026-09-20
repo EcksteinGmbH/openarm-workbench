@@ -756,6 +756,31 @@ def single_wizard_options():
     return _json_ok(service.single_wizard_options())
 
 
+@app.get("/api/arm/wizard/options")
+def arm_wizard_options():
+    return _wizard_call(service.arm_wizard_options, product_version=request.args.get("product_version"))
+
+
+@app.get("/api/arm/wizard/<arm_cn>/status")
+def arm_wizard_status(arm_cn: str):
+    return _wizard_call(service.arm_wizard_status, arm_cn=arm_cn)
+
+
+@app.get("/api/arm/wizard/<arm_cn>/motor-records")
+def arm_wizard_motor_records(arm_cn: str):
+    return _wizard_call(service.arm_wizard_available_motor_records, arm_cn=arm_cn)
+
+
+@app.post("/api/arm/wizard/<arm_cn>/motor-records")
+def arm_wizard_attach_motor_record(arm_cn: str):
+    data = _body()
+    return _wizard_call(
+        service.arm_wizard_attach_motor_record,
+        arm_cn=arm_cn,
+        record_id=str(data.get("record_id") or ""),
+    )
+
+
 @app.post("/api/link/wizard/detect")
 def link_wizard_detect():
     return _wizard_call(service.link_wizard_detect)

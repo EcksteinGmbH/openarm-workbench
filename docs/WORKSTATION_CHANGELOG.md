@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.15.0-registry-driven-criteria`
+Current workstation version: `0.16.0-arm-wizard-backend`
 
 ## Versioning Rule
 
@@ -13,6 +13,68 @@ Current workstation version: `0.15.0-registry-driven-criteria`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.16.0-arm-wizard-backend - 2026-09-20
+
+Summary: the whole-arm acceptance flow is now a sequenced twelve-step wizard behind the
+API, in the official order, with 2.0's steps present but locked. The 16 motors
+commissioned for the next 2.0 arm are protected and can now be attached to it.
+
+This is the service layer; the page comes next. The wizard only sequences and guards -
+every step delegates to the method the engineer tools already called, so a 1.0 arm is
+judged by exactly the code that judged the three arms already shipped, and the golden
+release-gate and report baselines are unchanged.
+
+The 16 commissioned motors:
+
+- `tests/golden/fixture/single_motor_records/` holds a committed copy of all 16 records
+  from 2026-09-17, plus the legacy by-SN file. They live under `artifacts/`, which is
+  gitignored, and they are the only evidence that each motor was configured and read
+  back on hardware.
+- `tests/test_single_motor_records_intact.py` guards the invariant rather than byte
+  equality, since a record gains fields when it is attached to an arm: all 16 joints
+  present, all PASS, all `openarm_2_0`, each with the ESC/MST pair Plan A calls for,
+  and every recorded value a readback rather than a target. It also checks the live
+  directory still matches wherever it exists. R-J1 predates the decoded `verified`
+  field (it was commissioned on 0.8.0); a test pins that this is the only exemption.
+- `arm_wizard_available_motor_records()` lists the commissioned motors whose product
+  version matches the arm, and `arm_wizard_attach_motor_record()` attaches one to its
+  joint. The record id is the key, never the SN - Damiao's SN register is not unique
+  across motors. Attaching a record from the other product version is refused, as is a
+  record that did not pass; re-attaching a joint replaces rather than duplicates.
+
+The wizard:
+
+- `ARM_WIZARD_STEPS` is the official order: 整机建档, 连接自检, 静态验收, 参数标准化,
+  切换 CAN-FD, 低增益使能检查, 零位校准, 夹爪测试, 相机测试, 官方 Demo, 放行检查,
+  报告签核. Each step carries a plain-language purpose, whether it moves the arm, and
+  whether it writes to the motors without moving them - so an operator knows before
+  pressing, not after.
+- Steps resolve per product. 1.0 skips 切换 CAN-FD and 相机测试 and has nothing locked.
+  2.0 shows both, and locks 切换 CAN-FD, 零位校准, 夹爪测试, 相机测试 and 官方 Demo
+  with the reason from the registry. Its read-only and parameter steps stay reachable,
+  so a 2.0 arm can still be scanned and checked.
+- `arm_wizard_status()` reads progress from evidence already on record, so an arm
+  tested through the engineer tools before this wizard existed shows its real state
+  instead of starting from zero.
+- Four problem-catalog entries with beginner-readable fixes: `arm_not_found`,
+  `arm_step_locked`, `arm_step_out_of_order`, `arm_motor_record_mismatch`. Only
+  `arm_step_locked` is blocking, because it needs a hardware verification or a
+  decision the operator cannot make on that page; the others they can clear themselves.
+- API: `GET /api/arm/wizard/options`, `GET /api/arm/wizard/<arm_cn>/status`,
+  `GET|POST /api/arm/wizard/<arm_cn>/motor-records`.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 204 passed, including 16 wizard tests and 5 record
+  guards. The golden release-gate and formal-report baselines for the three real arms
+  are unchanged.
+- Not exercised on hardware: none is attached.
+
+Operational Notes:
+
+- No step executes anything yet; this release defines and reports the flow. The per-step
+  handlers reuse the existing engineer methods and land with the page.
 
 ### 0.15.0-registry-driven-criteria - 2026-09-20
 

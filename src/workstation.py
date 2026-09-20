@@ -195,6 +195,8 @@ SINGLE_WIZARD_PRODUCT_LINES = {"openarm_2_0": "OpenArm 2.0", "openarm_1_0": "Ope
 # cannot be opened. The wizards raise these in a blocking dialog instead of only the
 # in-page panel, because nothing further can be tried until someone fixes the port.
 BLOCKING_PROBLEM_CODES = {
+    # Needs a hardware verification or a decision that cannot happen on this page.
+    "arm_step_locked",
     "can_interface_missing",
     "can_interface_down",
     "can_bus_error",
@@ -248,6 +250,41 @@ SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
             "确认没有其他程序（DMTool、candump 脚本）正在占用这个 CAN 口。",
             "请工程师在终端执行：sudo ip link set can0 down && sudo ip link set can0 type can bitrate 1000000 && sudo ip link set can0 up",
             "执行完后回到这里再点一次「配置并启动」。",
+        ],
+    },
+    "arm_not_found": {
+        "title": "找不到这台机械臂的档案",
+        "message": "输入的整机编号在工作站里没有对应记录。",
+        "solutions": [
+            "确认整机编号输入正确（右臂 Follower 形如 OAF26092001）。",
+            "如果这是一台新臂，请先在「整机建档」这一步建立档案。",
+            "在「已建档机械臂」列表里查看已有编号，直接选择而不是手输。",
+        ],
+    },
+    "arm_step_locked": {
+        "title": "这一步还不能执行",
+        "message": "这台臂的产品版本里，这一步所依赖的参数还没有经过真机验证。",
+        "solutions": [
+            "先完成该项的真机验证，再回到这一步。",
+            "页面上会写明具体缺什么；把它交给工程师处理。",
+            "在验证完成前，工作站不会让这一步运行，也不会为这台臂出正式报告。",
+        ],
+    },
+    "arm_step_out_of_order": {
+        "title": "前一步还没完成",
+        "message": "出厂流程有固定顺序，跳过前面的步骤会让后面的结果不可信。",
+        "solutions": [
+            "回到高亮显示的那一步，先把它做完。",
+            "如果前一步做过但没通过，请先处理它的问题再重试。",
+        ],
+    },
+    "arm_motor_record_mismatch": {
+        "title": "电机记录和这台臂对不上",
+        "message": "要挂载的单电机记录，和这台臂的产品版本或关节不一致。",
+        "solutions": [
+            "确认选的是这台臂的记录：产品版本（1.0 / 2.0）和关节号都要对上。",
+            "一个关节只能挂一条记录；要换请先移除原来那条。",
+            "找不到对应记录时，说明这颗电机还没做单电机配置，请先去「单电机测试」完成。",
         ],
     },
     "bus_no_motor": {
@@ -5851,6 +5888,310 @@ class WorkstationService:
         }
 
     # ---- Beginner link wizard (tab 01) ----
+
+    # ---- Beginner whole-arm wizard (tabs 03/04) ----
+    #
+    # The official acceptance order, one step per screen, matching the flow the link
+    # and single-motor wizards already use. This layer only sequences and guards; every
+    # step delegates to the same method the engineer tools have always called, so a 1.0
+    # arm is judged by exactly the code that judged the three arms already shipped.
+    #
+    # `products` limits a step to the product versions it applies to. A step whose
+    # product section is unverified is shown but locked, with the reason spelled out -
+    # that is how 2.0 keeps its place in the flow while its hardware is out of reach.
+    ARM_WIZARD_STEPS: List[Dict[str, Any]] = [
+        {
+            "id": "identity",
+            "label": "整机建档",
+            "purpose": "给这台臂建立档案，确定它是 1.0 还是 2.0。版本一经确定不可更改。",
+            "motion": False,
+        },
+        {
+            "id": "link",
+            "label": "连接自检",
+            "purpose": "确认 CAN 口可用、总线上能看到电机。只读，不动电机。",
+            "motion": False,
+        },
+        {
+            "id": "static",
+            "label": "静态验收",
+            "purpose": "逐关节核对 ID、模式、波特率、故障和温度，并复扫确认通信稳定。只读。",
+            "motion": False,
+        },
+        {
+            "id": "timeout",
+            "label": "参数标准化",
+            "purpose": "按 Profile 给每个关节写入 TIMEOUT 并保存。会写入电机，但不发运动指令。",
+            "motion": False,
+            "writes": True,
+        },
+        {
+            "id": "fd_switch",
+            "label": "切换 CAN-FD",
+            "purpose": "把整臂从 1 Mbps 经典 CAN 切到 CAN-FD 1M/5M，逐关节写入并保存。",
+            "motion": False,
+            "writes": True,
+            "products": ["openarm_2_0"],
+            "lock_section": "can.operation",
+        },
+        {
+            "id": "enable",
+            "label": "低增益使能检查",
+            "purpose": "逐关节低增益使能再失能，确认链路正常且无故障。电机会有极轻微动作。",
+            "motion": True,
+        },
+        {
+            "id": "zero",
+            "label": "零位校准",
+            "purpose": "官方动态零位，保存整臂零点，随后恢复初始姿态。机械臂会运动。",
+            "motion": True,
+            "lock_section": "zero",
+        },
+        {
+            "id": "gripper",
+            "label": "夹爪测试",
+            "purpose": "按本产品的方向和行程开合夹爪，记录实测行程。夹爪会运动。",
+            "motion": True,
+            "lock_section": "gripper",
+        },
+        {
+            "id": "camera",
+            "label": "相机测试",
+            "purpose": "枚举相机、检查分辨率与帧率并留存快照。不动电机。",
+            "motion": False,
+            "products": ["openarm_2_0"],
+            "lock_section": "camera.gripper",
+        },
+        {
+            "id": "demo",
+            "label": "官方 Demo",
+            "purpose": "跑官方 Demo 验证整臂动作，结束后强制失能。机械臂会运动。",
+            "motion": True,
+            "lock_section": "gripper",
+        },
+        {
+            "id": "gate",
+            "label": "放行检查",
+            "purpose": "核对证据是否齐全、版本是否一致，给出 PASS 或 HOLD。只读。",
+            "motion": False,
+        },
+        {
+            "id": "report",
+            "label": "报告签核",
+            "purpose": "生成正式出厂报告并归档证据。只读。",
+            "motion": False,
+        },
+    ]
+
+    def _arm_wizard_step_view(self, step: Dict[str, Any], product_version: str) -> Dict[str, Any]:
+        """One step, resolved for a product: applicable, and locked or not."""
+        applies = product_version in step.get("products", [product_version])
+        lock_reason = None
+        if applies and step.get("lock_section"):
+            lock_reason = self.product_registry.lock_reasons(product_version).get(step["lock_section"])
+        return {
+            "id": step["id"],
+            "label": step["label"],
+            "purpose": step["purpose"],
+            "motion": bool(step.get("motion")),
+            "writes": bool(step.get("writes")),
+            "applies": applies,
+            "locked": bool(lock_reason),
+            "locked_reason": lock_reason,
+        }
+
+    def arm_wizard_options(self, product_version: Optional[str] = None) -> Dict[str, Any]:
+        """Everything the arm wizard page needs to draw itself before any hardware."""
+        with self._lock:
+            selected = str(product_version or DEFAULT_PRODUCT_VERSION)
+            if selected not in self.product_registry.known_versions():
+                raise ValueError(f"unknown product_version {selected}")
+            product = self.product_registry.get(selected)
+            return {
+                "product_versions": [
+                    {
+                        "product_version": item["product_version"],
+                        "label": item["label"],
+                        "hardware_verified": bool(item.get("hardware_verified")),
+                    }
+                    for item in self.product_registry.list_products()
+                ],
+                "selected_product_version": selected,
+                "arm_sides": [
+                    {"id": side, "label": "右臂" if side == "right_arm" else "左臂", "expected_bus": arm["expected_bus"]}
+                    for side, arm in product["arms"].items()
+                ],
+                "steps": [self._arm_wizard_step_view(step, selected) for step in self.ARM_WIZARD_STEPS],
+                "operation_bus": dict(product["can"]["operation"]),
+                "locked_sections": self.product_registry.lock_reasons(selected),
+                "defaults": {"channel": "can0", "arm_side": "right_arm"},
+            }
+
+    def arm_wizard_status(self, arm_cn: str) -> Dict[str, Any]:
+        """Where this arm stands: which steps are done, which is next, what blocks it."""
+        with self._lock:
+            try:
+                _path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+            product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            gate = self.factory_release_gate(arm_cn)
+            done = self._arm_wizard_completed_steps(arm, gate)
+
+            steps = []
+            next_step = None
+            for step in self.ARM_WIZARD_STEPS:
+                view = self._arm_wizard_step_view(step, product_version)
+                view["done"] = step["id"] in done
+                if not view["applies"]:
+                    view["state"] = "skipped"
+                elif view["done"]:
+                    view["state"] = "done"
+                elif view["locked"]:
+                    view["state"] = "locked"
+                elif next_step is None:
+                    view["state"] = "current"
+                    next_step = step["id"]
+                else:
+                    view["state"] = "pending"
+                steps.append(view)
+
+            return {
+                "ok": True,
+                "arm_cn": arm_cn,
+                "product_version": product_version,
+                "product_label": self.product_registry.get(product_version)["label"],
+                "arm_type": arm.get("arm_type"),
+                "steps": steps,
+                "next_step": next_step,
+                "release_decision": gate["release_decision"],
+                "blocking_items": gate["blocking_items"],
+                "warning_items": gate["warning_items"],
+                "motor_records": self._arm_attached_motor_records(arm),
+            }
+
+    def _arm_wizard_completed_steps(self, arm: Dict[str, Any], gate: Dict[str, Any]) -> set:
+        """Which steps this arm already has evidence for.
+
+        Read from the evidence that is already on record, so an arm tested through the
+        engineer tools before this wizard existed shows its real progress rather than
+        starting from zero.
+        """
+        done = {"identity"}
+        linked = gate["evidence"]["linked_jobs"]
+        if any(item.get("status") == "passed" for item in linked):
+            done.add("link")
+            done.add("static")
+        if any(record.get("status") == "passed" for record in arm.get("zero_calibration_records") or []):
+            done.add("zero")
+        demo_records = arm.get("demo_validation_records") or []
+        if any(record.get("status") == "passed" for record in demo_records):
+            done.add("demo")
+            done.add("gripper")
+        for run in arm.get("command_run_history") or []:
+            if run.get("kind") == "arm_timeout_standardization" and run.get("status") == "passed":
+                done.add("timeout")
+            if run.get("kind") == "arm_safe_enable_check" and run.get("status") == "passed":
+                done.add("enable")
+        if gate["release_decision"] == "PASS":
+            done.add("gate")
+        if arm.get("factory_reports"):
+            done.add("report")
+        return done
+
+    def _arm_attached_motor_records(self, arm: Dict[str, Any]) -> List[Dict[str, Any]]:
+        attached = arm.get("single_motor_records") or []
+        return [
+            {
+                "record_id": item.get("record_id"),
+                "joint_name": item.get("joint_name"),
+                "motor_type": item.get("motor_type"),
+                "result": item.get("result"),
+                "attached_at": item.get("attached_at"),
+            }
+            for item in attached
+        ]
+
+    def arm_wizard_attach_motor_record(self, arm_cn: str, record_id: str) -> Dict[str, Any]:
+        """Attach one commissioned motor's record to a joint of this arm.
+
+        The 16 motors configured on 2026-09-17 are the only evidence that each was set
+        up and read back on hardware, and that evidence has to reach the arm's report.
+        Damiao's SN register is not unique across motors, so the record id is the key,
+        never the SN.
+        """
+        with self._lock:
+            try:
+                path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+
+            record = next(
+                (item for item in self._load_single_motor_records() if item.get("record_id") == record_id),
+                None,
+            )
+            if record is None:
+                return self._wizard_problem("arm_motor_record_mismatch", f"record_id={record_id} not found")
+
+            arm_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            record_version = str(record.get("product_line") or DEFAULT_PRODUCT_VERSION)
+            if record_version != arm_version:
+                return self._wizard_problem(
+                    "arm_motor_record_mismatch",
+                    f"记录属于 {record_version}，这台臂是 {arm_version}",
+                )
+            if record.get("result") != "PASS":
+                return self._wizard_problem(
+                    "arm_motor_record_mismatch", f"记录结果是 {record.get('result')}，只有 PASS 的记录可以挂载"
+                )
+
+            joint_name = str(record.get("joint_name") or "")
+            attached = [item for item in (arm.get("single_motor_records") or []) if item.get("joint_name") != joint_name]
+            attached.append(
+                {
+                    "record_id": record_id,
+                    "joint_name": joint_name,
+                    "arm_side": record.get("arm_side"),
+                    "motor_type": record.get("motor_type"),
+                    "result": record.get("result"),
+                    "product_version": record_version,
+                    "commissioned_at": record.get("created_at"),
+                    "attached_at": _now_iso(),
+                }
+            )
+            arm["single_motor_records"] = sorted(attached, key=lambda item: str(item.get("joint_name")))
+            arm["updated_at"] = _now_iso()
+            _atomic_json(path, arm)
+            return {"ok": True, "arm_cn": arm_cn, "attached": arm["single_motor_records"]}
+
+    def arm_wizard_available_motor_records(self, arm_cn: str) -> Dict[str, Any]:
+        """The commissioned motors that could belong to this arm, newest first."""
+        with self._lock:
+            try:
+                _path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+            arm_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            taken = {item.get("record_id") for item in (arm.get("single_motor_records") or [])}
+            candidates = [
+                {
+                    "record_id": record.get("record_id"),
+                    "joint_name": record.get("joint_name"),
+                    "arm_side": record.get("arm_side"),
+                    "motor_type": record.get("motor_type"),
+                    "created_at": record.get("created_at"),
+                    "attached": record.get("record_id") in taken,
+                }
+                for record in self._load_single_motor_records()
+                if str(record.get("product_line") or DEFAULT_PRODUCT_VERSION) == arm_version
+                and record.get("result") == "PASS"
+            ]
+            return {
+                "ok": True,
+                "arm_cn": arm_cn,
+                "product_version": arm_version,
+                "records": sorted(candidates, key=lambda item: str(item.get("joint_name"))),
+            }
 
     def link_wizard_detect(self) -> Dict[str, Any]:
         """Step 1: list the CAN ports this machine has, with beginner-readable health."""

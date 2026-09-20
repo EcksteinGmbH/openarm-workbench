@@ -366,3 +366,33 @@ def test_binding_an_arm_accepts_and_returns_the_product_version(client):
     gate = _json(client.get("/api/factory/release-gate/OAF26092010"))
     assert gate["release_decision"] == "HOLD"
     assert gate["product_version"] == "openarm_2_0"
+
+
+def test_arm_wizard_options_expose_the_official_order_and_2_0_locks(client):
+    payload = _json(client.get("/api/arm/wizard/options?product_version=openarm_2_0"))
+    ids = [step["id"] for step in payload["steps"]]
+    assert ids[0] == "identity" and ids[-1] == "report"
+    locked = {step["id"] for step in payload["steps"] if step["locked"]}
+    # 2.0 keeps its place in the flow; the page can show why each one waits.
+    assert {"fd_switch", "gripper", "camera"} <= locked
+    assert all(step["locked_reason"] for step in payload["steps"] if step["locked"])
+    assert payload["operation_bus"]["mode"] == "canfd"
+
+
+def test_arm_wizard_status_and_motor_record_attachment(client):
+    _json(client.post("/api/factory/arms", json={"arm_cn": "OAF26092050", "product_version": "openarm_2_0"}))
+    status = _json(client.get("/api/arm/wizard/OAF26092050/status"))
+    assert status["ok"] is True and status["next_step"] == "link"
+
+    # No commissioned records in this isolated tmp dir, so the list is simply empty.
+    records = _json(client.get("/api/arm/wizard/OAF26092050/motor-records"))
+    assert records["ok"] is True and records["records"] == []
+
+    refused = _json(client.post("/api/arm/wizard/OAF26092050/motor-records", json={"record_id": "nope"}))
+    assert refused["problem"]["code"] == "arm_motor_record_mismatch"
+
+
+def test_arm_wizard_status_of_an_unknown_arm_is_a_problem_envelope(client):
+    payload = _json(client.get("/api/arm/wizard/OAF00000000/status"))
+    assert payload["ok"] is False
+    assert payload["problem"]["code"] == "arm_not_found"
