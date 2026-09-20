@@ -644,7 +644,7 @@ def _write_reportlab_pdf(
     summary_table = Table(
         [
             [para("Arm Serial", "CellBold"), para(arm_serial), para("Arm Type", "CellBold"), para(f"OpenARM {role} {side_title}"), para("Final Result", "CellBold"), para(final_result)],
-            [para("Profile", "CellBold"), para(profile_id), para("CAN", "CellBold"), para("CAN 2.0 / 1 Mbps"), para("Operator", "CellBold"), para(operator_name)],
+            [para("Profile", "CellBold"), para(profile_id), para("CAN", "CellBold"), para(bus_label), para("Operator", "CellBold"), para(operator_name)],
         ],
         colWidths=[22 * mm, 45 * mm, 22 * mm, 60 * mm, 22 * mm, 40 * mm],
     )
@@ -723,6 +723,41 @@ def _write_reportlab_pdf(
     return pdf_path.exists() and pdf_path.stat().st_size > 0
 
 
+# The bus a 1.0 arm is tested on. Used when the caller states nothing, which is what
+# every report written before the product registry existed was built with.
+DEFAULT_REPORT_BUS = {"mode": "can20", "bitrate": 1000000, "dbitrate": None}
+
+
+def _bus_rate_text(bus: Dict[str, Any]) -> str:
+    bitrate = int(bus.get("bitrate") or 0)
+    arbitration = f"{bitrate / 1_000_000:g} Mbps"
+    if str(bus.get("mode")) != "canfd":
+        return arbitration
+    dbitrate = int(bus.get("dbitrate") or 0)
+    return f"{arbitration} arbitration / {dbitrate / 1_000_000:g} Mbps data"
+
+
+def _bus_label(bus: Dict[str, Any]) -> str:
+    """Short form for the header box, e.g. "CAN 2.0 / 1 Mbps"."""
+    name = "CAN FD" if str(bus.get("mode")) == "canfd" else "CAN 2.0"
+    return f"{name} / {_bus_rate_text(bus)}"
+
+
+def _bus_health_expectation(bus: Dict[str, Any]) -> str:
+    name = "CAN FD" if str(bus.get("mode")) == "canfd" else "CAN 2.0"
+    return (
+        f"{name}, {_bus_rate_text(bus)}, interface UP, ERROR-ACTIVE, "
+        "zero RX/TX errors and zero dropped frames"
+    )
+
+
+def _bus_sentence(bus: Dict[str, Any]) -> str:
+    """Prose for the scope section, stating what the dynamic commands actually ran on."""
+    if str(bus.get("mode")) == "canfd":
+        return f"CAN FD at {_bus_rate_text(bus)}"
+    return f"classic CAN 2.0 at {_bus_rate_text(bus)} with CAN-FD disabled"
+
+
 def render_formal_factory_report(
     *,
     root_dir: Path,
@@ -735,6 +770,7 @@ def render_formal_factory_report(
     report_date: Optional[str] = None,
     pdf_writer: Optional[Callable[[Path, Path], bool]] = None,
     allow_reportlab_fallback: bool = False,
+    bus: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     arm_serial = str(arm.get("arm_cn") or "").strip()
     if not arm_serial:
@@ -744,6 +780,10 @@ def render_formal_factory_report(
     role = _arm_role(arm)
     profile_id = str(profile.get("profile_id") or arm.get("bom_profile") or "-")
     report_date = str(report_date or datetime.now().strftime("%Y%m%d"))
+    bus = dict(bus or DEFAULT_REPORT_BUS)
+    bus_label = _bus_label(bus)
+    bus_health_expectation = _bus_health_expectation(bus)
+    bus_sentence = _bus_sentence(bus)
     if not re.fullmatch(r"\d{8}", report_date):
         raise ValueError("report_date must use YYYYMMDD format")
     out_dir = reports_dir / f"{arm_serial}_{side}_{report_date}"
@@ -959,7 +999,7 @@ def render_formal_factory_report(
         _tr(["Traceability", "Whole arm", "Only whole-arm serial is reported", f"arm_serial={arm_serial}; arm_type=OpenARM {role} {side_title}; profile={profile_id}; motor_labels={joint_range}; operator={operator_name}; project_lead={lead_name}", "-", "PASS"], {5: "pass"}),
         _tr(["Release Gate", "Whole arm", f"All required {role} {side_title.lower()} factory items completed", f"single_motor={'PASS' if single_motor_ok else 'WARNING'}; arm_scan={'PASS' if scan_ok else 'WARNING'}; TIMEOUT={'PASS' if timeout_ok else 'WARNING'} ({timeout_display}); can_health={'PASS' if can_health_ok else 'WARNING'}; data_complete={'PASS' if not required_missing_data else 'WARNING'}; low_gain_enable={'PASS' if low_gain_ok else 'WARNING'}; dynamic_zero={'PASS' if zero.get('passed') else 'WARNING'}; revised_demo={'PASS' if demo_ok else 'WARNING'}", "-", final_result], {5: _result_class(final_result)}),
         _section("2. Bus And Interface Evidence"),
-        _tr(["CAN Health", "can0", "CAN 2.0, 1 Mbps, interface UP, ERROR-ACTIVE, zero RX/TX errors and zero dropped frames", f"state={can_snapshot.get('can_state')}; bitrate={can_snapshot.get('bitrate')}; rx_errors={stats.get('rx_errors')}; tx_errors={stats.get('tx_errors')}; rx_dropped={stats.get('rx_dropped')}; tx_dropped={stats.get('tx_dropped')}", Path(can_record.get("json_path") or "-").name, "PASS" if can_health_ok else "WARNING"], {5: _result_class("PASS" if can_health_ok else "WARNING")}),
+        _tr(["CAN Health", "can0", bus_health_expectation, f"state={can_snapshot.get('can_state')}; bitrate={can_snapshot.get('bitrate')}; rx_errors={stats.get('rx_errors')}; tx_errors={stats.get('tx_errors')}; rx_dropped={stats.get('rx_dropped')}; tx_dropped={stats.get('tx_dropped')}", Path(can_record.get("json_path") or "-").name, "PASS" if can_health_ok else "WARNING"], {5: _result_class("PASS" if can_health_ok else "WARNING")}),
         _section("3. Electrical And Static Functional Tests"),
         _tr(["Single-Motor Static Health Checks", joint_range, "Each motor completed safe read-only parameter/status verification before dynamic tests", "; ".join(f"{name}={'PASS' if single_motor_results.get(name) else 'WARNING'}" for name in joint_names), "arm_acceptance_job.json", "PASS" if single_motor_ok else "WARNING"], {5: _result_class("PASS" if single_motor_ok else "WARNING")}),
         _tr(["Arm Communication Acceptance", joint_range, f"All motors online; IDs and parameters match the {side_title.lower()} workstation profile; TIMEOUT policy={timeout_display}", f"ESC_ID={esc_range}; MST_ID={mst_range}; CTRL_MODE={ctrl_mode_display}; can_br={can_br_display}; TIMEOUT={timeout_display}; no fault", timeout_evidence, "PASS" if scan_ok and timeout_ok else "WARNING"], {5: _result_class("PASS" if scan_ok and timeout_ok else "WARNING")}),
@@ -974,7 +1014,7 @@ def render_formal_factory_report(
     acceptance_pdf_rows = [
         ["Traceability", "Whole arm", "Only whole-arm serial is reported", f"arm_serial={arm_serial}; arm_type=OpenARM {role} {side_title}; profile={profile_id}; motor_labels={joint_range}; operator={operator_name}; project_lead={lead_name}", "-", "PASS"],
         ["Release Gate", "Whole arm", f"All required {role} {side_title.lower()} factory items completed", f"single_motor={'PASS' if single_motor_ok else 'WARNING'}; arm_scan={'PASS' if scan_ok else 'WARNING'}; TIMEOUT={'PASS' if timeout_ok else 'WARNING'} ({timeout_display}); can_health={'PASS' if can_health_ok else 'WARNING'}; data_complete={'PASS' if not required_missing_data else 'WARNING'}; low_gain_enable={'PASS' if low_gain_ok else 'WARNING'}; dynamic_zero={'PASS' if zero.get('passed') else 'WARNING'}; revised_demo={'PASS' if demo_ok else 'WARNING'}", "-", final_result],
-        ["CAN Health", "can0", "CAN 2.0, 1 Mbps, interface UP, ERROR-ACTIVE, zero RX/TX errors and zero dropped frames", f"state={can_snapshot.get('can_state')}; bitrate={can_snapshot.get('bitrate')}; rx_errors={stats.get('rx_errors')}; tx_errors={stats.get('tx_errors')}; rx_dropped={stats.get('rx_dropped')}; tx_dropped={stats.get('tx_dropped')}", Path(can_record.get("json_path") or "-").name, "PASS" if can_health_ok else "WARNING"],
+        ["CAN Health", "can0", bus_health_expectation, f"state={can_snapshot.get('can_state')}; bitrate={can_snapshot.get('bitrate')}; rx_errors={stats.get('rx_errors')}; tx_errors={stats.get('tx_errors')}; rx_dropped={stats.get('rx_dropped')}; tx_dropped={stats.get('tx_dropped')}", Path(can_record.get("json_path") or "-").name, "PASS" if can_health_ok else "WARNING"],
         ["Single-Motor Static Health Checks", joint_range, "Each motor completed safe read-only parameter/status verification before dynamic tests", "; ".join(f"{name}={'PASS' if single_motor_results.get(name) else 'WARNING'}" for name in joint_names), "arm_acceptance_job.json", "PASS" if single_motor_ok else "WARNING"],
         ["Arm Communication Acceptance", joint_range, f"All motors online; IDs and parameters match the {side_title.lower()} workstation profile; TIMEOUT policy={timeout_display}", f"ESC_ID={esc_range}; MST_ID={mst_range}; CTRL_MODE={ctrl_mode_display}; can_br={can_br_display}; TIMEOUT={timeout_display}; no fault", timeout_evidence, "PASS" if scan_ok and timeout_ok else "WARNING"],
         ["Dynamic Zero Calibration", side, f"Official dynamic zero with workstation {side_title.lower()} IDs; restore initial pose enabled", f"status={'PASS' if zero.get('passed') else 'WARNING'}; mechanical_stops={zero.get('stops')}", f"official_dynamic_zero_{side}.log", "PASS" if zero.get("passed") else "WARNING"],
@@ -1294,7 +1334,7 @@ def render_formal_factory_report(
         <div class="box"><div class="label">Arm Serial</div><div class="value">{escape(arm_serial)}</div></div>
         <div class="box"><div class="label">Arm Type</div><div class="value">OpenARM {escape(role)} {escape(side_title)}</div></div>
         <div class="box"><div class="label">Profile</div><div class="value">{escape(profile_id)}</div></div>
-        <div class="box"><div class="label">CAN</div><div class="value">CAN 2.0 / 1 Mbps</div></div>
+        <div class="box"><div class="label">CAN</div><div class="value">{escape(bus_label)}</div></div>
         <div class="box"><div class="label">Final Result</div><div class="value"><span class="badge">{escape(final_result)}</span></div></div>
       </div>
       <div class="muted">Motor serial numbers are intentionally not assigned in this report. Each motor is identified by joint label {escape(joint_range.replace('..', ' through '))}. {escape(joint_names[-1] if joint_names else 'J8')} is the gripper.</div>
@@ -1311,7 +1351,7 @@ def render_formal_factory_report(
     </div>
   </div>
   <h2>1. Scope And Traceability</h2>
-  <p>This report records the whole-arm serial number <strong>{escape(arm_serial)}</strong>. The {escape(side_title.lower())} CAN ID profile follows ESC_ID {escape(esc_range)} and MST_ID {escape(mst_range)}. All dynamic commands used classic CAN 2.0 at 1 Mbps with CAN-FD disabled.</p>
+  <p>This report records the whole-arm serial number <strong>{escape(arm_serial)}</strong>. The {escape(side_title.lower())} CAN ID profile follows ESC_ID {escape(esc_range)} and MST_ID {escape(mst_range)}. All dynamic commands used {escape(bus_sentence)}.</p>
   <h2>2. Acceptance Matrix</h2>
   <table><thead><tr><th style="width:17%">Test Item</th><th style="width:10%">Target</th><th style="width:19%">Acceptance Criteria</th><th>Measured Data</th><th style="width:16%">Evidence</th><th style="width:7%">Result</th></tr></thead><tbody>{''.join(acceptance_rows)}</tbody></table>
   <h2>3. Data Completeness And Follow-Up</h2>
@@ -1353,8 +1393,7 @@ def render_formal_factory_report(
     html_path.write_text(html, encoding="utf-8")
     scope_text = (
         f"This report records the whole-arm serial number {arm_serial}. The {side_title.lower()} CAN ID profile "
-        f"follows ESC_ID {esc_range} and MST_ID {mst_range}. All dynamic commands used classic CAN 2.0 at "
-        "1 Mbps with CAN-FD disabled."
+        f"follows ESC_ID {esc_range} and MST_ID {mst_range}. All dynamic commands used {bus_sentence}."
     )
     pdf_sections = [
         {

@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.14.0-gripper-sampling-and-progress-check`
+Current workstation version: `0.15.0-registry-driven-criteria`
 
 ## Versioning Rule
 
@@ -13,6 +13,78 @@ Current workstation version: `0.14.0-gripper-sampling-and-progress-check`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.15.0-registry-driven-criteria - 2026-09-20
+
+Summary: the values that define a product - TIMEOUT, bus mode, gripper geometry - are
+now read from the product registry instead of restated in four different places. A 2.0
+arm can no longer be issued a report claiming it was tested on CAN 2.0.
+
+Nothing about a 1.0 arm changed. The release-gate and formal-report goldens for the
+three real arms are byte-identical before and after every step below; that is the
+whole reason they were built first.
+
+New guard, built before the migration it protects:
+
+- `tests/golden/fixture/reports/` freezes the full formal acceptance report of each
+  golden arm, HTML and JSON, with the generation timestamp normalised and
+  `report_date` pinned. Two runs of the same input are otherwise byte-identical.
+  `tests/test_golden_formal_report.py` regenerates and shows a unified diff on any
+  change; `tests/golden/build_report_baseline.py` refreshes it and refuses to emit a
+  baseline that is not reproducible. The reports are generated from the fixture, which
+  carries only what the gate reads, so some evidence resolves to placeholders - the
+  baseline exists to detect change, not to be a specimen of a complete report.
+
+Migrated:
+
+- `commissioning_policy.whole_arm_timeout_policy` is derived from the registry rather
+  than restating `5000` per arm side. The registry already has to agree with the
+  profiles, so reading it is the only way this table cannot drift from them. Output is
+  unchanged; a product that ever targets a different value surfaces here on its own.
+- A single-motor record's `can_mode` comes from the product's commissioning bus
+  instead of the literal `"CAN 2.0"`.
+- The formal report takes a `bus` argument describing the operation bus, and builds
+  its header box, CAN-health expectation and scope sentence from it. Five hardcoded
+  occurrences of "CAN 2.0 / 1 Mbps" and "classic CAN 2.0 at 1 Mbps with CAN-FD
+  disabled" are gone. `generate_formal_factory_acceptance_report()` passes the bus of
+  the arm's recorded product, so a 2.0 arm's report reads "CAN FD / 1 Mbps
+  arbitration / 5 Mbps data" and contains no "CAN 2.0" anywhere - asserted by test.
+- `_official_demo_gripper_open_target()` is gone. It returned -1.0472 for an OAF arm
+  and +1.0472 for an OAL one, a rule that came from what those historical runs
+  happened to pass, not from any specification: the official limit table in
+  openarm-can-zero-position-calibration is [-60 deg, 0 deg] for every arm. The demo
+  now reads the target from the product. 1.0 states one value for Follower and Leader
+  alike; 2.0 keys it on arm side (right -90 deg, left +90 deg) and refuses to build a
+  command that does not state `--arm_side`, since guessing would open a 2.0 gripper
+  into its mechanical limit.
+- The 1.0 registry records the Leader anomaly as `historical_anomaly` with
+  `status: recorded_only_not_applied`: three Leader arm-sides on 2026-06-02/03 were
+  commanded +1.0472 and physically reached +0.956..+0.970 rad, signed off PASS. The
+  cause is unexplained - the demo tool's own default is +1.0472, contradicting the
+  limit table in the same package, and the earliest Follower has an operator-recorded
+  gripper stop at +1.0739, so the positive side is not a Leader trait. A 1.0 Leader is
+  now tested with the official -1.0472 like any other arm; the 0.14.0 midpoint
+  progress check stops the phase if it does not follow. That measurement breaks the
+  entry.
+- `run_official_demo_validation()` refuses to execute while the product's gripper is
+  unverified, naming the lock. The lock has to hold where the motor is driven, not
+  only at the release gate. Dry runs are unaffected.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 180 passed. The golden release-gate and formal
+  report for all three real arms are unchanged at every step; each migration was run
+  and checked separately rather than as one batch.
+- No hardcoded `1.0472` or `startswith("OAF"/"OAL")` remains in `src/workstation.py`.
+- Not exercised on hardware: none is attached.
+
+Operational Notes:
+
+- A 2.0 arm is blocked from a formal report, and now from executing the demo, until
+  its gripper direction and travel have been confirmed on hardware.
+- 1.0 Leader arms will be commanded -1.0472 rather than the +1.0472 used in 2026-06.
+  This is the intended change; the progress check is the guard if that turns out to be
+  the wrong direction for that hardware.
 
 ### 0.14.0-gripper-sampling-and-progress-check - 2026-09-20
 

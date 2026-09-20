@@ -782,27 +782,53 @@ def _ensure_command_option(command: List[str], *option_and_value: str) -> List[s
     return [*command, *option_and_value]
 
 
-def _official_demo_gripper_open_target(arm_cn: Optional[str]) -> float:
-    value = str(arm_cn or "").strip().upper()
-    if value.startswith("OAF"):
-        return -1.0472
-    if value.startswith("OAL"):
-        return 1.0472
-    raise ValueError("valid arm_cn is required for official demo gripper direction: use OAF... for Follower or OAL... for Leader")
+def _command_arm_side(command: List[str]) -> Optional[str]:
+    """The arm side the demo command itself declares, e.g. `--arm_side left_arm`."""
+    for option in ("--arm_side", "--arm-side"):
+        if option in command:
+            index = command.index(option)
+            if index + 1 < len(command):
+                return str(command[index + 1])
+    return None
 
 
-def _normalize_official_demo_command(command: List[str], arm_cn: Optional[str] = None) -> List[str]:
+def _official_demo_gripper_targets(gripper: Dict[str, Any], arm_side: Optional[str]) -> tuple:
+    """(open, close) targets for one arm, taken from the product registry.
+
+    1.0 declares one open target that applies to both arm sides and to Follower and
+    Leader alike, matching the official limit table [-60 deg, 0 deg]. 2.0 keys it on
+    the arm side instead (right 0 -> -90 deg, left 0 -> +90 deg) - a different scheme,
+    not a different number - so the registry keeps the two as separate fields and this
+    reads whichever one the product actually declares.
+    """
+    close_target = float(gripper.get("close_target_rad") or 0.0)
+    open_target = gripper.get("open_target_rad")
+    if open_target is not None:
+        return float(open_target), close_target
+    by_arm_side = gripper.get("open_target_rad_by_arm_side") or {}
+    if arm_side and arm_side in by_arm_side:
+        return float(by_arm_side[arm_side]), close_target
+    raise ValueError(
+        "this product keys the gripper open target on the arm side; "
+        f"the demo command must state --arm_side (one of {sorted(by_arm_side)})"
+    )
+
+
+def _normalize_official_demo_command(
+    command: List[str],
+    arm_cn: Optional[str] = None,
+    gripper: Optional[Dict[str, Any]] = None,
+) -> List[str]:
     if not _is_official_demo_command(command):
         return command
+    if gripper is None:
+        raise ValueError("gripper configuration is required to build the official demo command")
     normalized = list(command)
+    open_target, close_target = _official_demo_gripper_targets(gripper, _command_arm_side(normalized))
     normalized = _ensure_command_option(normalized, "--enable-hold-ms", str(OFFICIAL_DEMO_DEFAULT_ENABLE_HOLD_MS))
     normalized = _ensure_command_option(normalized, "--phase-hold-s", str(OFFICIAL_DEMO_DEFAULT_PHASE_HOLD_S))
-    normalized = _ensure_command_option(
-        normalized,
-        "--gripper-open-target",
-        f"{_official_demo_gripper_open_target(arm_cn):.4f}",
-    )
-    normalized = _ensure_command_option(normalized, "--gripper-close-target", "0.0")
+    normalized = _ensure_command_option(normalized, "--gripper-open-target", f"{open_target:.4f}")
+    normalized = _ensure_command_option(normalized, "--gripper-close-target", f"{close_target:.1f}")
     return normalized
 
 
@@ -1591,10 +1617,10 @@ class WorkstationService:
                 "arm_zero_save_stage": "assembled_arm_official_dynamic_zero_calibration",
                 "arm_timeout_standardization_stage": "whole_arm_factory_acceptance_before_dynamic_zero_and_demo",
                 "arm_timeout_standardization_mode": "profile_per_joint",
-                "whole_arm_timeout_policy": {
-                    "right_arm": {"J1-J8": 5000},
-                    "left_arm": {"J1-J8": 5000},
-                },
+                # Derived from the product registry rather than restated here: the
+                # registry already has to agree with the profiles (cross_check), so
+                # reading it is the only way this table cannot drift from them.
+                "whole_arm_timeout_policy": self._whole_arm_timeout_policy(),
                 "motor_traceability_identity": "arm_cn_plus_joint_label",
                 "zero_controller_sn_hw_behavior": "accepted_unassigned_optional_metadata",
             },
@@ -1616,6 +1642,48 @@ class WorkstationService:
                 "automatic_encoder_calibration": False,
             },
         }
+
+    CAN_MODE_LABELS = {"can20": "CAN 2.0", "canfd": "CAN FD"}
+
+    def _can_mode_label(self, product_version: Optional[str], stage: str) -> str:
+        """Human-readable bus mode for one product stage, e.g. "CAN 2.0".
+
+        Falls back to the default product for records that predate the registry, which
+        is what every such record on disk actually used.
+        """
+        try:
+            product = self.product_registry.get(str(product_version or DEFAULT_PRODUCT_VERSION))
+        except KeyError:
+            product = self.product_registry.get(DEFAULT_PRODUCT_VERSION)
+        return self.CAN_MODE_LABELS.get(str(product["can"][stage]["mode"]), str(product["can"][stage]["mode"]))
+
+    def _arm_product_version(self, arm_cn: Optional[str]) -> str:
+        """The product an arm is recorded as, defaulting for pre-registry records."""
+        try:
+            _path, arm = self._load_arm_record(str(arm_cn))
+        except (KeyError, ValueError, TypeError):
+            return DEFAULT_PRODUCT_VERSION
+        version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+        return version if version in self.product_registry.known_versions() else DEFAULT_PRODUCT_VERSION
+
+    def _whole_arm_timeout_policy(self) -> Dict[str, Dict[str, int]]:
+        """The operational TIMEOUT each arm side targets, per product version.
+
+        Both product versions currently target the same value on every joint, so the
+        shape stays `{arm_side: {"J1-J8": value}}` as before. A version that ever
+        targets something different will show up here without any other code changing.
+        """
+        policy: Dict[str, Dict[str, int]] = {}
+        for product in self.product_registry.list_products():
+            timeout = int(product["parameters"]["timeout"])
+            for arm_side in product["arms"]:
+                policy.setdefault(arm_side, {})[f"J1-J8@{product['product_version']}"] = timeout
+        # Collapse to the historical shape while every product agrees on one value.
+        collapsed: Dict[str, Dict[str, int]] = {}
+        for arm_side, entries in policy.items():
+            values = set(entries.values())
+            collapsed[arm_side] = {"J1-J8": values.pop()} if len(values) == 1 else entries
+        return collapsed
 
     def vendor_tool_status(self) -> Dict[str, Any]:
         path = DMTOOL_APPIMAGE_PATH
@@ -2422,7 +2490,17 @@ class WorkstationService:
         command_args = shlex.split(command or "")
         if not command_args:
             raise ValueError("demo command is required")
-        command_args = _normalize_official_demo_command(command_args, arm_cn=arm_cn)
+        product_version = self._arm_product_version(arm_cn)
+        gripper = dict(self.product_registry.get(product_version).get("gripper") or {})
+        if execute and gripper.get("hardware_verified") is False:
+            # The open target drives the motor. Running it before the direction and
+            # travel have been confirmed on this product can push the gripper into its
+            # own hard stop, so the lock has to hold here, not just at the release gate.
+            raise ValueError(
+                f"{product_version} 的夹爪参数尚未真机验证，拒绝执行 Demo："
+                f"{gripper.get('locked_reason') or '未说明原因'}"
+            )
+        command_args = _normalize_official_demo_command(command_args, arm_cn=arm_cn, gripper=gripper)
         executable = command_args[0]
         if not any(executable.startswith(prefix) for prefix in OPENARM_ALLOWED_COMMAND_PREFIXES):
             raise ValueError("only OpenARM commands are allowed in controlled demo execution")
@@ -3299,11 +3377,19 @@ class WorkstationService:
             selected_profile_id = str(profile_id or arm.get("bom_profile") or "openarm_right_arm_v1")
             profile = self.profile_manager.get_profile(selected_profile_id)
             report_arm = self._formal_factory_report_arm_view(arm, selected_profile_id, profile)
+            # The report states the bus the arm was tested on. Reading it from the
+            # product means a 2.0 arm can never ship a report claiming CAN 2.0.
+            product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            try:
+                bus = dict(self.product_registry.get(product_version)["can"]["operation"])
+            except KeyError:
+                bus = dict(self.product_registry.get(DEFAULT_PRODUCT_VERSION)["can"]["operation"])
             report = render_formal_factory_report(
                 root_dir=ROOT_DIR,
                 reports_dir=FORMAL_REPORTS_DIR,
                 arm=report_arm,
                 profile=profile,
+                bus=bus,
                 operator=operator,
                 project_lead=project_lead,
                 notes=notes,
@@ -5656,7 +5742,10 @@ class WorkstationService:
                 "CTRL_MODE": _control_name(after["CTRL_MODE"]) if after.get("CTRL_MODE") is not None else None,
                 "can_br": _normalize_can_br(after.get("can_br")),
                 "can_br_code": after.get("can_br"),
-                "can_mode": "CAN 2.0",
+                # Single-motor ID commissioning happens on the product's commissioning
+                # bus, which is classic CAN for both versions today. Read it rather
+                # than assert it, so a product that commissions on FD records the truth.
+                "can_mode": self._can_mode_label(job.product_line, "commissioning"),
             },
             "timeout_recorded": after.get("TIMEOUT", before.get("TIMEOUT")),
             "firmware": {"sw_ver": before.get("sw_ver"), "sub_ver": before.get("sub_ver")},

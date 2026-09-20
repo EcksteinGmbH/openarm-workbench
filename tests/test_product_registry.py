@@ -83,14 +83,77 @@ def test_1_0_is_hardware_verified_and_2_0_is_not():
     assert registry.is_locked("openarm_2_0", "operation") is True
 
 
-def test_2_0_gripper_keys_on_arm_side_while_1_0_keys_on_the_cn_prefix():
-    registry = workstation.ProductRegistry()
-    # Not a different number - a different scheme. 1.0 直接按 Follower/Leader 分方向，
-    # 2.0 按左右臂分，混用会把夹爪往反方向开。
-    assert set(registry.get("openarm_1_0")["gripper"]["open_target_rad_by_arm_cn_prefix"]) == {"OAF", "OAL"}
-    assert set(registry.get("openarm_2_0")["gripper"]["open_target_rad_by_arm_side"]) == {"right_arm", "left_arm"}
-    assert "open_target_rad_by_arm_side" not in registry.get("openarm_1_0")["gripper"]
-    assert "open_target_rad_by_arm_cn_prefix" not in registry.get("openarm_2_0")["gripper"]
+def test_1_0_states_one_gripper_target_for_follower_and_leader_alike():
+    # The old code returned -1.0472 for OAF and +1.0472 for OAL, a rule that came from
+    # what those historical runs happened to pass rather than from any spec. The
+    # official limit table is [-60 deg, 0 deg], so one value applies to both.
+    gripper = workstation.ProductRegistry().get("openarm_1_0")["gripper"]
+    assert gripper["open_target_rad"] == -1.0472
+    assert "open_target_rad_by_arm_side" not in gripper
+    assert "open_target_rad_by_arm_cn_prefix" not in gripper
+
+
+def test_the_leader_anomaly_is_recorded_but_not_applied():
+    # Kept as evidence to be settled by the next Leader measured on hardware, not as a
+    # code path that keeps re-asserting Leader is mirrored.
+    anomaly = workstation.ProductRegistry().get("openarm_1_0")["gripper"]["historical_anomaly"]
+    assert anomaly["observed_open_target_rad"] == 1.0472
+    assert anomaly["status"] == "recorded_only_not_applied"
+    assert anomaly["cause"] and anomaly["resolution"]
+
+
+def test_2_0_keys_the_gripper_target_on_the_arm_side():
+    # A different scheme from 1.0, not a different number: 2.0 mirrors right and left.
+    by_side = workstation.ProductRegistry().get("openarm_2_0")["gripper"]["open_target_rad_by_arm_side"]
+    assert set(by_side) == {"right_arm", "left_arm"}
+    assert by_side["right_arm"] == -by_side["left_arm"]
+
+
+@pytest.mark.parametrize(
+    "product_version, arm_side, expected",
+    [
+        ("openarm_1_0", "right_arm", -1.0472),
+        ("openarm_1_0", "left_arm", -1.0472),
+        ("openarm_1_0", None, -1.0472),
+        ("openarm_2_0", "right_arm", -1.5708),
+        ("openarm_2_0", "left_arm", 1.5708),
+    ],
+)
+def test_gripper_targets_come_from_the_product(product_version, arm_side, expected):
+    gripper = workstation.ProductRegistry().get(product_version)["gripper"]
+    open_target, close_target = workstation._official_demo_gripper_targets(gripper, arm_side)
+    assert open_target == expected
+    assert close_target == 0.0
+
+
+def test_a_product_keyed_on_arm_side_refuses_a_command_that_omits_it():
+    # Guessing here would open a 2.0 gripper the wrong way into its mechanical limit.
+    gripper = workstation.ProductRegistry().get("openarm_2_0")["gripper"]
+    with pytest.raises(ValueError, match="must state --arm_side"):
+        workstation._official_demo_gripper_targets(gripper, None)
+
+
+def test_the_demo_command_takes_its_gripper_target_from_the_product():
+    command = ["/x/openarm-can-demo", "--canport", "can0", "--arm_side", "left_arm"]
+    gripper = workstation.ProductRegistry().get("openarm_1_0")["gripper"]
+    built = workstation._normalize_official_demo_command(command, arm_cn="OAF26080401", gripper=gripper)
+    assert "--gripper-open-target" in built
+    assert built[built.index("--gripper-open-target") + 1] == "-1.0472"
+    # Same value for a Leader CN: the OAF/OAL split is gone.
+    built_leader = workstation._normalize_official_demo_command(command, arm_cn="OAL26060201", gripper=gripper)
+    assert built_leader[built_leader.index("--gripper-open-target") + 1] == "-1.0472"
+
+
+def test_the_demo_refuses_to_execute_while_the_gripper_is_unverified(service):
+    # The lock has to hold where the motor is driven, not only at the release gate.
+    service.bind_arm_identity("OAF26092030", product_version="openarm_2_0")
+    with pytest.raises(ValueError, match="拒绝执行 Demo"):
+        service.run_official_demo_validation(
+            "OAF26092030",
+            "/x/openarm-can-demo --canport can0 --arm_side right_arm",
+            execute=True,
+            confirmations={key: True for key in workstation.DEMO_COMMAND_CONFIRMATIONS},
+        )
 
 
 def test_2_0_gripper_threshold_is_left_unset_rather_than_invented():

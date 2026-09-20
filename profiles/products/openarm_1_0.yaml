@@ -52,14 +52,32 @@ parameters:
 
 gripper:
   joint: J8
+  # One value for Follower and Leader alike, matching the official limit table
+  # [-60 deg, 0 deg] in openarm-can-zero-position-calibration. Verified on 12 Follower
+  # arm-sides (2026-05-18 .. 2026-09-03), which reached 90-98% of this target.
+  open_target_rad: -1.0472   # -60 deg
   close_target_rad: 0.0
   min_travel_rad: 0.8
-  # 1.0 direction is keyed off the arm CN prefix (Follower vs Leader), which is what
-  # `_official_demo_gripper_open_target()` implements today.
-  open_target_rad_by_arm_cn_prefix:
-    OAF: -1.0472   # -60 deg
-    OAL: 1.0472    # +60 deg
   hardware_verified: true
+  historical_anomaly:
+    scope: OAL (1.0 Leader)
+    observed_open_target_rad: 1.0472
+    observed:
+      3 Leader arm-sides on 2026-06-02/03 were commanded +1.0472 and physically
+      reached +0.956 .. +0.970 rad, signed off PASS with operator visual confirmation.
+    cause: >-
+      Unexplained. The demo tool's built-in default for --gripper-open-target is
+      +1.0472, which contradicts the limit table in the same openarm_can 1.2.2 package.
+      Those Leader runs appear to have used the default while the Follower runs had
+      already switched to the corrected value. The earliest Follower (2026-05-12) also
+      has an operator-recorded gripper mechanical stop at +1.0739, so the positive side
+      is not a Leader-specific trait. The gripper limit search is always skipped
+      (skip_gripper_limit_search=True), so nothing automated ever established the sign.
+    status: recorded_only_not_applied
+    resolution: >-
+      A 1.0 Leader is tested with the official -1.0472 like any other arm. The midpoint
+      progress check (workstation 0.14.0) stops the phase if it does not follow,
+      instead of holding it against a stop. Break this entry with that measurement.
 
 zero:
   method: limit_search

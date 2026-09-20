@@ -1,0 +1,341 @@
+{
+  "report_id": "OA-FOL-R-FACTORY-20260101-001",
+  "report_type": "formal_factory_acceptance_report",
+  "title": "OpenARM Follower Right Arm Factory Acceptance Report",
+  "subject_id": "OAF26080401",
+  "subject_type": "follower_right_arm",
+  "generated_at": "<GENERATED-UTC>",
+  "summary": {
+    "release_decision": "WARNING",
+    "revision": "Rev. B integrity-audited",
+    "arm_serial": "OAF26080401",
+    "profile_id": "openarm_v1",
+    "test_engineer": "golden",
+    "project_lead": "golden",
+    "standard_report_template": "formal_factory_acceptance_v2_integrity_audited_chromium_skia",
+    "report_layout_policy": "Page count and section count may expand with test scope; required evidence, measured data, readable headers, and deliverable factory formatting must be preserved.",
+    "motor_serial_numbers": "not_assigned; motors identified by joint label",
+    "pdf_output_requirement": "Chromium/Skia PDF; ReportLab fallback disabled for formal factory reports",
+    "zero_validation": {
+      "passed": false,
+      "stops": "-",
+      "post_arm": "-",
+      "post_gripper": "-",
+      "max_abs_position_rad": null,
+      "threshold_rad": 0.02,
+      "within_threshold": false
+    },
+    "low_gain_validation": {
+      "record_type": "low_gain_enable_check",
+      "arm_cn": "OAF26080401",
+      "arm_side": "right_arm",
+      "profile_id": "openarm_right_arm_v1",
+      "recorded_at": "2026-08-05T10:40:49+08:00",
+      "trigger": "power_cycle_after_right_arm_j1_j8_timeout5000",
+      "hold_ms": 300,
+      "trajectory_motion_command_sent": false,
+      "mit_current_position_hold_sent": true,
+      "keepalive_frames_sent": 432,
+      "comm_lost_reported": false,
+      "ok": true,
+      "summary": {
+        "total_expected": 8,
+        "enabled_count": 8,
+        "disabled_count": 8,
+        "passed": 8,
+        "failed": 0,
+        "all_disabled_after_check": true
+      },
+      "pre_enable": {
+        "readiness_passed": true,
+        "samples_per_joint": 5,
+        "all_timeout_5000": true,
+        "all_status_code": "0x00",
+        "all_disabled": true,
+        "all_position_spans_rad": 0.0
+      },
+      "hold_positions": {
+        "R-J1": -2.648012,
+        "R-J2": 1.667239,
+        "R-J3": -1.712634,
+        "R-J4": 1.072518,
+        "R-J5": -0.634203,
+        "R-J6": -0.834859,
+        "R-J7": 2.504959,
+        "R-J8": 0.432403
+      },
+      "results": [
+        {
+          "joint_name": "R-J1",
+          "esc_id": "0x01",
+          "mst_id": "0x11",
+          "timeout": 5000,
+          "enabled_frame": "1164E27FF7FE1C1A",
+          "disabled_frame": "0164E27FF7FE1C1A",
+          "enable_status_code": "0x01",
+          "disable_status_code": "0x00",
+          "passed": true
+        },
+        {
+          "joint_name": "R-J2",
+          "esc_id": "0x02",
+          "mst_id": "0x12",
+          "timeout": 5000,
+          "enabled_frame": "1291127FF7FF1B1B",
+          "disabled_frame": "0291127FF7FE1B1B",
+          "enable_status_code": "0x01",
+          "disable_status_code": "0x00",
+          "passed": true
+        },
+        {
+          "joint_name": "R-J3",
+          "esc_id": "0x03",
+          "mst_id": "0x13",
+          "timeout": 5000,
+          "enabled_frame": "136E767FF7FE1E1B",
+          "disabled_frame": "036E767FF7FE1E1B",
+          "enable_status_code": "0x01",
+          "disable_status_code": "0x00",
+          "passed": true
+        },
+        {
+          "joint_name": "R-J4",
+          "esc_id": "0x04",
+          "mst_id": "0x14",
+          "timeout": 5000,
+          "enabled_frame": "148AFB7FF7FF1E1C",
+          "disabled_frame": "048AFB7FF7FF1E1C",
+          "enable_status_code": "0x01",
+          "disable_status_code": "0x00",
+          "passed": true
+        },
+        {
+          "joint_name": "R-J5",
+          "esc_id": "0x05",
+          "mst_id": "0x15",
+          "timeout": 5000,
+          "enabled_frame": "1579817FF7FE1E1C",
+          "disabled_frame": "0579817FF7FE1E1C",
+          "enable_status_code": "0x01",
+          "disable_status_code": "0x00",
+          "passed": true
+        },
+        {
+          "joint_name": "R-J6",
+          "esc_id": "0x06",
+          "mst_id": "0x16",
+          "timeout": 5000,
+          "enabled_frame": "1677737FF7FE1E1D",
+          "disabled_frame": "0677737FF7FE1E1D",
+          "enable_status_code": "0x01",
+          "disable_status_code": "0x00",
+          "passed": true
+        },
+        {
+          "joint_name": "R-J7",
+          "esc_id": "0x07",
+          "mst_id": "0x17",
+          "timeout": 5000,
+          "enabled_frame": "1799A67FF7FF1E1C",
+          "disabled_frame": "0799A67FF7FE1E1C",
+          "enable_status_code": "0x01",
+          "disable_status_code": "0x00",
+          "passed": true
+        },
+        {
+          "joint_name": "R-J8",
+          "esc_id": "0x08",
+          "mst_id": "0x18",
+          "timeout": 5000,
+          "enabled_frame": "18846D7FF7FE1D1C",
+          "disabled_frame": "08846D7FF7FE1D1C",
+          "enable_status_code": "0x01",
+          "disable_status_code": "0x00",
+          "passed": true
+        }
+      ],
+      "post_check": {
+        "all_online": true,
+        "all_timeout_5000": true,
+        "all_disabled": true,
+        "faults": 0,
+        "can_state": "ERROR-ACTIVE",
+        "can_bitrate": 1000000,
+        "can_bus_errors": 0,
+        "can_bus_off": 0,
+        "tx_backlog_frames": 0,
+        "can_link_dropped_counter": 10,
+        "qdisc_dropped_counter": 11,
+        "counter_note": "Drop counters predate this successful run and did not increase during the check."
+      }
+    },
+    "demo_validation": {
+      "blocking_items": [],
+      "close_final": -0.041772,
+      "disabled_count": 8,
+      "enabled_count": 8,
+      "gripper_travel_rad": 0.966659,
+      "gripper_travel_threshold_rad": 0.8,
+      "id16_special_frame_count": 0,
+      "keepalive_frames": 2160,
+      "open_observed_at_close_start": -1.008431,
+      "open_start": -0.041772,
+      "open_target": -1.0472,
+      "passed": true,
+      "warning_items": []
+    },
+    "demo_monitor_sample_count": 0,
+    "single_motor_static_detail_rows": 8,
+    "evidence_sha256": {
+      "evidence/20260805_015501_2584abc5918f.json": "571cc89a67284d66e15077bbf46cb520b6611bab1c412ed1a235d6acf81c53d2",
+      "evidence/20260805_right_all_joints_timeout5000.json": "aea3980803be341b71f91b6fa22d3e38b8e503179639bf198a7f5daced87c006",
+      "evidence/20260805_right_all_joints_timeout5000_powercycle_verify.json": "2a3eaf4bb9894c39ea89124a8ac7e3d054733074a05b465092026f2359dc4624",
+      "evidence/20260805_right_profile_timeout_standardization.json": "3ee1992dc9d1db9c068e9f9bcacc58664167bbe63662d3e7b5e71040d5df9b62",
+      "evidence/arm_acceptance_job.json": "5734c75b375e23c4ae109f4bb933bfd1535c33474c6647e4c48b6febf7260092",
+      "evidence/low_gain_enable_right_arm.json": "2571b50cda07cd1ced868fc8205ba7176bff648a1cd8e56eb903258bab03a3ed",
+      "evidence/motor_check/J1.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5",
+      "evidence/motor_check/J2.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5",
+      "evidence/motor_check/J3.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5",
+      "evidence/motor_check/J4.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5",
+      "evidence/motor_check/J5.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5",
+      "evidence/motor_check/J6.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5",
+      "evidence/motor_check/J7.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5",
+      "evidence/motor_check/J8.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5",
+      "evidence/official_dynamic_zero_right_arm.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5",
+      "evidence/revised_official_demo_right_arm.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5",
+      "evidence/timeout_adjustment_manifest.json": "ef713b44bebdb70072e664af93ff5e0853371c4818428b0a4538046a04f3569c"
+    },
+    "data_source_policy": "strict_arm_serial_and_side; no global latest-job fallback; missing measured fields are reported as missing instead of being filled with fixed values",
+    "missing_required_data": [
+      {
+        "code": "missing_arm_acceptance_job",
+        "scope": "right_arm",
+        "detail": "No linked arm_acceptance job was found for arm_serial=OAF26080401, profile=openarm_v1.",
+        "recommended_action": "Run the arm communication/static acceptance workflow for this exact arm serial and side, then link the job to the arm record."
+      },
+      {
+        "code": "missing_joint_static_record",
+        "scope": "J1",
+        "detail": "No static acceptance record was found for J1 in arm_serial=OAF26080401, profile=openarm_v1.",
+        "recommended_action": "Retest J1 in the right_arm arm acceptance workflow."
+      },
+      {
+        "code": "missing_joint_static_record",
+        "scope": "J2",
+        "detail": "No static acceptance record was found for J2 in arm_serial=OAF26080401, profile=openarm_v1.",
+        "recommended_action": "Retest J2 in the right_arm arm acceptance workflow."
+      },
+      {
+        "code": "missing_joint_static_record",
+        "scope": "J3",
+        "detail": "No static acceptance record was found for J3 in arm_serial=OAF26080401, profile=openarm_v1.",
+        "recommended_action": "Retest J3 in the right_arm arm acceptance workflow."
+      },
+      {
+        "code": "missing_joint_static_record",
+        "scope": "J4",
+        "detail": "No static acceptance record was found for J4 in arm_serial=OAF26080401, profile=openarm_v1.",
+        "recommended_action": "Retest J4 in the right_arm arm acceptance workflow."
+      },
+      {
+        "code": "missing_joint_static_record",
+        "scope": "J5",
+        "detail": "No static acceptance record was found for J5 in arm_serial=OAF26080401, profile=openarm_v1.",
+        "recommended_action": "Retest J5 in the right_arm arm acceptance workflow."
+      },
+      {
+        "code": "missing_joint_static_record",
+        "scope": "J6",
+        "detail": "No static acceptance record was found for J6 in arm_serial=OAF26080401, profile=openarm_v1.",
+        "recommended_action": "Retest J6 in the right_arm arm acceptance workflow."
+      },
+      {
+        "code": "missing_joint_static_record",
+        "scope": "J7",
+        "detail": "No static acceptance record was found for J7 in arm_serial=OAF26080401, profile=openarm_v1.",
+        "recommended_action": "Retest J7 in the right_arm arm acceptance workflow."
+      },
+      {
+        "code": "missing_joint_static_record",
+        "scope": "J8",
+        "detail": "No static acceptance record was found for J8 in arm_serial=OAF26080401, profile=openarm_v1.",
+        "recommended_action": "Retest J8 in the right_arm arm acceptance workflow."
+      },
+      {
+        "code": "missing_passed_dynamic_zero",
+        "scope": "right_arm",
+        "detail": "No passed official dynamic zero calibration record was found for arm_serial=OAF26080401, side=right_arm.",
+        "recommended_action": "Run official dynamic zero calibration for this exact arm side before final release, or remove the zero section from the active standard if no longer required."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "J1",
+        "detail": "No final Demo monitor/status sample was captured for J1.",
+        "recommended_action": "Rerun the official Demo for right_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "J2",
+        "detail": "No final Demo monitor/status sample was captured for J2.",
+        "recommended_action": "Rerun the official Demo for right_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "J3",
+        "detail": "No final Demo monitor/status sample was captured for J3.",
+        "recommended_action": "Rerun the official Demo for right_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "J4",
+        "detail": "No final Demo monitor/status sample was captured for J4.",
+        "recommended_action": "Rerun the official Demo for right_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "J5",
+        "detail": "No final Demo monitor/status sample was captured for J5.",
+        "recommended_action": "Rerun the official Demo for right_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "J6",
+        "detail": "No final Demo monitor/status sample was captured for J6.",
+        "recommended_action": "Rerun the official Demo for right_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "J7",
+        "detail": "No final Demo monitor/status sample was captured for J7.",
+        "recommended_action": "Rerun the official Demo for right_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "J8",
+        "detail": "No final Demo monitor/status sample was captured for J8.",
+        "recommended_action": "Rerun the official Demo for right_arm with final status monitoring enabled."
+      }
+    ],
+    "recommended_actions": [
+      "Run the arm communication/static acceptance workflow for this exact arm serial and side, then link the job to the arm record.",
+      "Retest J1 in the right_arm arm acceptance workflow.",
+      "Retest J2 in the right_arm arm acceptance workflow.",
+      "Retest J3 in the right_arm arm acceptance workflow.",
+      "Retest J4 in the right_arm arm acceptance workflow.",
+      "Retest J5 in the right_arm arm acceptance workflow.",
+      "Retest J6 in the right_arm arm acceptance workflow.",
+      "Retest J7 in the right_arm arm acceptance workflow.",
+      "Retest J8 in the right_arm arm acceptance workflow.",
+      "Run official dynamic zero calibration for this exact arm side before final release, or remove the zero section from the active standard if no longer required.",
+      "Rerun the official Demo for right_arm with final status monitoring enabled.",
+      "Rerun the official Demo for right_arm with final status monitoring enabled.",
+      "Rerun the official Demo for right_arm with final status monitoring enabled.",
+      "Rerun the official Demo for right_arm with final status monitoring enabled.",
+      "Rerun the official Demo for right_arm with final status monitoring enabled.",
+      "Rerun the official Demo for right_arm with final status monitoring enabled.",
+      "Rerun the official Demo for right_arm with final status monitoring enabled.",
+      "Rerun the official Demo for right_arm with final status monitoring enabled."
+    ],
+    "notes": null
+  }
+}

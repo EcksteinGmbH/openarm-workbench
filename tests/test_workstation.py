@@ -2937,3 +2937,18 @@ def test_a_normal_demo_has_no_gripper_abort():
     assert summary["gripper_abort_messages"] == []
     assert "gripper_progress_aborted" not in summary["blocking_items"]
     assert summary["gripper_travel_rad"] == pytest.approx(abs(-0.041772 - -1.008812), abs=1e-6)
+
+
+def test_single_motor_record_reads_its_can_mode_from_the_product(monkeypatch):
+    # Both products commission over classic CAN today, so the recorded label is
+    # unchanged; it is now read from the registry rather than asserted in the code.
+    monkeypatch.setattr(workstation, "DamiaoSocketCANDriver", shared_socketcan_factory())
+    service = workstation.WorkstationService()
+    assert service._can_mode_label("openarm_1_0", "commissioning") == "CAN 2.0"
+    assert service._can_mode_label("openarm_2_0", "commissioning") == "CAN 2.0"
+    # The assembled 2.0 arm is meant to run FD; the label follows the registry.
+    assert service._can_mode_label("openarm_2_0", "operation") == "CAN FD"
+    assert service._can_mode_label("openarm_1_0", "operation") == "CAN 2.0"
+    # Records written before the registry existed state no product.
+    assert service._can_mode_label(None, "commissioning") == "CAN 2.0"
+    assert service._can_mode_label("openarm_9_9", "commissioning") == "CAN 2.0"
