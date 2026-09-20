@@ -24,13 +24,18 @@ const STATE_TEXT = {
 
 const arm = {
     arms: [],
+    completed: [],
+    nextArmCn: '',
     armCn: null,
     status: null,
     records: null,
     problem: null,
     busy: '',
     safety: {},
-    open: null
+    open: null,
+    creating: false,
+    showCompleted: false,
+    draft: { product_version: 'openarm_2_0', arm_type: 'OpenARM Follower', arm_cn: '' }
 };
 
 function esc(value) {
@@ -54,26 +59,68 @@ function safetyReady(step) {
 
 // ---- 1. picking an arm -----------------------------------------------------------
 
+function armCard(item, muted = false) {
+    return `
+        <button class="aw-arm ${item.arm_cn === arm.armCn ? 'selected' : ''} ${muted ? 'muted-arm' : ''}"
+            data-arm="${esc(item.arm_cn)}" ${arm.busy ? 'disabled' : ''}>
+            <span class="aw-arm-cn">${esc(item.arm_cn)}</span>
+            <span class="aw-arm-meta">${esc(item.product_label)} · ${esc(item.arm_type || '-')}</span>
+            <span class="aw-arm-meta">${muted ? `已出厂 · ${item.report_count} 份报告` : `放行 ${esc(item.release_decision)} · 已挂电机 ${item.attached_motor_records}/16`}</span>
+        </button>`;
+}
+
+function renderCreateForm() {
+    return `
+        <form class="aw-create" id="awCreateForm">
+            <p class="muted">给这台新机械臂开一个档案。整机编号是它的身份证号，之后所有测试记录和出厂报告都挂在它下面。</p>
+            <div class="aw-create-row">
+                <label class="field">
+                    <span>产品版本（定下就不能改）</span>
+                    <select name="product_version">
+                        <option value="openarm_2_0" ${arm.draft.product_version === 'openarm_2_0' ? 'selected' : ''}>OpenArm 2.0</option>
+                        <option value="openarm_1_0" ${arm.draft.product_version === 'openarm_1_0' ? 'selected' : ''}>OpenArm 1.0</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>类型</span>
+                    <select name="arm_type">
+                        <option value="OpenARM Follower" ${arm.draft.arm_type === 'OpenARM Follower' ? 'selected' : ''}>Follower（从臂）</option>
+                        <option value="OpenARM Leader" ${arm.draft.arm_type === 'OpenARM Leader' ? 'selected' : ''}>Leader（主臂）</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>整机编号</span>
+                    <input name="arm_cn" value="${esc(arm.draft.arm_cn || arm.nextArmCn)}" spellcheck="false">
+                </label>
+            </div>
+            <div class="smw-actions">
+                <button type="submit" class="btn btn-primary" ${arm.busy ? 'disabled' : ''}>建立档案，开始测试</button>
+                <button type="button" class="btn btn-secondary" data-cancel-create="1" ${arm.busy ? 'disabled' : ''}>取消</button>
+            </div>
+        </form>`;
+}
+
 function renderPicker() {
     const picker = document.getElementById('awPicker');
-    if (!arm.arms.length) {
-        picker.innerHTML = `
-            <div class="aw-empty">
-                <strong>还没有建档的机械臂</strong>
-                <p class="muted">整臂测试从建档开始。点右上角「高级工具（工程师）」，在「官方动态测试 → 身份档案」里为这台臂建立整机编号，再回到这里。</p>
-            </div>`;
-        return;
-    }
+    const inProgress = arm.arms;
     picker.innerHTML = `
-        <p class="muted aw-hint">整机编号是一台机械臂的身份证号，出厂报告按它归档。选中哪台，下面就显示哪台的进度。</p>
-        <div class="aw-arm-list">
-            ${arm.arms.map(item => `
-                <button class="aw-arm ${item.arm_cn === arm.armCn ? 'selected' : ''}" data-arm="${esc(item.arm_cn)}" ${arm.busy ? 'disabled' : ''}>
-                    <span class="aw-arm-cn">${esc(item.arm_cn)}</span>
-                    <span class="aw-arm-meta">${esc(item.product_label)} · ${esc(item.arm_type || '-')}</span>
-                    <span class="aw-arm-meta">已挂电机记录 ${item.attached_motor_records} / 16</span>
-                </button>`).join('')}
-        </div>`;
+        ${arm.creating ? renderCreateForm() : `
+            <div class="aw-start-row">
+                <button class="btn btn-primary" data-new-arm="1" ${arm.busy ? 'disabled' : ''}>+ 新建机械臂</button>
+                <span class="muted">装配好一台新机械臂后，从这里开始。</span>
+            </div>`}
+        ${inProgress.length ? `
+            <div class="aw-group-title">正在测试的机械臂</div>
+            <div class="aw-arm-list">${inProgress.map(item => armCard(item)).join('')}</div>`
+        : (arm.creating ? '' : '<p class="muted aw-hint">目前没有正在测试的机械臂。</p>')}
+        ${arm.completed.length ? `
+            <button class="aw-toggle" data-toggle-completed="1">
+                ${arm.showCompleted ? '▾' : '▸'} 已出厂的机械臂（${arm.completed.length}）
+            </button>
+            ${arm.showCompleted ? `
+                <p class="muted aw-hint">这些臂已经出厂，留档备查。除非要复测，平时不用动它们。</p>
+                <div class="aw-arm-list">${arm.completed.map(item => armCard(item, true)).join('')}</div>` : ''}`
+        : ''}`;
 }
 
 // ---- 2. the steps ----------------------------------------------------------------
@@ -200,7 +247,9 @@ function renderBadge() {
 }
 
 function renderProblem() {
-    const target = document.getElementById('awSteps');
+    // Put the message where the action that failed was: creating an arm fails in the
+    // picker, running a step fails among the steps.
+    const target = document.getElementById(arm.creating || !arm.status ? 'awPicker' : 'awSteps');
     target.insertAdjacentHTML('afterbegin', `
         <div class="smw-card smw-problem">
             <div class="smw-problem-kicker">需要处理</div>
@@ -261,9 +310,30 @@ async function run(busyText, request, onSuccess) {
 async function loadArms() {
     const payload = await api('/api/arm/wizard/arms');
     arm.arms = payload.arms || [];
-    if (!arm.armCn || !arm.arms.some(item => item.arm_cn === arm.armCn)) {
-        arm.armCn = arm.arms[0]?.arm_cn || null;
-    }
+    arm.completed = payload.completed_arms || [];
+    arm.nextArmCn = payload.next_arm_cn || '';
+    // Only auto-select an arm still being tested. A shipped arm is opened on purpose.
+    const known = [...arm.arms, ...arm.completed].some(item => item.arm_cn === arm.armCn);
+    if (!known) arm.armCn = arm.arms[0]?.arm_cn || null;
+}
+
+function createArm(form) {
+    const data = new FormData(form);
+    arm.draft = {
+        product_version: String(data.get('product_version')),
+        arm_type: String(data.get('arm_type')),
+        arm_cn: String(data.get('arm_cn') || '').trim().toUpperCase()
+    };
+    return run('正在建档…', () => api('/api/arm/wizard/create', {
+        method: 'POST',
+        body: JSON.stringify(arm.draft)
+    }), async payload => {
+        addLog(`整臂向导：${payload.arm_cn} 已建档（${payload.product_version}）`, 'success', 'arm');
+        arm.creating = false;
+        arm.draft.arm_cn = '';
+        await loadArms();
+        await loadArm(payload.arm_cn);
+    });
 }
 
 async function loadArm(armCn) {
@@ -324,6 +394,23 @@ function setAdvanced(open) {
 
 function handleClick(event) {
     if (arm.busy) return;
+    if (event.target.closest('[data-new-arm]')) {
+        arm.creating = true;
+        arm.problem = null;
+        render();
+        return;
+    }
+    if (event.target.closest('[data-cancel-create]')) {
+        arm.creating = false;
+        arm.problem = null;
+        render();
+        return;
+    }
+    if (event.target.closest('[data-toggle-completed]')) {
+        arm.showCompleted = !arm.showCompleted;
+        render();
+        return;
+    }
     const armButton = event.target.closest('[data-arm]');
     if (armButton) {
         loadArm(armButton.dataset.arm);
@@ -360,6 +447,11 @@ export async function initArmWizard() {
     if (!root) return;
     root.addEventListener('click', handleClick);
     root.addEventListener('change', handleChange);
+    root.addEventListener('submit', event => {
+        if (event.target.id !== 'awCreateForm') return;
+        event.preventDefault();
+        if (!arm.busy) createArm(event.target);
+    });
     document.getElementById('awAdvancedBtn').addEventListener('click', () => setAdvanced(true));
     document.getElementById('awBackBtn').addEventListener('click', () => setAdvanced(false));
     render();

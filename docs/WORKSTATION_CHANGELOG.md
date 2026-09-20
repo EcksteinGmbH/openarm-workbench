@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.18.0-arm-wizard-layout`
+Current workstation version: `0.19.0-arm-wizard-new-arm-first`
 
 ## Versioning Rule
 
@@ -13,6 +13,47 @@ Current workstation version: `0.18.0-arm-wizard-layout`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.19.0-arm-wizard-new-arm-first - 2026-09-20
+
+Summary: the arm wizard starts from building a new arm, not from picking one of the
+three that have already shipped. Step 1, 整机建档, is now executed by the wizard itself.
+
+The previous version listed every arm on file, and all of them are sold units. That
+made the page read as a tool for re-testing delivered arms rather than the acceptance
+flow for the arm being built - the opposite of what it is for.
+
+Changes:
+
+- 新建机械臂 is the first thing on the page: product version (write-once), Follower or
+  Leader, and a serial that is pre-filled with the next free number for today, so the
+  usual case is one click. The form says plainly that the 整机编号 is the arm's identity
+  and that everything is filed under it.
+- An arm counts as finished once it is released *and* its report is filed. Those are
+  kept on record - the report has to stay reachable - but they fold away behind
+  已出厂的机械臂（N）, collapsed, and are never auto-selected. Released but unsigned
+  still counts as under test, because it still needs its report.
+- `arm_wizard_create()` executes step 1 and is the first step the wizard runs itself:
+  it validates the serial against the factory naming rule, refuses one already in use,
+  refuses an unknown product version, and opens the file. Two new problem entries,
+  `arm_cn_invalid` and `arm_cn_taken`; the latter points out that continuing that arm
+  is probably what was meant, rather than a new one.
+- Failure messages now appear where the action was: creating an arm fails in the
+  picker, running a step fails among the steps.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 216 passed, including that a shipped arm is kept but
+  separated, that a released-without-report arm is still under test, that the suggested
+  serial skips numbers already used, and that a bad or duplicate serial is refused
+  without writing anything.
+- Checked live: the wizard opens on 新建机械臂 with `OAF26092001` suggested, no arms
+  under test, and the three sold arms folded away with their report counts.
+
+Operational Notes:
+
+- The other eleven steps still hand over to the engineer tools; step 1 is the first one
+  the wizard performs.
 
 ### 0.18.0-arm-wizard-layout - 2026-09-20
 

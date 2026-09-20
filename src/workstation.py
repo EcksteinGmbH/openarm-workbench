@@ -252,6 +252,23 @@ SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
             "执行完后回到这里再点一次「配置并启动」。",
         ],
     },
+    "arm_cn_invalid": {
+        "title": "整机编号不符合规则",
+        "message": "整机编号要按出厂规则命名，否则报告归档会对不上。",
+        "solutions": [
+            "格式是 OA + F/L + 6 位日期 + 2 位序号，例如 OAF26092001。",
+            "F 表示 Follower，L 表示 Leader。",
+            "直接用页面给出的建议编号最稳妥，它已经避开了已用过的号。",
+        ],
+    },
+    "arm_cn_taken": {
+        "title": "这个整机编号已经用过了",
+        "message": "工作站里已经有一台这个编号的机械臂。",
+        "solutions": [
+            "如果你想继续测那一台，从下面的列表里选它，不要新建。",
+            "如果这是另一台新臂，把序号加一（例如 ...01 改成 ...02）。",
+        ],
+    },
     "arm_not_found": {
         "title": "找不到这台机械臂的档案",
         "message": "输入的整机编号在工作站里没有对应记录。",
@@ -6084,6 +6101,11 @@ class WorkstationService:
                     label = self.product_registry.get(product_version)["label"]
                 except KeyError:
                     label = product_version
+                try:
+                    decision = self.factory_release_gate(arm["arm_cn"])["release_decision"]
+                except Exception:
+                    decision = "HOLD"
+                reports = len(arm.get("factory_reports") or [])
                 arms.append(
                     {
                         "arm_cn": arm["arm_cn"],
@@ -6092,10 +6114,58 @@ class WorkstationService:
                         "product_label": label,
                         "updated_at": arm.get("updated_at"),
                         "attached_motor_records": len(arm.get("single_motor_records") or []),
+                        "release_decision": decision,
+                        "report_count": reports,
+                        # Finished means released with a report filed. Those arms have
+                        # shipped; the wizard is for the arm being built now, so they
+                        # are kept on record but out of the way.
+                        "completed": decision == "PASS" and reports > 0,
                     }
                 )
             arms.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
-            return {"ok": True, "arms": arms}
+            return {
+                "ok": True,
+                "arms": [item for item in arms if not item["completed"]],
+                "completed_arms": [item for item in arms if item["completed"]],
+                "next_arm_cn": self._suggest_arm_cn(),
+            }
+
+    def _suggest_arm_cn(self) -> str:
+        """The next free Follower serial for today, so building a new arm is one click."""
+        date_code = _factory_date_code(None)
+        taken = {path.stem for path in FACTORY_ARMS_DIR.glob("*.json")}
+        for sequence in range(1, 100):
+            candidate = f"OAF{date_code}{sequence:02d}"
+            if candidate not in taken:
+                return candidate
+        return f"OAF{date_code}01"
+
+    def arm_wizard_create(
+        self,
+        arm_cn: str,
+        product_version: str,
+        arm_type: str = "OpenARM Follower",
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Step 1: open the file for a new arm. This is the wizard's own first step."""
+        with self._lock:
+            arm_cn = str(arm_cn or "").strip().upper()
+            validation = self.validate_factory_arm_cn(arm_cn)
+            if not validation.get("valid"):
+                return self._wizard_problem("arm_cn_invalid", validation.get("message"))
+            if (FACTORY_ARMS_DIR / f"{_safe_name(arm_cn)}.json").exists():
+                return self._wizard_problem("arm_cn_taken", f"arm_cn={arm_cn}")
+            if product_version not in self.product_registry.known_versions():
+                return self._wizard_problem(
+                    "arm_cn_invalid", f"unknown product_version {product_version}"
+                )
+            record = self.bind_arm_identity(
+                arm_cn=arm_cn,
+                arm_type=arm_type,
+                notes=notes,
+                product_version=product_version,
+            )
+            return {"ok": True, "arm_cn": record["arm_cn"], "product_version": record["product_version"]}
 
     def arm_wizard_status(self, arm_cn: str) -> Dict[str, Any]:
         """Where this arm stands: which steps are done, which is next, what blocks it."""

@@ -1974,3 +1974,64 @@ body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .left-rail,
 body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .right-rail {
     display: none;
 }
+
+/* --- new arm first: building one is the primary action, shipped arms fold away --- */
+.aw-start-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.aw-create {
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.aw-create > p { margin: 0 0 12px; }
+
+.aw-create-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.aw-create .field { display: flex; flex-direction: column; gap: 4px; }
+.aw-create .field > span { font-size: 12px; color: var(--muted); font-weight: 700; }
+
+.aw-create select,
+.aw-create input {
+    padding: 8px 10px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.aw-group-title {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin: 14px 0 8px;
+}
+
+.aw-toggle {
+    margin-top: 16px;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.aw-toggle:hover { color: var(--text); }
+
+.aw-arm.muted-arm { opacity: 0.7; }
+.aw-arm.muted-arm.selected { opacity: 1; }

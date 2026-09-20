@@ -429,3 +429,21 @@ def test_the_arm_wizard_page_is_wired_like_the_other_two_wizards(client):
     assert "重新测这一步" in source, "re-running a finished step must be reachable"
     assert "SAFETY_CHECKS" in source and "safetyReady(" in source
     assert "showProblemModal" in source
+    # Building a new arm is the starting point; shipped arms fold away behind a toggle.
+    assert "+ 新建机械臂" in source and "data-new-arm" in source
+    assert "已出厂的机械臂" in source and "data-toggle-completed" in source
+
+
+def test_creating_an_arm_through_the_wizard_api(client):
+    suggested = _json(client.get("/api/arm/wizard/arms"))["next_arm_cn"]
+    created = _json(client.post("/api/arm/wizard/create", json={
+        "arm_cn": suggested, "product_version": "openarm_2_0"}))
+    assert created["ok"] is True and created["product_version"] == "openarm_2_0"
+
+    listing = _json(client.get("/api/arm/wizard/arms"))
+    assert suggested in [item["arm_cn"] for item in listing["arms"]]
+    assert listing["completed_arms"] == []
+
+    refused = _json(client.post("/api/arm/wizard/create", json={
+        "arm_cn": suggested, "product_version": "openarm_2_0"}))
+    assert refused["problem"]["code"] == "arm_cn_taken"

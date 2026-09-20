@@ -766,6 +766,18 @@ def arm_wizard_arms():
     return _wizard_call(service.arm_wizard_arms)
 
 
+@app.post("/api/arm/wizard/create")
+def arm_wizard_create():
+    data = _body()
+    return _wizard_call(
+        service.arm_wizard_create,
+        arm_cn=str(data.get("arm_cn") or ""),
+        product_version=str(data.get("product_version") or ""),
+        arm_type=str(data.get("arm_type") or "OpenARM Follower"),
+        notes=data.get("notes"),
+    )
+
+
 @app.get("/api/arm/wizard/<arm_cn>/status")
 def arm_wizard_status(arm_cn: str):
     return _wizard_call(service.arm_wizard_status, arm_cn=arm_cn)

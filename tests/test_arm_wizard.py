@@ -263,3 +263,86 @@ def test_recording_is_skipped_when_no_arm_is_named(service):
     )
     assert result["ok"] is True
     assert list(workstation.FACTORY_ARMS_DIR.glob("*.json")) == []
+
+
+# ---- building a new arm is the wizard's starting point ---------------------------
+
+
+def test_a_shipped_arm_is_kept_on_record_but_out_of_the_working_list(service):
+    """The wizard is for the arm being built now, not for the ones already sold.
+
+    A released arm with its report filed has shipped. It stays on file - the report has
+    to remain reachable - but it does not belong in the list of arms under test.
+    """
+    service.bind_arm_identity("OAF26092070")
+    path = workstation.FACTORY_ARMS_DIR / "OAF26092070.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["linked_jobs"] = [{"job_id": "x", "job_type": "arm_acceptance", "status": "passed"}]
+    record["zero_calibration_records"] = [{"status": "passed"}]
+    record["demo_validation_records"] = [{"status": "passed"}]
+    record["evidence_records"] = [{"evidence_type": "can_health_snapshot", "status": "passed"}]
+    record["factory_reports"] = [{"report_id": "r1"}]
+    path.write_text(json.dumps(record), encoding="utf-8")
+
+    service.bind_arm_identity("OAF26092071")  # still being tested
+
+    payload = service.arm_wizard_arms()
+    assert [item["arm_cn"] for item in payload["arms"]] == ["OAF26092071"]
+    assert [item["arm_cn"] for item in payload["completed_arms"]] == ["OAF26092070"]
+    assert payload["completed_arms"][0]["report_count"] == 1
+
+
+def test_a_released_arm_without_a_report_is_still_being_worked_on(service):
+    # Released but unsigned is not shipped; it still needs its report.
+    service.bind_arm_identity("OAF26092072")
+    path = workstation.FACTORY_ARMS_DIR / "OAF26092072.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["linked_jobs"] = [{"job_id": "x", "job_type": "arm_acceptance", "status": "passed"}]
+    record["zero_calibration_records"] = [{"status": "passed"}]
+    record["demo_validation_records"] = [{"status": "passed"}]
+    record["evidence_records"] = [{"evidence_type": "can_health_snapshot", "status": "passed"}]
+    path.write_text(json.dumps(record), encoding="utf-8")
+
+    payload = service.arm_wizard_arms()
+    assert [item["arm_cn"] for item in payload["arms"]] == ["OAF26092072"]
+    assert payload["completed_arms"] == []
+
+
+def test_the_suggested_serial_skips_numbers_already_used(service):
+    first = service.arm_wizard_arms()["next_arm_cn"]
+    assert first.startswith("OAF") and first.endswith("01")
+    service.arm_wizard_create(first, product_version="openarm_2_0")
+    assert service.arm_wizard_arms()["next_arm_cn"] == first[:-2] + "02"
+
+
+def test_creating_an_arm_opens_its_file_with_the_product_locked_in(service):
+    suggested = service.arm_wizard_arms()["next_arm_cn"]
+    payload = service.arm_wizard_create(suggested, product_version="openarm_2_0", arm_type="OpenARM Follower")
+    assert payload["ok"] is True
+    assert payload["product_version"] == "openarm_2_0"
+
+    status = service.arm_wizard_status(suggested)
+    by_id = {step["id"]: step for step in status["steps"]}
+    assert by_id["identity"]["state"] == "done"
+    assert status["next_step"] == "link"
+
+
+def test_a_serial_that_breaks_the_naming_rule_is_refused(service):
+    payload = service.arm_wizard_create("NOT-A-SERIAL", product_version="openarm_1_0")
+    assert payload["problem"]["code"] == "arm_cn_invalid"
+    assert payload["problem"]["solutions"]
+
+
+def test_reusing_an_existing_serial_is_refused_with_advice(service):
+    suggested = service.arm_wizard_arms()["next_arm_cn"]
+    service.arm_wizard_create(suggested, product_version="openarm_1_0")
+    payload = service.arm_wizard_create(suggested, product_version="openarm_1_0")
+    assert payload["problem"]["code"] == "arm_cn_taken"
+    # The operator most likely meant to continue that arm, so say so.
+    assert any("继续测" in item for item in payload["problem"]["solutions"])
+
+
+def test_an_unknown_product_version_cannot_be_recorded(service):
+    payload = service.arm_wizard_create("OAF26092073", product_version="openarm_9_9")
+    assert payload["problem"]["code"] == "arm_cn_invalid"
+    assert not (workstation.FACTORY_ARMS_DIR / "OAF26092073.json").exists()
