@@ -1,0 +1,5478 @@
+{
+ "active_demo_workflow": null,
+ "active_zero_workflow": null,
+ "arm_cn": "OAF26080401",
+ "arm_type": "OpenARM Follower",
+ "bom_profile": "openarm_v1",
+ "bundle_history": [],
+ "command_run_history": [
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-demo",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "right_arm",
+    "--enable-hold-ms",
+    "1500",
+    "--phase-hold-s",
+    "3.0",
+    "--gripper-open-target",
+    "-1.0472",
+    "--gripper-close-target",
+    "0.0"
+   ],
+   "confirmations": {
+    "comm_check_passed": true,
+    "estop_ready": true,
+    "low_speed": true,
+    "workspace_clear": true,
+    "zero_calibrated": true
+   },
+   "demo_summary": {
+    "blocking_items": [],
+    "close_final": -0.041772,
+    "disabled_count": 8,
+    "enabled_count": 8,
+    "gripper_travel_rad": 0.966659,
+    "gripper_travel_threshold_rad": 0.8,
+    "id16_special_frame_count": 0,
+    "keepalive_frames": 2160,
+    "open_observed_at_close_start": -1.008431,
+    "open_start": -0.041772,
+    "open_target": -1.0472,
+    "passed": true,
+    "warning_items": []
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+   "execute": true,
+   "finished_at": "2026-08-05T02:57:34Z",
+   "kind": "official_demo_validation",
+   "missing_confirmations": [],
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "right_arm",
+    "--enable-hold-ms",
+    "1500",
+    "--phase-hold-s",
+    "3.0",
+    "--gripper-open-target",
+    "-1.0472",
+    "--gripper-close-target",
+    "0.0"
+   ],
+   "returncode": 0,
+   "run_id": "c63226f87895",
+   "started_at": "2026-08-05T02:57:12Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 300,
+   "workflow_type": "demo_validation"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-demo",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "right_arm",
+    "--enable-hold-ms",
+    "1500",
+    "--phase-hold-s",
+    "3.0",
+    "--gripper-open-target",
+    "-1.0472",
+    "--gripper-close-target",
+    "0.0"
+   ],
+   "confirmations": {
+    "comm_check_passed": true,
+    "estop_ready": true,
+    "low_speed": true,
+    "workspace_clear": true,
+    "zero_calibrated": true
+   },
+   "demo_summary": {
+    "blocking_items": [],
+    "close_final": -0.041772,
+    "disabled_count": 8,
+    "enabled_count": 8,
+    "gripper_travel_rad": 0.96704,
+    "gripper_travel_threshold_rad": 0.8,
+    "id16_special_frame_count": 0,
+    "keepalive_frames": 2152,
+    "open_observed_at_close_start": -1.008812,
+    "open_start": -0.000191,
+    "open_target": -1.0472,
+    "passed": true,
+    "warning_items": []
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+   "execute": true,
+   "finished_at": "2026-08-05T02:54:38Z",
+   "kind": "official_demo_validation",
+   "missing_confirmations": [],
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "right_arm",
+    "--enable-hold-ms",
+    "1500",
+    "--phase-hold-s",
+    "3.0",
+    "--gripper-open-target",
+    "-1.0472",
+    "--gripper-close-target",
+    "0.0"
+   ],
+   "returncode": 0,
+   "run_id": "78fc71135473",
+   "started_at": "2026-08-05T02:54:16Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 300,
+   "workflow_type": "demo_validation"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-motor-check",
+    "8",
+    "24",
+    "can0"
+   ],
+   "confirmations": {
+    "can_interface_up": true,
+    "id_pair_verified": true,
+    "motor_powered": true,
+    "no_motion_expected": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+   "execute": true,
+   "finished_at": "2026-08-05T02:46:55Z",
+   "kind": "official_motor_check",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-05T02:46:56Z",
+    "has_blocking": false,
+    "profile_id": "openarm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 8,
+      "issues": [],
+      "joint_name": "J8",
+      "mst_id": 24,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 24,
+        "data": [
+         8,
+         127,
+         255,
+         127,
+         248,
+         0,
+         30,
+         29
+        ],
+        "data_hex": "087FFF7FF8001E1D",
+        "timestamp": 1785898016.087288
+       },
+       "master_id": 24,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 8,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 30.0,
+       "t_rotor": 29.0,
+       "torque": 0.0024420025292783976,
+       "velocity": -0.007326007355004549
+      }
+     }
+    ],
+    "started_at": "2026-08-05T02:46:56Z",
+    "target_canid": 8
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+    "8",
+    "24",
+    "can0"
+   ],
+   "returncode": 0,
+   "run_id": "af4979b43aa2",
+   "started_at": "2026-08-05T02:46:53Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 30,
+   "workflow_type": "official_motor_check"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-motor-check",
+    "7",
+    "23",
+    "can0"
+   ],
+   "confirmations": {
+    "can_interface_up": true,
+    "id_pair_verified": true,
+    "motor_powered": true,
+    "no_motion_expected": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+   "execute": true,
+   "finished_at": "2026-08-05T02:46:53Z",
+   "kind": "official_motor_check",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-05T02:46:53Z",
+    "has_blocking": false,
+    "profile_id": "openarm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 7,
+      "issues": [],
+      "joint_name": "J7",
+      "mst_id": 23,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 23,
+        "data": [
+         7,
+         130,
+         95,
+         127,
+         248,
+         3,
+         31,
+         29
+        ],
+        "data_hex": "07825F7FF8031F1D",
+        "timestamp": 1785898013.7280393
+       },
+       "master_id": 23,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": 0.2317463904619217,
+       "slave_id": 7,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 31.0,
+       "t_rotor": 29.0,
+       "torque": 0.017094017937779427,
+       "velocity": -0.007326007355004549
+      }
+     }
+    ],
+    "started_at": "2026-08-05T02:46:53Z",
+    "target_canid": 7
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+    "7",
+    "23",
+    "can0"
+   ],
+   "returncode": 0,
+   "run_id": "a6a35c11df24",
+   "started_at": "2026-08-05T02:46:51Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 30,
+   "workflow_type": "official_motor_check"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-motor-check",
+    "6",
+    "22",
+    "can0"
+   ],
+   "confirmations": {
+    "can_interface_up": true,
+    "id_pair_verified": true,
+    "motor_powered": true,
+    "no_motion_expected": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+   "execute": true,
+   "finished_at": "2026-08-05T02:46:51Z",
+   "kind": "official_motor_check",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-05T02:46:51Z",
+    "has_blocking": false,
+    "profile_id": "openarm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 6,
+      "issues": [],
+      "joint_name": "J6",
+      "mst_id": 22,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 22,
+        "data": [
+         6,
+         128,
+         0,
+         127,
+         247,
+         255,
+         31,
+         29
+        ],
+        "data_hex": "0680007FF7FF1F1D",
+        "timestamp": 1785898011.3830764
+       },
+       "master_id": 22,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": 0.00019073777366429567,
+       "slave_id": 6,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 31.0,
+       "t_rotor": 29.0,
+       "torque": -0.0024420025292783976,
+       "velocity": -0.007326007355004549
+      }
+     }
+    ],
+    "started_at": "2026-08-05T02:46:51Z",
+    "target_canid": 6
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+    "6",
+    "22",
+    "can0"
+   ],
+   "returncode": 0,
+   "run_id": "3943f907fa50",
+   "started_at": "2026-08-05T02:46:49Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 30,
+   "workflow_type": "official_motor_check"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-motor-check",
+    "5",
+    "21",
+    "can0"
+   ],
+   "confirmations": {
+    "can_interface_up": true,
+    "id_pair_verified": true,
+    "motor_powered": true,
+    "no_motion_expected": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+   "execute": true,
+   "finished_at": "2026-08-05T02:46:48Z",
+   "kind": "official_motor_check",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-05T02:46:49Z",
+    "has_blocking": false,
+    "profile_id": "openarm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 5,
+      "issues": [],
+      "joint_name": "J5",
+      "mst_id": 21,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 21,
+        "data": [
+         5,
+         127,
+         255,
+         127,
+         247,
+         255,
+         31,
+         29
+        ],
+        "data_hex": "057FFF7FF7FF1F1D",
+        "timestamp": 1785898008.985672
+       },
+       "master_id": 21,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 5,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 31.0,
+       "t_rotor": 29.0,
+       "torque": -0.0024420025292783976,
+       "velocity": -0.007326007355004549
+      }
+     }
+    ],
+    "started_at": "2026-08-05T02:46:48Z",
+    "target_canid": 5
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+    "5",
+    "21",
+    "can0"
+   ],
+   "returncode": 0,
+   "run_id": "dd5f4d04c928",
+   "started_at": "2026-08-05T02:46:46Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 30,
+   "workflow_type": "official_motor_check"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-motor-check",
+    "4",
+    "20",
+    "can0"
+   ],
+   "confirmations": {
+    "can_interface_up": true,
+    "id_pair_verified": true,
+    "motor_powered": true,
+    "no_motion_expected": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+   "execute": true,
+   "finished_at": "2026-08-05T02:46:46Z",
+   "kind": "official_motor_check",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-05T02:46:46Z",
+    "has_blocking": false,
+    "profile_id": "openarm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 4,
+      "issues": [],
+      "joint_name": "J4",
+      "mst_id": 20,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 20,
+        "data": [
+         4,
+         127,
+         255,
+         127,
+         247,
+         251,
+         32,
+         31
+        ],
+        "data_hex": "047FFF7FF7FB201F",
+        "timestamp": 1785898006.549292
+       },
+       "master_id": 20,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 4,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 32.0,
+       "t_rotor": 31.0,
+       "torque": -0.0615384615957737,
+       "velocity": -0.0019536020699888468
+      }
+     }
+    ],
+    "started_at": "2026-08-05T02:46:46Z",
+    "target_canid": 4
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+    "4",
+    "20",
+    "can0"
+   ],
+   "returncode": 0,
+   "run_id": "bff627f6e29d",
+   "started_at": "2026-08-05T02:46:44Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 30,
+   "workflow_type": "official_motor_check"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-motor-check",
+    "3",
+    "19",
+    "can0"
+   ],
+   "confirmations": {
+    "can_interface_up": true,
+    "id_pair_verified": true,
+    "motor_powered": true,
+    "no_motion_expected": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+   "execute": true,
+   "finished_at": "2026-08-05T02:46:44Z",
+   "kind": "official_motor_check",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-05T02:46:44Z",
+    "has_blocking": false,
+    "profile_id": "openarm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 3,
+      "issues": [],
+      "joint_name": "J3",
+      "mst_id": 19,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 19,
+        "data": [
+         3,
+         127,
+         255,
+         127,
+         247,
+         254,
+         31,
+         28
+        ],
+        "data_hex": "037FFF7FF7FE1F1C",
+        "timestamp": 1785898004.1805823
+       },
+       "master_id": 19,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 3,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 31.0,
+       "t_rotor": 28.0,
+       "torque": -0.020512821152806282,
+       "velocity": -0.0019536020699888468
+      }
+     }
+    ],
+    "started_at": "2026-08-05T02:46:44Z",
+    "target_canid": 3
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+    "3",
+    "19",
+    "can0"
+   ],
+   "returncode": 0,
+   "run_id": "4b2bb5922378",
+   "started_at": "2026-08-05T02:46:42Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 30,
+   "workflow_type": "official_motor_check"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-motor-check",
+    "2",
+    "18",
+    "can0"
+   ],
+   "confirmations": {
+    "can_interface_up": true,
+    "id_pair_verified": true,
+    "motor_powered": true,
+    "no_motion_expected": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+   "execute": true,
+   "finished_at": "2026-08-05T02:46:41Z",
+   "kind": "official_motor_check",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-05T02:46:41Z",
+    "has_blocking": false,
+    "profile_id": "openarm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 2,
+      "issues": [],
+      "joint_name": "J2",
+      "mst_id": 18,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 18,
+        "data": [
+         2,
+         127,
+         255,
+         127,
+         247,
+         254,
+         29,
+         27
+        ],
+        "data_hex": "027FFF7FF7FE1D1B",
+        "timestamp": 1785898001.7802253
+       },
+       "master_id": 18,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 2,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 29.0,
+       "t_rotor": 27.0,
+       "torque": -0.03956044092774391,
+       "velocity": -0.010989011265337467
+      }
+     }
+    ],
+    "started_at": "2026-08-05T02:46:41Z",
+    "target_canid": 2
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+    "2",
+    "18",
+    "can0"
+   ],
+   "returncode": 0,
+   "run_id": "c198d3b02101",
+   "started_at": "2026-08-05T02:46:39Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 30,
+   "workflow_type": "official_motor_check"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-motor-check",
+    "1",
+    "17",
+    "can0"
+   ],
+   "confirmations": {
+    "can_interface_up": true,
+    "id_pair_verified": true,
+    "motor_powered": true,
+    "no_motion_expected": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+   "execute": true,
+   "finished_at": "2026-08-05T02:46:39Z",
+   "kind": "official_motor_check",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-05T02:46:39Z",
+    "has_blocking": false,
+    "profile_id": "openarm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 1,
+      "issues": [],
+      "joint_name": "J1",
+      "mst_id": 17,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 17,
+        "data": [
+         1,
+         127,
+         255,
+         127,
+         247,
+         255,
+         30,
+         26
+        ],
+        "data_hex": "017FFF7FF7FF1E1A",
+        "timestamp": 1785897999.4485333
+       },
+       "master_id": 17,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 1,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 30.0,
+       "t_rotor": 26.0,
+       "torque": -0.013186813332140446,
+       "velocity": -0.010989011265337467
+      }
+     }
+    ],
+    "started_at": "2026-08-05T02:46:39Z",
+    "target_canid": 1
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-motor-check",
+    "1",
+    "17",
+    "can0"
+   ],
+   "returncode": 0,
+   "run_id": "5946b5c06ffa",
+   "started_at": "2026-08-05T02:46:37Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 30,
+   "workflow_type": "official_motor_check"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-zero-position-calibration",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "right_arm",
+    "--max-bump-deg",
+    "90.0",
+    "--max-bump-time-s",
+    "20.0",
+    "--bump-step-deg",
+    "0.2",
+    "--bump-dt-s",
+    "0.005",
+    "--restore-initial-pose",
+    "--restore-max-deg",
+    "120.0",
+    "--skip-gripper-limit-search"
+   ],
+   "confirmations": {
+    "estop_ready": true,
+    "one_arm_only": true,
+    "power_stable": true,
+    "workspace_clear": true,
+    "zero_pose_confirmed": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+   "execute": true,
+   "finished_at": "2026-08-05T02:43:50Z",
+   "kind": "official_zero_calibration",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-05T02:43:52Z",
+    "has_blocking": false,
+    "profile_id": "openarm_right_arm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 1,
+      "issues": [],
+      "joint_name": "R-J1",
+      "mst_id": 17,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 17,
+        "data": [
+         1,
+         127,
+         255,
+         127,
+         247,
+         255,
+         30,
+         27
+        ],
+        "data_hex": "017FFF7FF7FF1E1B",
+        "timestamp": 1785897830.7002757
+       },
+       "master_id": 17,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 1,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 30.0,
+       "t_rotor": 27.0,
+       "torque": -0.013186813332140446,
+       "velocity": -0.010989011265337467
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 2,
+      "issues": [],
+      "joint_name": "R-J2",
+      "mst_id": 18,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 18,
+        "data": [
+         2,
+         127,
+         255,
+         127,
+         247,
+         254,
+         29,
+         27
+        ],
+        "data_hex": "027FFF7FF7FE1D1B",
+        "timestamp": 1785897830.9818625
+       },
+       "master_id": 18,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 2,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 29.0,
+       "t_rotor": 27.0,
+       "torque": -0.03956044092774391,
+       "velocity": -0.010989011265337467
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 3,
+      "issues": [],
+      "joint_name": "R-J3",
+      "mst_id": 19,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 19,
+        "data": [
+         3,
+         127,
+         255,
+         127,
+         247,
+         253,
+         31,
+         28
+        ],
+        "data_hex": "037FFF7FF7FD1F1C",
+        "timestamp": 1785897831.2630222
+       },
+       "master_id": 19,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 3,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 31.0,
+       "t_rotor": 28.0,
+       "torque": -0.03418803587555885,
+       "velocity": -0.0019536020699888468
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 4,
+      "issues": [],
+      "joint_name": "R-J4",
+      "mst_id": 20,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 20,
+        "data": [
+         4,
+         127,
+         255,
+         127,
+         247,
+         251,
+         31,
+         54
+        ],
+        "data_hex": "047FFF7FF7FB1F36",
+        "timestamp": 1785897831.5451832
+       },
+       "master_id": 20,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 4,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 31.0,
+       "t_rotor": 54.0,
+       "torque": -0.0615384615957737,
+       "velocity": -0.0019536020699888468
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 5,
+      "issues": [],
+      "joint_name": "R-J5",
+      "mst_id": 21,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 21,
+        "data": [
+         5,
+         127,
+         255,
+         127,
+         247,
+         254,
+         31,
+         28
+        ],
+        "data_hex": "057FFF7FF7FE1F1C",
+        "timestamp": 1785897831.8277757
+       },
+       "master_id": 21,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 5,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 31.0,
+       "t_rotor": 28.0,
+       "torque": -0.007326007355004549,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 6,
+      "issues": [],
+      "joint_name": "R-J6",
+      "mst_id": 22,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 22,
+        "data": [
+         6,
+         128,
+         0,
+         127,
+         247,
+         255,
+         31,
+         29
+        ],
+        "data_hex": "0680007FF7FF1F1D",
+        "timestamp": 1785897832.1102223
+       },
+       "master_id": 22,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": 0.00019073777366429567,
+       "slave_id": 6,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 31.0,
+       "t_rotor": 29.0,
+       "torque": -0.0024420025292783976,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 7,
+      "issues": [],
+      "joint_name": "R-J7",
+      "mst_id": 23,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 23,
+        "data": [
+         7,
+         130,
+         95,
+         127,
+         248,
+         3,
+         31,
+         29
+        ],
+        "data_hex": "07825F7FF8031F1D",
+        "timestamp": 1785897832.3924546
+       },
+       "master_id": 23,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": 0.2317463904619217,
+       "slave_id": 7,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 31.0,
+       "t_rotor": 29.0,
+       "torque": 0.017094017937779427,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 8,
+      "issues": [],
+      "joint_name": "R-J8",
+      "mst_id": 24,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 24,
+        "data": [
+         8,
+         127,
+         255,
+         127,
+         248,
+         1,
+         30,
+         28
+        ],
+        "data_hex": "087FFF7FF8011E1C",
+        "timestamp": 1785897832.6741767
+       },
+       "master_id": 24,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 8,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 30.0,
+       "t_rotor": 28.0,
+       "torque": 0.007326007355004549,
+       "velocity": -0.007326007355004549
+      }
+     }
+    ],
+    "started_at": "2026-08-05T02:43:50Z",
+    "target_canid": null
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "right_arm",
+    "--max-bump-deg",
+    "90.0",
+    "--max-bump-time-s",
+    "20.0",
+    "--bump-step-deg",
+    "0.2",
+    "--bump-dt-s",
+    "0.005",
+    "--restore-initial-pose",
+    "--restore-max-deg",
+    "120.0",
+    "--skip-gripper-limit-search"
+   ],
+   "returncode": 0,
+   "run_id": "565fde8f570d",
+   "started_at": "2026-08-05T02:42:18Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 240,
+   "workflow_type": "zero_calibration",
+   "zero_summary": {
+    "blocking_items": [],
+    "limit_search_failed": false,
+    "mechanical_stops": [
+     {
+      "joint": "J4",
+      "position_deg": -0.04,
+      "position_rad": -0.0008
+     },
+     {
+      "joint": "J6",
+      "position_deg": 46.16,
+      "position_rad": 0.8057
+     },
+     {
+      "joint": "J2",
+      "position_deg": -6.99,
+      "position_rad": -0.1221
+     },
+     {
+      "joint": "J1",
+      "position_deg": -76.24,
+      "position_rad": -1.3306
+     }
+    ],
+    "passed": true,
+    "restore_completed": true,
+    "warning_items": [],
+    "zero_write_refused": false,
+    "zero_written": true
+   }
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "blocking_items": [
+    "limit_search_failed",
+    "zero_write_refused",
+    "zero_write_not_confirmed"
+   ],
+   "command": [
+    "openarm-can-zero-position-calibration",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "right_arm",
+    "--max-bump-deg",
+    "90.0",
+    "--max-bump-time-s",
+    "20.0",
+    "--bump-step-deg",
+    "0.2",
+    "--bump-dt-s",
+    "0.005",
+    "--restore-initial-pose",
+    "--restore-max-deg",
+    "120.0",
+    "--skip-gripper-limit-search"
+   ],
+   "confirmations": {
+    "estop_ready": true,
+    "one_arm_only": true,
+    "power_stable": true,
+    "workspace_clear": true,
+    "zero_pose_confirmed": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+   "execute": true,
+   "finished_at": "2026-08-05T02:10:35Z",
+   "kind": "official_zero_calibration",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-05T02:10:37Z",
+    "has_blocking": true,
+    "profile_id": "openarm_right_arm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 1,
+      "issues": [
+       "disable_state_not_confirmed",
+       "post_recovery_motor_error"
+      ],
+      "joint_name": "R-J1",
+      "mst_id": 17,
+      "passed": false,
+      "status": {
+       "has_error": true,
+       "is_enabled": false,
+       "is_healthy": false,
+       "last_status_frame": {
+        "can_id": 17,
+        "data": [
+         209,
+         100,
+         212,
+         127,
+         247,
+         255,
+         30,
+         26
+        ],
+        "data_hex": "D164D47FF7FF1E1A",
+        "timestamp": 1785895835.5721066
+       },
+       "master_id": 17,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": -2.653353214263916,
+       "slave_id": 1,
+       "status": "COMM_LOST",
+       "status_code": 13,
+       "t_mos": 30.0,
+       "t_rotor": 26.0,
+       "torque": -0.013186813332140446,
+       "velocity": -0.010989011265337467
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 2,
+      "issues": [
+       "disable_state_not_confirmed",
+       "post_recovery_motor_error"
+      ],
+      "joint_name": "R-J2",
+      "mst_id": 18,
+      "passed": false,
+      "status": {
+       "has_error": true,
+       "is_enabled": false,
+       "is_healthy": false,
+       "last_status_frame": {
+        "can_id": 18,
+        "data": [
+         210,
+         145,
+         62,
+         127,
+         247,
+         255,
+         29,
+         28
+        ],
+        "data_hex": "D2913E7FF7FF1D1C",
+        "timestamp": 1785895835.8533165
+       },
+       "master_id": 18,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": 1.6840238571166992,
+       "slave_id": 2,
+       "status": "COMM_LOST",
+       "status_code": 13,
+       "t_mos": 29.0,
+       "t_rotor": 28.0,
+       "torque": -0.013186813332140446,
+       "velocity": -0.010989011265337467
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 3,
+      "issues": [],
+      "joint_name": "R-J3",
+      "mst_id": 19,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 19,
+        "data": [
+         3,
+         110,
+         118,
+         127,
+         247,
+         255,
+         31,
+         28
+        ],
+        "data_hex": "036E767FF7FF1F1C",
+        "timestamp": 1785895836.133971
+       },
+       "master_id": 19,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": -1.7126344442367554,
+       "slave_id": 3,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 31.0,
+       "t_rotor": 28.0,
+       "torque": -0.006837606895714998,
+       "velocity": -0.0019536020699888468
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 4,
+      "issues": [
+       "disable_state_not_confirmed",
+       "post_recovery_motor_error"
+      ],
+      "joint_name": "R-J4",
+      "mst_id": 20,
+      "passed": false,
+      "status": {
+       "has_error": true,
+       "is_enabled": false,
+       "is_healthy": false,
+       "last_status_frame": {
+        "can_id": 20,
+        "data": [
+         212,
+         138,
+         251,
+         127,
+         247,
+         252,
+         31,
+         30
+        ],
+        "data_hex": "D48AFB7FF7FC1F1E",
+        "timestamp": 1785895836.414694
+       },
+       "master_id": 20,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": 1.0725184679031372,
+       "slave_id": 4,
+       "status": "COMM_LOST",
+       "status_code": 13,
+       "t_mos": 31.0,
+       "t_rotor": 30.0,
+       "torque": -0.047863248735666275,
+       "velocity": -0.0019536020699888468
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 5,
+      "issues": [],
+      "joint_name": "R-J5",
+      "mst_id": 21,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 21,
+        "data": [
+         5,
+         121,
+         129,
+         127,
+         248,
+         1,
+         33,
+         30
+        ],
+        "data_hex": "0579817FF801211E",
+        "timestamp": 1785895836.6956844
+       },
+       "master_id": 21,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -0.6342030763626099,
+       "slave_id": 5,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 33.0,
+       "t_rotor": 30.0,
+       "torque": 0.007326007355004549,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 6,
+      "issues": [],
+      "joint_name": "R-J6",
+      "mst_id": 22,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 22,
+        "data": [
+         6,
+         119,
+         108,
+         127,
+         247,
+         254,
+         33,
+         30
+        ],
+        "data_hex": "06776C7FF7FE211E",
+        "timestamp": 1785895836.9764023
+       },
+       "master_id": 22,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -0.8375295400619507,
+       "slave_id": 6,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 33.0,
+       "t_rotor": 30.0,
+       "torque": -0.007326007355004549,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 7,
+      "issues": [],
+      "joint_name": "R-J7",
+      "mst_id": 23,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 23,
+        "data": [
+         7,
+         151,
+         0,
+         127,
+         248,
+         2,
+         32,
+         30
+        ],
+        "data_hex": "0797007FF802201E",
+        "timestamp": 1785895837.257156
+       },
+       "master_id": 23,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": 2.246318817138672,
+       "slave_id": 7,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 32.0,
+       "t_rotor": 30.0,
+       "torque": 0.012210012413561344,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 8,
+      "issues": [],
+      "joint_name": "R-J8",
+      "mst_id": 24,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 24,
+        "data": [
+         8,
+         132,
+         109,
+         127,
+         248,
+         2,
+         31,
+         30
+        ],
+        "data_hex": "08846D7FF8021F1E",
+        "timestamp": 1785895837.538212
+       },
+       "master_id": 24,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": 0.43240252137184143,
+       "slave_id": 8,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 31.0,
+       "t_rotor": 30.0,
+       "torque": 0.012210012413561344,
+       "velocity": -0.007326007355004549
+      }
+     }
+    ],
+    "started_at": "2026-08-05T02:10:35Z",
+    "target_canid": null
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "right_arm",
+    "--max-bump-deg",
+    "90.0",
+    "--max-bump-time-s",
+    "20.0",
+    "--bump-step-deg",
+    "0.2",
+    "--bump-dt-s",
+    "0.005",
+    "--restore-initial-pose",
+    "--restore-max-deg",
+    "120.0",
+    "--skip-gripper-limit-search"
+   ],
+   "returncode": 1,
+   "run_id": "8df667966f4d",
+   "started_at": "2026-08-05T02:09:27Z",
+   "status": "failed",
+   "stderr": "<stripped: command output, not read by the release gate>",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 240,
+   "warnings": [
+    "restore_not_confirmed",
+    "post_recovery_not_disabled"
+   ],
+   "workflow_type": "zero_calibration",
+   "zero_summary": {
+    "blocking_items": [
+     "limit_search_failed",
+     "zero_write_refused",
+     "zero_write_not_confirmed"
+    ],
+    "limit_search_failed": true,
+    "mechanical_stops": [
+     {
+      "joint": "J4",
+      "position_deg": -0.44,
+      "position_rad": -0.0076
+     },
+     {
+      "joint": "J6",
+      "position_deg": 42.86,
+      "position_rad": 0.7481
+     }
+    ],
+    "passed": false,
+    "restore_completed": false,
+    "warning_items": [
+     "restore_not_confirmed"
+    ],
+    "zero_write_refused": true,
+    "zero_written": false
+   }
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-demo",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "left_arm",
+    "--enable-hold-ms",
+    "1500",
+    "--phase-hold-s",
+    "3.0",
+    "--gripper-open-target",
+    "-1.0472",
+    "--gripper-close-target",
+    "0.0"
+   ],
+   "confirmations": {
+    "comm_check_passed": true,
+    "estop_ready": true,
+    "low_speed": true,
+    "one_arm_only": true,
+    "operator_present": true,
+    "power_stable": true,
+    "workspace_clear": true,
+    "zero_calibrated": true
+   },
+   "demo_summary": {
+    "blocking_items": [],
+    "close_final": -0.037957,
+    "disabled_count": 7,
+    "enabled_count": 7,
+    "gripper_travel_rad": 0.9746699999999999,
+    "gripper_travel_threshold_rad": 0.8,
+    "id16_special_frame_count": 2,
+    "keepalive_frames": 2104,
+    "open_observed_at_close_start": -1.012627,
+    "open_start": -0.000191,
+    "open_target": -1.0472,
+    "passed": true,
+    "warning_items": []
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+   "execute": true,
+   "finished_at": "2026-08-04T10:18:30Z",
+   "kind": "official_demo_validation",
+   "missing_confirmations": [],
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "left_arm",
+    "--enable-hold-ms",
+    "1500",
+    "--phase-hold-s",
+    "3.0",
+    "--gripper-open-target",
+    "-1.0472",
+    "--gripper-close-target",
+    "0.0"
+   ],
+   "returncode": 0,
+   "run_id": "0ae3c9133886",
+   "started_at": "2026-08-04T10:18:08Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 300,
+   "workflow_type": "demo_validation"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "blocking_items": [
+    "missing_successful_disable_message",
+    "enable_feedback_incomplete",
+    "disable_feedback_incomplete"
+   ],
+   "command": [
+    "openarm-can-demo",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "left_arm",
+    "--enable-hold-ms",
+    "1500",
+    "--phase-hold-s",
+    "3.0",
+    "--gripper-open-target",
+    "-1.0472",
+    "--gripper-close-target",
+    "0.0"
+   ],
+   "confirmations": {
+    "estop_ready": true,
+    "one_arm_only": true,
+    "operator_present": true,
+    "power_stable": true,
+    "workspace_clear": true,
+    "zero_calibrated": true
+   },
+   "demo_summary": {
+    "blocking_items": [
+     "missing_successful_disable_message",
+     "enable_feedback_incomplete",
+     "disable_feedback_incomplete"
+    ],
+    "close_final": null,
+    "disabled_count": 0,
+    "enabled_count": 0,
+    "gripper_travel_rad": null,
+    "gripper_travel_threshold_rad": 0.8,
+    "id16_special_frame_count": 0,
+    "keepalive_frames": null,
+    "open_observed_at_close_start": null,
+    "open_start": null,
+    "open_target": null,
+    "passed": false,
+    "warning_items": [
+     "gripper_travel_not_measured"
+    ]
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+   "execute": true,
+   "finished_at": "2026-08-04T10:17:56Z",
+   "kind": "official_demo_validation",
+   "missing_confirmations": [
+    {
+     "key": "comm_check_passed",
+     "label": "通信扫描/验收已经通过"
+    },
+    {
+     "key": "low_speed",
+     "label": "Demo/Follower 将以低速低风险方式执行"
+    }
+   ],
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "left_arm",
+    "--enable-hold-ms",
+    "1500",
+    "--phase-hold-s",
+    "3.0",
+    "--gripper-open-target",
+    "-1.0472",
+    "--gripper-close-target",
+    "0.0"
+   ],
+   "returncode": null,
+   "run_id": "8dde39adce49",
+   "started_at": "2026-08-04T10:17:56Z",
+   "status": "failed",
+   "stderr": "",
+   "stdout": "",
+   "timeout_s": 300,
+   "warnings": [
+    "gripper_travel_not_measured"
+   ],
+   "workflow_type": "demo_validation"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-zero-position-calibration",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "left_arm",
+    "--max-bump-deg",
+    "90.0",
+    "--max-bump-time-s",
+    "20.0",
+    "--bump-step-deg",
+    "0.2",
+    "--bump-dt-s",
+    "0.005",
+    "--restore-initial-pose",
+    "--restore-max-deg",
+    "120.0",
+    "--skip-gripper-limit-search"
+   ],
+   "confirmations": {
+    "estop_ready": true,
+    "one_arm_only": true,
+    "operator_present": true,
+    "power_stable": true,
+    "workspace_clear": true,
+    "zero_pose_confirmed": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+   "execute": true,
+   "finished_at": "2026-08-04T10:16:14Z",
+   "kind": "official_zero_calibration",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-04T10:16:16Z",
+    "has_blocking": false,
+    "profile_id": "openarm_left_arm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 9,
+      "issues": [],
+      "joint_name": "L-J1",
+      "mst_id": 25,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 25,
+        "data": [
+         9,
+         128,
+         0,
+         127,
+         247,
+         255,
+         28,
+         26
+        ],
+        "data_hex": "0980007FF7FF1C1A",
+        "timestamp": 1785838574.7161887
+       },
+       "master_id": 25,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": 0.00019073777366429567,
+       "slave_id": 9,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 28.0,
+       "t_rotor": 26.0,
+       "torque": -0.013186813332140446,
+       "velocity": -0.010989011265337467
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 10,
+      "issues": [],
+      "joint_name": "L-J2",
+      "mst_id": 26,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 26,
+        "data": [
+         10,
+         127,
+         255,
+         127,
+         247,
+         255,
+         30,
+         27
+        ],
+        "data_hex": "0A7FFF7FF7FF1E1B",
+        "timestamp": 1785838574.9975815
+       },
+       "master_id": 26,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 10,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 30.0,
+       "t_rotor": 27.0,
+       "torque": -0.013186813332140446,
+       "velocity": -0.010989011265337467
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 11,
+      "issues": [],
+      "joint_name": "L-J3",
+      "mst_id": 27,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 27,
+        "data": [
+         11,
+         128,
+         53,
+         127,
+         248,
+         0,
+         30,
+         27
+        ],
+        "data_hex": "0B80357FF8001E1B",
+        "timestamp": 1785838575.2790773
+       },
+       "master_id": 27,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": 0.02040894143283367,
+       "slave_id": 11,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 30.0,
+       "t_rotor": 27.0,
+       "torque": 0.006837606895714998,
+       "velocity": -0.0019536020699888468
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 12,
+      "issues": [],
+      "joint_name": "L-J4",
+      "mst_id": 28,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 28,
+        "data": [
+         12,
+         127,
+         255,
+         127,
+         248,
+         1,
+         29,
+         51
+        ],
+        "data_hex": "0C7FFF7FF8011D33",
+        "timestamp": 1785838575.5606349
+       },
+       "master_id": 28,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 12,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 29.0,
+       "t_rotor": 51.0,
+       "torque": 0.020512821152806282,
+       "velocity": -0.0019536020699888468
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 13,
+      "issues": [],
+      "joint_name": "L-J5",
+      "mst_id": 29,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 29,
+        "data": [
+         13,
+         127,
+         255,
+         127,
+         248,
+         1,
+         30,
+         27
+        ],
+        "data_hex": "0D7FFF7FF8011E1B",
+        "timestamp": 1785838575.8419926
+       },
+       "master_id": 29,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 13,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 30.0,
+       "t_rotor": 27.0,
+       "torque": 0.007326007355004549,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 14,
+      "issues": [],
+      "joint_name": "L-J6",
+      "mst_id": 30,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 30,
+        "data": [
+         14,
+         129,
+         47,
+         127,
+         247,
+         254,
+         30,
+         27
+        ],
+        "data_hex": "0E812F7FF7FE1E1B",
+        "timestamp": 1785838576.1231883
+       },
+       "master_id": 30,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": 0.11577782779932022,
+       "slave_id": 14,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 30.0,
+       "t_rotor": 27.0,
+       "torque": -0.007326007355004549,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 15,
+      "issues": [],
+      "joint_name": "L-J7",
+      "mst_id": 31,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 31,
+        "data": [
+         15,
+         125,
+         171,
+         127,
+         247,
+         253,
+         30,
+         27
+        ],
+        "data_hex": "0F7DAB7FF7FD1E1B",
+        "timestamp": 1785838576.40451
+       },
+       "master_id": 31,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -0.22755016386508942,
+       "slave_id": 15,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 30.0,
+       "t_rotor": 27.0,
+       "torque": -0.012210012413561344,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 16,
+      "issues": [],
+      "joint_name": "L-J8",
+      "mst_id": 32,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 32,
+        "data": [
+         16,
+         127,
+         255,
+         127,
+         247,
+         255,
+         30,
+         27
+        ],
+        "data_hex": "107FFF7FF7FF1E1B",
+        "timestamp": 1785838576.6857781
+       },
+       "master_id": 32,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -0.00019073777366429567,
+       "slave_id": 16,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 30.0,
+       "t_rotor": 27.0,
+       "torque": -0.0024420025292783976,
+       "velocity": -0.007326007355004549
+      }
+     }
+    ],
+    "started_at": "2026-08-04T10:16:14Z",
+    "target_canid": null
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "left_arm",
+    "--max-bump-deg",
+    "90.0",
+    "--max-bump-time-s",
+    "20.0",
+    "--bump-step-deg",
+    "0.2",
+    "--bump-dt-s",
+    "0.005",
+    "--restore-initial-pose",
+    "--restore-max-deg",
+    "120.0",
+    "--skip-gripper-limit-search"
+   ],
+   "returncode": 0,
+   "run_id": "84b3fb392762",
+   "started_at": "2026-08-04T10:14:42Z",
+   "status": "passed",
+   "stderr": "",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 300,
+   "workflow_type": "zero_calibration",
+   "zero_summary": {
+    "blocking_items": [],
+    "limit_search_failed": false,
+    "mechanical_stops": [
+     {
+      "joint": "J4",
+      "position_deg": -0.07,
+      "position_rad": -0.0011
+     },
+     {
+      "joint": "J3",
+      "position_deg": 85.09,
+      "position_rad": 1.4851
+     },
+     {
+      "joint": "J6",
+      "position_deg": 45.86,
+      "position_rad": 0.8003
+     },
+     {
+      "joint": "J7",
+      "position_deg": 69.33,
+      "position_rad": 1.21
+     },
+     {
+      "joint": "J2",
+      "position_deg": 0.37,
+      "position_rad": 0.0065
+     },
+     {
+      "joint": "J1",
+      "position_deg": 78.38,
+      "position_rad": 1.368
+     }
+    ],
+    "passed": true,
+    "restore_completed": true,
+    "warning_items": [],
+    "zero_write_refused": false,
+    "zero_written": true
+   }
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "blocking_items": [
+    "limit_search_failed",
+    "zero_write_refused",
+    "zero_write_not_confirmed"
+   ],
+   "command": [
+    "openarm-can-zero-position-calibration",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "left_arm",
+    "--max-bump-deg",
+    "90.0",
+    "--max-bump-time-s",
+    "20.0",
+    "--bump-step-deg",
+    "0.2",
+    "--bump-dt-s",
+    "0.005",
+    "--restore-initial-pose",
+    "--restore-max-deg",
+    "120.0",
+    "--skip-gripper-limit-search"
+   ],
+   "confirmations": {
+    "estop_ready": true,
+    "one_arm_only": true,
+    "operator_present": true,
+    "power_stable": true,
+    "workspace_clear": true,
+    "zero_pose_confirmed": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+   "execute": true,
+   "finished_at": "2026-08-04T09:55:38Z",
+   "kind": "official_zero_calibration",
+   "missing_confirmations": [],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-04T09:55:40Z",
+    "has_blocking": true,
+    "profile_id": "openarm_left_arm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 9,
+      "issues": [
+       "disable_state_not_confirmed",
+       "post_recovery_motor_error"
+      ],
+      "joint_name": "L-J1",
+      "mst_id": 25,
+      "passed": false,
+      "status": {
+       "has_error": true,
+       "is_enabled": false,
+       "is_healthy": false,
+       "last_status_frame": {
+        "can_id": 25,
+        "data": [
+         217,
+         137,
+         215,
+         127,
+         247,
+         255,
+         28,
+         26
+        ],
+        "data_hex": "D989D77FF7FF1C1A",
+        "timestamp": 1785837338.8081484
+       },
+       "master_id": 25,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": 0.9611276388168335,
+       "slave_id": 9,
+       "status": "COMM_LOST",
+       "status_code": 13,
+       "t_mos": 28.0,
+       "t_rotor": 26.0,
+       "torque": -0.013186813332140446,
+       "velocity": -0.010989011265337467
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 10,
+      "issues": [
+       "disable_state_not_confirmed",
+       "post_recovery_motor_error"
+      ],
+      "joint_name": "L-J2",
+      "mst_id": 26,
+      "passed": false,
+      "status": {
+       "has_error": true,
+       "is_enabled": false,
+       "is_healthy": false,
+       "last_status_frame": {
+        "can_id": 26,
+        "data": [
+         218,
+         109,
+         114,
+         127,
+         247,
+         254,
+         30,
+         26
+        ],
+        "data_hex": "DA6D727FF7FE1E1A",
+        "timestamp": 1785837339.0897837
+       },
+       "master_id": 26,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": -1.8118181228637695,
+       "slave_id": 10,
+       "status": "COMM_LOST",
+       "status_code": 13,
+       "t_mos": 30.0,
+       "t_rotor": 26.0,
+       "torque": -0.03956044092774391,
+       "velocity": -0.010989011265337467
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 11,
+      "issues": [
+       "disable_state_not_confirmed",
+       "post_recovery_motor_error"
+      ],
+      "joint_name": "L-J3",
+      "mst_id": 27,
+      "passed": false,
+      "status": {
+       "has_error": true,
+       "is_enabled": false,
+       "is_healthy": false,
+       "last_status_frame": {
+        "can_id": 27,
+        "data": [
+         219,
+         172,
+         21,
+         127,
+         248,
+         2,
+         30,
+         27
+        ],
+        "data_hex": "DBAC157FF8021E1B",
+        "timestamp": 1785837339.370714
+       },
+       "master_id": 27,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": 4.305142402648926,
+       "slave_id": 11,
+       "status": "COMM_LOST",
+       "status_code": 13,
+       "t_mos": 30.0,
+       "t_rotor": 27.0,
+       "torque": 0.03418803587555885,
+       "velocity": -0.0019536020699888468
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 12,
+      "issues": [
+       "disable_state_not_confirmed",
+       "post_recovery_motor_error"
+      ],
+      "joint_name": "L-J4",
+      "mst_id": 28,
+      "passed": false,
+      "status": {
+       "has_error": true,
+       "is_enabled": false,
+       "is_healthy": false,
+       "last_status_frame": {
+        "can_id": 28,
+        "data": [
+         220,
+         139,
+         183,
+         127,
+         248,
+         0,
+         28,
+         26
+        ],
+        "data_hex": "DC8BB77FF8001C1A",
+        "timestamp": 1785837339.6550338
+       },
+       "master_id": 28,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": 1.1442358493804932,
+       "slave_id": 12,
+       "status": "COMM_LOST",
+       "status_code": 13,
+       "t_mos": 28.0,
+       "t_rotor": 26.0,
+       "torque": 0.006837606895714998,
+       "velocity": -0.0019536020699888468
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 13,
+      "issues": [
+       "disable_state_not_confirmed",
+       "post_recovery_motor_error"
+      ],
+      "joint_name": "L-J5",
+      "mst_id": 29,
+      "passed": false,
+      "status": {
+       "has_error": true,
+       "is_enabled": false,
+       "is_healthy": false,
+       "last_status_frame": {
+        "can_id": 29,
+        "data": [
+         221,
+         153,
+         236,
+         127,
+         248,
+         0,
+         30,
+         27
+        ],
+        "data_hex": "DD99EC7FF8001E1B",
+        "timestamp": 1785837339.9363642
+       },
+       "master_id": 29,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": 2.5316624641418457,
+       "slave_id": 13,
+       "status": "COMM_LOST",
+       "status_code": 13,
+       "t_mos": 30.0,
+       "t_rotor": 27.0,
+       "torque": 0.0024420025292783976,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 14,
+      "issues": [
+       "disable_state_not_confirmed",
+       "post_recovery_motor_error"
+      ],
+      "joint_name": "L-J6",
+      "mst_id": 30,
+      "passed": false,
+      "status": {
+       "has_error": true,
+       "is_enabled": false,
+       "is_healthy": false,
+       "last_status_frame": {
+        "can_id": 30,
+        "data": [
+         222,
+         100,
+         123,
+         127,
+         248,
+         0,
+         30,
+         27
+        ],
+        "data_hex": "DE647B7FF8001E1B",
+        "timestamp": 1785837340.2177882
+       },
+       "master_id": 30,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -2.6873044967651367,
+       "slave_id": 14,
+       "status": "COMM_LOST",
+       "status_code": 13,
+       "t_mos": 30.0,
+       "t_rotor": 27.0,
+       "torque": 0.0024420025292783976,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 15,
+      "issues": [
+       "disable_state_not_confirmed",
+       "post_recovery_motor_error"
+      ],
+      "joint_name": "L-J7",
+      "mst_id": 31,
+      "passed": false,
+      "status": {
+       "has_error": true,
+       "is_enabled": false,
+       "is_healthy": false,
+       "last_status_frame": {
+        "can_id": 31,
+        "data": [
+         223,
+         118,
+         47,
+         127,
+         248,
+         0,
+         30,
+         26
+        ],
+        "data_hex": "DF762F7FF8001E1A",
+        "timestamp": 1785837340.4991522
+       },
+       "master_id": 31,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -0.9584572911262512,
+       "slave_id": 15,
+       "status": "COMM_LOST",
+       "status_code": 13,
+       "t_mos": 30.0,
+       "t_rotor": 26.0,
+       "torque": 0.0024420025292783976,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 16,
+      "issues": [
+       "disable_state_not_confirmed",
+       "post_recovery_motor_error"
+      ],
+      "joint_name": "L-J8",
+      "mst_id": 32,
+      "passed": false,
+      "status": {
+       "has_error": true,
+       "is_enabled": false,
+       "is_healthy": false,
+       "last_status_frame": {
+        "can_id": 32,
+        "data": [
+         208,
+         136,
+         171,
+         127,
+         247,
+         255,
+         30,
+         27
+        ],
+        "data_hex": "D088AB7FF7FF1E1B",
+        "timestamp": 1785837340.780813
+       },
+       "master_id": 32,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": 0.846684992313385,
+       "slave_id": 16,
+       "status": "COMM_LOST",
+       "status_code": 13,
+       "t_mos": 30.0,
+       "t_rotor": 27.0,
+       "torque": -0.0024420025292783976,
+       "velocity": -0.007326007355004549
+      }
+     }
+    ],
+    "started_at": "2026-08-04T09:55:38Z",
+    "target_canid": null
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "left_arm",
+    "--max-bump-deg",
+    "90.0",
+    "--max-bump-time-s",
+    "20.0",
+    "--bump-step-deg",
+    "0.2",
+    "--bump-dt-s",
+    "0.005",
+    "--restore-initial-pose",
+    "--restore-max-deg",
+    "120.0",
+    "--skip-gripper-limit-search"
+   ],
+   "returncode": 1,
+   "run_id": "8cc48c39601a",
+   "started_at": "2026-08-04T09:55:00Z",
+   "status": "failed",
+   "stderr": "<stripped: command output, not read by the release gate>",
+   "stdout": "<stripped: command output, not read by the release gate>",
+   "timeout_s": 300,
+   "warnings": [
+    "restore_not_confirmed",
+    "post_recovery_not_disabled"
+   ],
+   "workflow_type": "zero_calibration",
+   "zero_summary": {
+    "blocking_items": [
+     "limit_search_failed",
+     "zero_write_refused",
+     "zero_write_not_confirmed"
+    ],
+    "limit_search_failed": true,
+    "mechanical_stops": [
+     {
+      "joint": "J4",
+      "position_deg": -0.11,
+      "position_rad": -0.0019
+     }
+    ],
+    "passed": false,
+    "restore_completed": false,
+    "warning_items": [
+     "restore_not_confirmed"
+    ],
+    "zero_write_refused": true,
+    "zero_written": false
+   }
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "available": true,
+   "command": [
+    "openarm-can-zero-position-calibration",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "left_arm",
+    "--max-bump-deg",
+    "90.0",
+    "--max-bump-time-s",
+    "20.0",
+    "--bump-step-deg",
+    "0.2",
+    "--bump-dt-s",
+    "0.005",
+    "--restore-initial-pose",
+    "--restore-max-deg",
+    "120.0",
+    "--skip-gripper-limit-search"
+   ],
+   "confirmations": {
+    "estop_ready": true,
+    "operator_present": true,
+    "workspace_clear": true
+   },
+   "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+   "execute": true,
+   "finished_at": "2026-08-04T09:49:18Z",
+   "kind": "official_zero_calibration",
+   "missing_confirmations": [
+    {
+     "key": "zero_pose_confirmed",
+     "label": "机械臂已摆到官方零位姿态"
+    },
+    {
+     "key": "power_stable",
+     "label": "24V 供电稳定"
+    },
+    {
+     "key": "one_arm_only",
+     "label": "当前只对单侧机械臂执行校准"
+    }
+   ],
+   "post_recovery": {
+    "attempted": true,
+    "canport": "can0",
+    "finished_at": "2026-08-04T09:49:20Z",
+    "has_blocking": false,
+    "profile_id": "openarm_left_arm_v1",
+    "results": [
+     {
+      "disable_ok": true,
+      "esc_id": 9,
+      "issues": [],
+      "joint_name": "L-J1",
+      "mst_id": 25,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 25,
+        "data": [
+         9,
+         137,
+         215,
+         127,
+         247,
+         255,
+         27,
+         25
+        ],
+        "data_hex": "0989D77FF7FF1B19",
+        "timestamp": 1785836958.4030275
+       },
+       "master_id": 25,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": 0.9611276388168335,
+       "slave_id": 9,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 27.0,
+       "t_rotor": 25.0,
+       "torque": -0.013186813332140446,
+       "velocity": -0.010989011265337467
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 10,
+      "issues": [],
+      "joint_name": "L-J2",
+      "mst_id": 26,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 26,
+        "data": [
+         10,
+         110,
+         23,
+         127,
+         247,
+         255,
+         29,
+         26
+        ],
+        "data_hex": "0A6E177FF7FF1D1A",
+        "timestamp": 1785836958.68424
+       },
+       "master_id": 26,
+       "motor_type": "DM8009",
+       "params": {},
+       "position": -1.7488746643066406,
+       "slave_id": 10,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 29.0,
+       "t_rotor": 26.0,
+       "torque": -0.013186813332140446,
+       "velocity": -0.010989011265337467
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 11,
+      "issues": [],
+      "joint_name": "L-J3",
+      "mst_id": 27,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 27,
+        "data": [
+         11,
+         156,
+         11,
+         127,
+         247,
+         252,
+         29,
+         26
+        ],
+        "data_hex": "0B9C0B7FF7FC1D1A",
+        "timestamp": 1785836958.9658093
+       },
+       "master_id": 27,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": 2.7388036251068115,
+       "slave_id": 11,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 29.0,
+       "t_rotor": 26.0,
+       "torque": -0.047863248735666275,
+       "velocity": -0.0019536020699888468
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 12,
+      "issues": [],
+      "joint_name": "L-J4",
+      "mst_id": 28,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 28,
+        "data": [
+         12,
+         139,
+         185,
+         127,
+         248,
+         0,
+         27,
+         25
+        ],
+        "data_hex": "0C8BB97FF8001B19",
+        "timestamp": 1785836959.2469506
+       },
+       "master_id": 28,
+       "motor_type": "DM4340",
+       "params": {},
+       "position": 1.1449989080429077,
+       "slave_id": 12,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 27.0,
+       "t_rotor": 25.0,
+       "torque": 0.006837606895714998,
+       "velocity": -0.0019536020699888468
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 13,
+      "issues": [],
+      "joint_name": "L-J5",
+      "mst_id": 29,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 29,
+        "data": [
+         13,
+         153,
+         236,
+         127,
+         248,
+         1,
+         28,
+         26
+        ],
+        "data_hex": "0D99EC7FF8011C1A",
+        "timestamp": 1785836959.5284326
+       },
+       "master_id": 29,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": 2.5316624641418457,
+       "slave_id": 13,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 28.0,
+       "t_rotor": 26.0,
+       "torque": 0.007326007355004549,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 14,
+      "issues": [],
+      "joint_name": "L-J6",
+      "mst_id": 30,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 30,
+        "data": [
+         14,
+         100,
+         125,
+         127,
+         248,
+         0,
+         28,
+         26
+        ],
+        "data_hex": "0E647D7FF8001C1A",
+        "timestamp": 1785836959.8099353
+       },
+       "master_id": 30,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -2.6865415573120117,
+       "slave_id": 14,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 28.0,
+       "t_rotor": 26.0,
+       "torque": 0.0024420025292783976,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 15,
+      "issues": [],
+      "joint_name": "L-J7",
+      "mst_id": 31,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 31,
+        "data": [
+         15,
+         118,
+         47,
+         127,
+         247,
+         255,
+         28,
+         25
+        ],
+        "data_hex": "0F762F7FF7FF1C19",
+        "timestamp": 1785836960.0917325
+       },
+       "master_id": 31,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": -0.9584572911262512,
+       "slave_id": 15,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 28.0,
+       "t_rotor": 25.0,
+       "torque": -0.0024420025292783976,
+       "velocity": -0.007326007355004549
+      }
+     },
+     {
+      "disable_ok": true,
+      "esc_id": 16,
+      "issues": [],
+      "joint_name": "L-J8",
+      "mst_id": 32,
+      "passed": true,
+      "status": {
+       "has_error": false,
+       "is_enabled": false,
+       "is_healthy": true,
+       "last_status_frame": {
+        "can_id": 32,
+        "data": [
+         16,
+         136,
+         171,
+         127,
+         247,
+         254,
+         28,
+         26
+        ],
+        "data_hex": "1088AB7FF7FE1C1A",
+        "timestamp": 1785836960.3727787
+       },
+       "master_id": 32,
+       "motor_type": "DM4310",
+       "params": {},
+       "position": 0.846684992313385,
+       "slave_id": 16,
+       "status": "DISABLED",
+       "status_code": 0,
+       "t_mos": 28.0,
+       "t_rotor": 26.0,
+       "torque": -0.007326007355004549,
+       "velocity": -0.007326007355004549
+      }
+     }
+    ],
+    "started_at": "2026-08-04T09:49:18Z",
+    "target_canid": null
+   },
+   "resolved_command": [
+    "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+    "--canport",
+    "can0",
+    "--arm_side",
+    "left_arm",
+    "--max-bump-deg",
+    "90.0",
+    "--max-bump-time-s",
+    "20.0",
+    "--bump-step-deg",
+    "0.2",
+    "--bump-dt-s",
+    "0.005",
+    "--restore-initial-pose",
+    "--restore-max-deg",
+    "120.0",
+    "--skip-gripper-limit-search"
+   ],
+   "returncode": null,
+   "run_id": "8e4d91166348",
+   "started_at": "2026-08-04T09:49:18Z",
+   "status": "blocked",
+   "stderr": "",
+   "stdout": "",
+   "timeout_s": 300,
+   "workflow_type": "zero_calibration"
+  }
+ ],
+ "created_at": "2026-08-04T09:46:07Z",
+ "delivery_status": "demo_verified",
+ "demo_validation_records": [
+  {
+   "arm_cn": "OAF26080401",
+   "command": "openarm-can-demo --canport can0 --arm_side right_arm --enable-hold-ms 1500 --phase-hold-s 3.0 --gripper-open-target -1.0472 --gripper-close-target 0.0",
+   "command_runs": [
+    {
+     "arm_cn": "OAF26080401",
+     "available": true,
+     "command": [
+      "openarm-can-demo",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--enable-hold-ms",
+      "1500",
+      "--phase-hold-s",
+      "3.0",
+      "--gripper-open-target",
+      "-1.0472",
+      "--gripper-close-target",
+      "0.0"
+     ],
+     "confirmations": {
+      "comm_check_passed": true,
+      "estop_ready": true,
+      "low_speed": true,
+      "workspace_clear": true,
+      "zero_calibrated": true
+     },
+     "demo_summary": {
+      "blocking_items": [],
+      "close_final": -0.041772,
+      "disabled_count": 8,
+      "enabled_count": 8,
+      "gripper_travel_rad": 0.966659,
+      "gripper_travel_threshold_rad": 0.8,
+      "id16_special_frame_count": 0,
+      "keepalive_frames": 2160,
+      "open_observed_at_close_start": -1.008431,
+      "open_start": -0.041772,
+      "open_target": -1.0472,
+      "passed": true,
+      "warning_items": []
+     },
+     "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+     "execute": true,
+     "finished_at": "2026-08-05T02:57:34Z",
+     "kind": "official_demo_validation",
+     "missing_confirmations": [],
+     "resolved_command": [
+      "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--enable-hold-ms",
+      "1500",
+      "--phase-hold-s",
+      "3.0",
+      "--gripper-open-target",
+      "-1.0472",
+      "--gripper-close-target",
+      "0.0"
+     ],
+     "returncode": 0,
+     "run_id": "c63226f87895",
+     "started_at": "2026-08-05T02:57:12Z",
+     "status": "passed",
+     "stderr": "",
+     "stdout": "<stripped: command output, not read by the release gate>",
+     "timeout_s": 300,
+     "workflow_type": "demo_validation"
+    }
+   ],
+   "demo_name": "official_demo_right_arm_observation_repeat",
+   "linked_job": null,
+   "notes": "Supplemental right-arm gripper observation rerun passed in c63226f87895. This record supplements and does not replace formal Demo run 78fc71135473.",
+   "operator": "Peng Cheng",
+   "record_id": "9d63d4420d78",
+   "record_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/arm_records/OAF26080401/demo_validation/20260805_025803_9d63d4420d78.json",
+   "record_type": "demo_validation",
+   "recorded_at": "2026-08-05T02:58:03Z",
+   "status": "passed",
+   "validation_scope": "right_arm_gripper_observation_repeat"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "command": "openarm-can-demo --canport can0 --arm_side right_arm --enable-hold-ms 1500 --phase-hold-s 3.0 --gripper-open-target -1.0472 --gripper-close-target 0.0",
+   "command_runs": [
+    {
+     "arm_cn": "OAF26080401",
+     "available": true,
+     "command": [
+      "openarm-can-demo",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--enable-hold-ms",
+      "1500",
+      "--phase-hold-s",
+      "3.0",
+      "--gripper-open-target",
+      "-1.0472",
+      "--gripper-close-target",
+      "0.0"
+     ],
+     "confirmations": {
+      "comm_check_passed": true,
+      "estop_ready": true,
+      "low_speed": true,
+      "workspace_clear": true,
+      "zero_calibrated": true
+     },
+     "demo_summary": {
+      "blocking_items": [],
+      "close_final": -0.041772,
+      "disabled_count": 8,
+      "enabled_count": 8,
+      "gripper_travel_rad": 0.96704,
+      "gripper_travel_threshold_rad": 0.8,
+      "id16_special_frame_count": 0,
+      "keepalive_frames": 2152,
+      "open_observed_at_close_start": -1.008812,
+      "open_start": -0.000191,
+      "open_target": -1.0472,
+      "passed": true,
+      "warning_items": []
+     },
+     "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+     "execute": true,
+     "finished_at": "2026-08-05T02:54:38Z",
+     "kind": "official_demo_validation",
+     "missing_confirmations": [],
+     "resolved_command": [
+      "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--enable-hold-ms",
+      "1500",
+      "--phase-hold-s",
+      "3.0",
+      "--gripper-open-target",
+      "-1.0472",
+      "--gripper-close-target",
+      "0.0"
+     ],
+     "returncode": 0,
+     "run_id": "78fc71135473",
+     "started_at": "2026-08-05T02:54:16Z",
+     "status": "passed",
+     "stderr": "",
+     "stdout": "<stripped: command output, not read by the release gate>",
+     "timeout_s": 300,
+     "workflow_type": "demo_validation"
+    }
+   ],
+   "demo_name": "official_demo_right_arm",
+   "linked_job": null,
+   "notes": "Right-arm official Step 5 Demo passed in run 78fc71135473 after official dynamic zero and power-cycle verification. Gripper travel 0.967040 rad; all eight motors safely disabled; no COMM_LOST, faults, warnings, or abnormal temperatures.",
+   "operator": "Peng Cheng",
+   "record_id": "2ff5dd9c1ffe",
+   "record_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/arm_records/OAF26080401/demo_validation/20260805_025520_2ff5dd9c1ffe.json",
+   "record_type": "demo_validation",
+   "recorded_at": "2026-08-05T02:55:20Z",
+   "status": "passed",
+   "validation_scope": "right_arm"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "command": "openarm-can-demo --canport can0 --arm_side left_arm --enable-hold-ms 1500 --phase-hold-s 3.0 --gripper-open-target -1.0472 --gripper-close-target 0.0",
+   "command_runs": [],
+   "demo_name": "official_demo_left_arm",
+   "linked_job": null,
+   "notes": "Left arm official Demo passed after dynamic zero; gripper open/close validated; no COMM_LOST; motors disabled after cleanup.",
+   "operator": null,
+   "record_id": "7a56c394a761",
+   "record_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/arm_records/OAF26080401/demo_validation/20260804_101859_7a56c394a761.json",
+   "record_type": "demo_validation",
+   "recorded_at": "2026-08-04T10:18:59Z",
+   "status": "passed",
+   "validation_scope": "left_arm"
+  }
+ ],
+ "evidence_records": [
+  {
+   "arm_cn": "OAF26080401",
+   "captured_at": "2026-08-05T01:55:01Z",
+   "evidence_id": "2584abc5918f",
+   "evidence_type": "can_health_snapshot",
+   "interface": "can0",
+   "job_id": "42c54238ed8b",
+   "json_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/evidence/OAF26080401/can_health/20260805_015501_2584abc5918f.json",
+   "log_path": null,
+   "status": "passed"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "captured_at": "2026-08-04T11:11:46Z",
+   "evidence_id": "63f5ef724964",
+   "evidence_type": "can_health_snapshot",
+   "interface": "can0",
+   "job_id": "1114e68a5f6f",
+   "json_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/evidence/OAF26080401/can_health/20260804_111146_63f5ef724964.json",
+   "log_path": null,
+   "status": "passed"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "captured_at": "2026-08-04T10:43:26Z",
+   "evidence_id": "98b07c8bea53",
+   "evidence_type": "can_health_snapshot",
+   "interface": "can0",
+   "job_id": null,
+   "json_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/evidence/OAF26080401/can_health/20260804_104326_98b07c8bea53.json",
+   "log_path": null,
+   "status": "passed"
+  }
+ ],
+ "factory_reports": [
+  {
+   "created_at": "2026-08-05T03:50:03+00:00",
+   "html_path": "/home/ubuntu/Projects/OpenARM/artifacts/reports/OAF26080401_left_arm_20260804/OpenARM_Follower_Left_Arm_Factory_Test_Report_20260804.html",
+   "json_path": "/home/ubuntu/Projects/OpenARM/artifacts/reports/OAF26080401_left_arm_20260804/OpenARM_Follower_Left_Arm_Factory_Test_Report_20260804.json",
+   "pdf_path": "/home/ubuntu/Projects/OpenARM/artifacts/reports/OAF26080401_left_arm_20260804/OpenARM_Follower_Left_Arm_Factory_Test_Report_20260804.pdf",
+   "release_decision": "PASS",
+   "report_id": "OA-FOL-L-FACTORY-20260804-001",
+   "report_type": "formal_factory_acceptance_report",
+   "title": "OpenARM Follower Left Arm Factory Acceptance Report"
+  },
+  {
+   "created_at": "2026-08-05T03:26:06+00:00",
+   "html_path": "/home/ubuntu/Projects/OpenARM/artifacts/reports/OAF26080401_right_arm_20260805/OpenARM_Follower_Right_Arm_Factory_Test_Report_20260805.html",
+   "json_path": "/home/ubuntu/Projects/OpenARM/artifacts/reports/OAF26080401_right_arm_20260805/OpenARM_Follower_Right_Arm_Factory_Test_Report_20260805.json",
+   "pdf_path": "/home/ubuntu/Projects/OpenARM/artifacts/reports/OAF26080401_right_arm_20260805/OpenARM_Follower_Right_Arm_Factory_Test_Report_20260805.pdf",
+   "release_decision": "PASS",
+   "report_id": "OA-FOL-R-FACTORY-20260805-001",
+   "report_type": "formal_factory_acceptance_report",
+   "title": "OpenARM Follower Right Arm Factory Acceptance Report"
+  },
+  {
+   "generated_at": "2026-08-04T10:20:28Z",
+   "html_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/reports/arm/OAF26080401/safety_test_report/20260804_102028_9564cfad4455.html",
+   "json_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/reports/arm/OAF26080401/safety_test_report/20260804_102028_9564cfad4455.json",
+   "pdf_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/reports/arm/OAF26080401/safety_test_report/20260804_102028_9564cfad4455.pdf",
+   "report_id": "9564cfad4455",
+   "report_type": "safety_test_report",
+   "title": "Safety Test Report"
+  },
+  {
+   "generated_at": "2026-08-04T10:20:28Z",
+   "html_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/reports/arm/OAF26080401/zero_calibration_report/20260804_102028_af5130a5db08.html",
+   "json_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/reports/arm/OAF26080401/zero_calibration_report/20260804_102028_af5130a5db08.json",
+   "pdf_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/reports/arm/OAF26080401/zero_calibration_report/20260804_102028_af5130a5db08.pdf",
+   "report_id": "af5130a5db08",
+   "report_type": "zero_calibration_report",
+   "title": "Zero Calibration Report"
+  }
+ ],
+ "joint_bindings": {},
+ "left_arm_installed": true,
+ "linked_jobs": [
+  {
+   "artifact_dir": "{JOBS}/20260805_015412_42c54238ed8b",
+   "job_id": "42c54238ed8b",
+   "job_type": "arm_acceptance",
+   "linked_at": "2026-08-05T01:54:40Z",
+   "status": "passed"
+  },
+  {
+   "artifact_dir": "{JOBS}/20260804_095133_231a74aa68a0",
+   "job_id": "231a74aa68a0",
+   "job_type": "arm_acceptance",
+   "linked_at": "2026-08-04T09:53:25Z",
+   "status": "passed"
+  }
+ ],
+ "notes": "2026-08-04 current test unit. Right arm test is on hold pending R-J5 COMM_LOST/MIT displacement issue resolution; left arm test to start next.",
+ "qc_status": "zero_calibrated",
+ "right_arm_installed": true,
+ "updated_at": "2026-08-05T03:50:04Z",
+ "workflow_history": [
+  {
+   "arm_cn": "OAF26080401",
+   "command": "openarm-can-demo --canport can0 --arm_side right_arm --enable-hold-ms 1500 --phase-hold-s 3.0 --gripper-open-target -1.0472 --gripper-close-target 0.0",
+   "command_runs": [
+    {
+     "arm_cn": "OAF26080401",
+     "available": true,
+     "command": [
+      "openarm-can-demo",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--enable-hold-ms",
+      "1500",
+      "--phase-hold-s",
+      "3.0",
+      "--gripper-open-target",
+      "-1.0472",
+      "--gripper-close-target",
+      "0.0"
+     ],
+     "confirmations": {
+      "comm_check_passed": true,
+      "estop_ready": true,
+      "low_speed": true,
+      "workspace_clear": true,
+      "zero_calibrated": true
+     },
+     "demo_summary": {
+      "blocking_items": [],
+      "close_final": -0.041772,
+      "disabled_count": 8,
+      "enabled_count": 8,
+      "gripper_travel_rad": 0.966659,
+      "gripper_travel_threshold_rad": 0.8,
+      "id16_special_frame_count": 0,
+      "keepalive_frames": 2160,
+      "open_observed_at_close_start": -1.008431,
+      "open_start": -0.041772,
+      "open_target": -1.0472,
+      "passed": true,
+      "warning_items": []
+     },
+     "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+     "execute": true,
+     "finished_at": "2026-08-05T02:57:34Z",
+     "kind": "official_demo_validation",
+     "missing_confirmations": [],
+     "resolved_command": [
+      "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--enable-hold-ms",
+      "1500",
+      "--phase-hold-s",
+      "3.0",
+      "--gripper-open-target",
+      "-1.0472",
+      "--gripper-close-target",
+      "0.0"
+     ],
+     "returncode": 0,
+     "run_id": "c63226f87895",
+     "started_at": "2026-08-05T02:57:12Z",
+     "status": "passed",
+     "stderr": "",
+     "stdout": "<stripped: command output, not read by the release gate>",
+     "timeout_s": 300,
+     "workflow_type": "demo_validation"
+    }
+   ],
+   "current_step_index": 5,
+   "demo_name": "official_demo_right_arm_observation_repeat",
+   "final_notes": "Supplemental right-arm gripper observation rerun passed in c63226f87895. This record supplements and does not replace formal Demo run 78fc71135473.",
+   "finished_at": "2026-08-05T02:58:03Z",
+   "linked_job": null,
+   "notes": "Supplemental operator-observation rerun requested after the formal right-arm Demo had already passed. Does not replace run 78fc71135473.",
+   "operator": "Peng Cheng",
+   "result_status": "passed",
+   "started_at": "2026-08-05T02:57:05Z",
+   "status": "completed",
+   "steps": [
+    {
+     "completed_at": "2026-08-05T02:57:06Z",
+     "id": "official_demo_prereq",
+     "instruction": "确认 Motor IDs、SocketCAN、motor-check、官方动态零位已完成。",
+     "label": "官方 Demo 前置条件复核",
+     "notes": "Formal right-arm Demo 78fc71135473 already passed; this workflow is supplemental observation only.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:57:06Z",
+     "id": "demo_safety_ready",
+     "instruction": "急停在手、工作区清空、知道快速断电方式；Demo 会 enable 并执行位置/力矩/夹爪动作。",
+     "label": "Demo 安全确认",
+     "notes": "Operator requested the rerun and is watching the gripper; workspace and emergency stop conditions remain confirmed.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:57:06Z",
+     "id": "official_demo_plan",
+     "instruction": "确认 openarm-can-demo 或按当前单臂配置构建后的官方 Demo 命令。",
+     "label": "生成并核对 Demo 命令",
+     "notes": "Repeat command confirmed with gripper open target -1.0472 rad and close target 0.0 rad.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:58:03Z",
+     "id": "official_demo_run",
+     "instruction": "通过受控按钮执行官方 Demo，记录 stdout/stderr、返回码和异常现象。",
+     "label": "运行官方 Step 5 Demo",
+     "notes": "Supplemental observation Demo c63226f87895 passed: observed gripper travel 0.966659 rad, 8/8 enabled and disabled, no warnings or blocking items.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:58:03Z",
+     "id": "result_review",
+     "instruction": "核对 enable、位置控制、力矩控制、夹爪、状态监测和安全失能是否完成。",
+     "label": "Demo 结果复核与结论",
+     "notes": "Post-repeat read-only verification passed: all eight joints DISABLED with status 0x00; temperatures 27-32 C; no faults.",
+     "status": "completed"
+    }
+   ],
+   "validation_scope": "right_arm_gripper_observation_repeat",
+   "workflow_id": "1feadfa2e145",
+   "workflow_type": "demo_validation"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "command": "openarm-can-demo --canport can0 --arm_side right_arm --enable-hold-ms 1500 --phase-hold-s 3.0 --gripper-open-target -1.0472 --gripper-close-target 0.0",
+   "command_runs": [
+    {
+     "arm_cn": "OAF26080401",
+     "available": true,
+     "command": [
+      "openarm-can-demo",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--enable-hold-ms",
+      "1500",
+      "--phase-hold-s",
+      "3.0",
+      "--gripper-open-target",
+      "-1.0472",
+      "--gripper-close-target",
+      "0.0"
+     ],
+     "confirmations": {
+      "comm_check_passed": true,
+      "estop_ready": true,
+      "low_speed": true,
+      "workspace_clear": true,
+      "zero_calibrated": true
+     },
+     "demo_summary": {
+      "blocking_items": [],
+      "close_final": -0.041772,
+      "disabled_count": 8,
+      "enabled_count": 8,
+      "gripper_travel_rad": 0.96704,
+      "gripper_travel_threshold_rad": 0.8,
+      "id16_special_frame_count": 0,
+      "keepalive_frames": 2152,
+      "open_observed_at_close_start": -1.008812,
+      "open_start": -0.000191,
+      "open_target": -1.0472,
+      "passed": true,
+      "warning_items": []
+     },
+     "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+     "execute": true,
+     "finished_at": "2026-08-05T02:54:38Z",
+     "kind": "official_demo_validation",
+     "missing_confirmations": [],
+     "resolved_command": [
+      "/home/ubuntu/Projects/OpenARM/tools/openarm-can-demo",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--enable-hold-ms",
+      "1500",
+      "--phase-hold-s",
+      "3.0",
+      "--gripper-open-target",
+      "-1.0472",
+      "--gripper-close-target",
+      "0.0"
+     ],
+     "returncode": 0,
+     "run_id": "78fc71135473",
+     "started_at": "2026-08-05T02:54:16Z",
+     "status": "passed",
+     "stderr": "",
+     "stdout": "<stripped: command output, not read by the release gate>",
+     "timeout_s": 300,
+     "workflow_type": "demo_validation"
+    }
+   ],
+   "current_step_index": 5,
+   "demo_name": "official_demo_right_arm",
+   "final_notes": "Right-arm official Step 5 Demo passed in run 78fc71135473 after official dynamic zero and power-cycle verification. Gripper travel 0.967040 rad; all eight motors safely disabled; no COMM_LOST, faults, warnings, or abnormal temperatures.",
+   "finished_at": "2026-08-05T02:55:20Z",
+   "linked_job": null,
+   "notes": "Right-arm Demo after official dynamic zero, post-zero communication check, and power-cycle persistence verification.",
+   "operator": "Peng Cheng",
+   "result_status": "passed",
+   "started_at": "2026-08-05T02:51:05Z",
+   "status": "completed",
+   "steps": [
+    {
+     "completed_at": "2026-08-05T02:51:21Z",
+     "id": "official_demo_prereq",
+     "instruction": "确认 Motor IDs、SocketCAN、motor-check、官方动态零位已完成。",
+     "label": "官方 Demo 前置条件复核",
+     "notes": "Motor IDs, SocketCAN 1 Mbps, official motor-check, official dynamic zero, and power-cycle verification all passed for the right arm.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:54:10Z",
+     "id": "demo_safety_ready",
+     "instruction": "急停在手、工作区清空、知道快速断电方式；Demo 会 enable 并执行位置/力矩/夹爪动作。",
+     "label": "Demo 安全确认",
+     "notes": "Operator reconfirmed power-on, clear workspace, and readiness to start Demo. Read-only gate passed 8/8 with all joints DISABLED and TIMEOUT=5000.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:54:10Z",
+     "id": "official_demo_plan",
+     "instruction": "确认 openarm-can-demo 或按当前单臂配置构建后的官方 Demo 命令。",
+     "label": "生成并核对 Demo 命令",
+     "notes": "Command confirmed: openarm-can-demo --canport can0 --arm_side right_arm --enable-hold-ms 1500 --phase-hold-s 3.0 --gripper-open-target -1.0472 --gripper-close-target 0.0",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:55:08Z",
+     "id": "official_demo_run",
+     "instruction": "通过受控按钮执行官方 Demo，记录 stdout/stderr、返回码和异常现象。",
+     "label": "运行官方 Step 5 Demo",
+     "notes": "Official right-arm Demo run 78fc71135473 passed: 8/8 enabled, 2152 keepalive frames, gripper travel 0.967040 rad, 8/8 disabled, no blocking or warning items.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:55:14Z",
+     "id": "result_review",
+     "instruction": "核对 enable、位置控制、力矩控制、夹爪、状态监测和安全失能是否完成。",
+     "label": "Demo 结果复核与结论",
+     "notes": "Post-Demo read-only verification passed: R-J1 through R-J8 DISABLED with status 0x00, TIMEOUT=5000, temperatures 27-32 C, CAN ERROR-ACTIVE 1 Mbps with zero bus errors and no TX backlog.",
+     "status": "completed"
+    }
+   ],
+   "validation_scope": "right_arm",
+   "workflow_id": "6e02dd2d8780",
+   "workflow_type": "demo_validation"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "calibration_scope": "right_arm",
+   "command_runs": [
+    {
+     "arm_cn": "OAF26080401",
+     "available": true,
+     "command": [
+      "openarm-can-zero-position-calibration",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--max-bump-deg",
+      "90.0",
+      "--max-bump-time-s",
+      "20.0",
+      "--bump-step-deg",
+      "0.2",
+      "--bump-dt-s",
+      "0.005",
+      "--restore-initial-pose",
+      "--restore-max-deg",
+      "120.0",
+      "--skip-gripper-limit-search"
+     ],
+     "confirmations": {
+      "estop_ready": true,
+      "one_arm_only": true,
+      "power_stable": true,
+      "workspace_clear": true,
+      "zero_pose_confirmed": true
+     },
+     "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+     "execute": true,
+     "finished_at": "2026-08-05T02:43:50Z",
+     "kind": "official_zero_calibration",
+     "missing_confirmations": [],
+     "post_recovery": {
+      "attempted": true,
+      "canport": "can0",
+      "finished_at": "2026-08-05T02:43:52Z",
+      "has_blocking": false,
+      "profile_id": "openarm_right_arm_v1",
+      "results": [
+       {
+        "disable_ok": true,
+        "esc_id": 1,
+        "issues": [],
+        "joint_name": "R-J1",
+        "mst_id": 17,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 17,
+          "data": [
+           1,
+           127,
+           255,
+           127,
+           247,
+           255,
+           30,
+           27
+          ],
+          "data_hex": "017FFF7FF7FF1E1B",
+          "timestamp": 1785897830.7002757
+         },
+         "master_id": 17,
+         "motor_type": "DM8009",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 1,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 30.0,
+         "t_rotor": 27.0,
+         "torque": -0.013186813332140446,
+         "velocity": -0.010989011265337467
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 2,
+        "issues": [],
+        "joint_name": "R-J2",
+        "mst_id": 18,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 18,
+          "data": [
+           2,
+           127,
+           255,
+           127,
+           247,
+           254,
+           29,
+           27
+          ],
+          "data_hex": "027FFF7FF7FE1D1B",
+          "timestamp": 1785897830.9818625
+         },
+         "master_id": 18,
+         "motor_type": "DM8009",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 2,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 29.0,
+         "t_rotor": 27.0,
+         "torque": -0.03956044092774391,
+         "velocity": -0.010989011265337467
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 3,
+        "issues": [],
+        "joint_name": "R-J3",
+        "mst_id": 19,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 19,
+          "data": [
+           3,
+           127,
+           255,
+           127,
+           247,
+           253,
+           31,
+           28
+          ],
+          "data_hex": "037FFF7FF7FD1F1C",
+          "timestamp": 1785897831.2630222
+         },
+         "master_id": 19,
+         "motor_type": "DM4340",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 3,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 28.0,
+         "torque": -0.03418803587555885,
+         "velocity": -0.0019536020699888468
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 4,
+        "issues": [],
+        "joint_name": "R-J4",
+        "mst_id": 20,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 20,
+          "data": [
+           4,
+           127,
+           255,
+           127,
+           247,
+           251,
+           31,
+           54
+          ],
+          "data_hex": "047FFF7FF7FB1F36",
+          "timestamp": 1785897831.5451832
+         },
+         "master_id": 20,
+         "motor_type": "DM4340",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 4,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 54.0,
+         "torque": -0.0615384615957737,
+         "velocity": -0.0019536020699888468
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 5,
+        "issues": [],
+        "joint_name": "R-J5",
+        "mst_id": 21,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 21,
+          "data": [
+           5,
+           127,
+           255,
+           127,
+           247,
+           254,
+           31,
+           28
+          ],
+          "data_hex": "057FFF7FF7FE1F1C",
+          "timestamp": 1785897831.8277757
+         },
+         "master_id": 21,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 5,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 28.0,
+         "torque": -0.007326007355004549,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 6,
+        "issues": [],
+        "joint_name": "R-J6",
+        "mst_id": 22,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 22,
+          "data": [
+           6,
+           128,
+           0,
+           127,
+           247,
+           255,
+           31,
+           29
+          ],
+          "data_hex": "0680007FF7FF1F1D",
+          "timestamp": 1785897832.1102223
+         },
+         "master_id": 22,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": 0.00019073777366429567,
+         "slave_id": 6,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 29.0,
+         "torque": -0.0024420025292783976,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 7,
+        "issues": [],
+        "joint_name": "R-J7",
+        "mst_id": 23,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 23,
+          "data": [
+           7,
+           130,
+           95,
+           127,
+           248,
+           3,
+           31,
+           29
+          ],
+          "data_hex": "07825F7FF8031F1D",
+          "timestamp": 1785897832.3924546
+         },
+         "master_id": 23,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": 0.2317463904619217,
+         "slave_id": 7,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 29.0,
+         "torque": 0.017094017937779427,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 8,
+        "issues": [],
+        "joint_name": "R-J8",
+        "mst_id": 24,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 24,
+          "data": [
+           8,
+           127,
+           255,
+           127,
+           248,
+           1,
+           30,
+           28
+          ],
+          "data_hex": "087FFF7FF8011E1C",
+          "timestamp": 1785897832.6741767
+         },
+         "master_id": 24,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 8,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 30.0,
+         "t_rotor": 28.0,
+         "torque": 0.007326007355004549,
+         "velocity": -0.007326007355004549
+        }
+       }
+      ],
+      "started_at": "2026-08-05T02:43:50Z",
+      "target_canid": null
+     },
+     "resolved_command": [
+      "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--max-bump-deg",
+      "90.0",
+      "--max-bump-time-s",
+      "20.0",
+      "--bump-step-deg",
+      "0.2",
+      "--bump-dt-s",
+      "0.005",
+      "--restore-initial-pose",
+      "--restore-max-deg",
+      "120.0",
+      "--skip-gripper-limit-search"
+     ],
+     "returncode": 0,
+     "run_id": "565fde8f570d",
+     "started_at": "2026-08-05T02:42:18Z",
+     "status": "passed",
+     "stderr": "",
+     "stdout": "<stripped: command output, not read by the release gate>",
+     "timeout_s": 240,
+     "workflow_type": "zero_calibration",
+     "zero_summary": {
+      "blocking_items": [],
+      "limit_search_failed": false,
+      "mechanical_stops": [
+       {
+        "joint": "J4",
+        "position_deg": -0.04,
+        "position_rad": -0.0008
+       },
+       {
+        "joint": "J6",
+        "position_deg": 46.16,
+        "position_rad": 0.8057
+       },
+       {
+        "joint": "J2",
+        "position_deg": -6.99,
+        "position_rad": -0.1221
+       },
+       {
+        "joint": "J1",
+        "position_deg": -76.24,
+        "position_rad": -1.3306
+       }
+      ],
+      "passed": true,
+      "restore_completed": true,
+      "warning_items": [],
+      "zero_write_refused": false,
+      "zero_written": true
+     }
+    },
+    {
+     "arm_cn": "OAF26080401",
+     "available": true,
+     "blocking_items": [
+      "limit_search_failed",
+      "zero_write_refused",
+      "zero_write_not_confirmed"
+     ],
+     "command": [
+      "openarm-can-zero-position-calibration",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--max-bump-deg",
+      "90.0",
+      "--max-bump-time-s",
+      "20.0",
+      "--bump-step-deg",
+      "0.2",
+      "--bump-dt-s",
+      "0.005",
+      "--restore-initial-pose",
+      "--restore-max-deg",
+      "120.0",
+      "--skip-gripper-limit-search"
+     ],
+     "confirmations": {
+      "estop_ready": true,
+      "one_arm_only": true,
+      "power_stable": true,
+      "workspace_clear": true,
+      "zero_pose_confirmed": true
+     },
+     "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+     "execute": true,
+     "finished_at": "2026-08-05T02:10:35Z",
+     "kind": "official_zero_calibration",
+     "missing_confirmations": [],
+     "post_recovery": {
+      "attempted": true,
+      "canport": "can0",
+      "finished_at": "2026-08-05T02:10:37Z",
+      "has_blocking": true,
+      "profile_id": "openarm_right_arm_v1",
+      "results": [
+       {
+        "disable_ok": true,
+        "esc_id": 1,
+        "issues": [
+         "disable_state_not_confirmed",
+         "post_recovery_motor_error"
+        ],
+        "joint_name": "R-J1",
+        "mst_id": 17,
+        "passed": false,
+        "status": {
+         "has_error": true,
+         "is_enabled": false,
+         "is_healthy": false,
+         "last_status_frame": {
+          "can_id": 17,
+          "data": [
+           209,
+           100,
+           212,
+           127,
+           247,
+           255,
+           30,
+           26
+          ],
+          "data_hex": "D164D47FF7FF1E1A",
+          "timestamp": 1785895835.5721066
+         },
+         "master_id": 17,
+         "motor_type": "DM8009",
+         "params": {},
+         "position": -2.653353214263916,
+         "slave_id": 1,
+         "status": "COMM_LOST",
+         "status_code": 13,
+         "t_mos": 30.0,
+         "t_rotor": 26.0,
+         "torque": -0.013186813332140446,
+         "velocity": -0.010989011265337467
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 2,
+        "issues": [
+         "disable_state_not_confirmed",
+         "post_recovery_motor_error"
+        ],
+        "joint_name": "R-J2",
+        "mst_id": 18,
+        "passed": false,
+        "status": {
+         "has_error": true,
+         "is_enabled": false,
+         "is_healthy": false,
+         "last_status_frame": {
+          "can_id": 18,
+          "data": [
+           210,
+           145,
+           62,
+           127,
+           247,
+           255,
+           29,
+           28
+          ],
+          "data_hex": "D2913E7FF7FF1D1C",
+          "timestamp": 1785895835.8533165
+         },
+         "master_id": 18,
+         "motor_type": "DM8009",
+         "params": {},
+         "position": 1.6840238571166992,
+         "slave_id": 2,
+         "status": "COMM_LOST",
+         "status_code": 13,
+         "t_mos": 29.0,
+         "t_rotor": 28.0,
+         "torque": -0.013186813332140446,
+         "velocity": -0.010989011265337467
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 3,
+        "issues": [],
+        "joint_name": "R-J3",
+        "mst_id": 19,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 19,
+          "data": [
+           3,
+           110,
+           118,
+           127,
+           247,
+           255,
+           31,
+           28
+          ],
+          "data_hex": "036E767FF7FF1F1C",
+          "timestamp": 1785895836.133971
+         },
+         "master_id": 19,
+         "motor_type": "DM4340",
+         "params": {},
+         "position": -1.7126344442367554,
+         "slave_id": 3,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 28.0,
+         "torque": -0.006837606895714998,
+         "velocity": -0.0019536020699888468
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 4,
+        "issues": [
+         "disable_state_not_confirmed",
+         "post_recovery_motor_error"
+        ],
+        "joint_name": "R-J4",
+        "mst_id": 20,
+        "passed": false,
+        "status": {
+         "has_error": true,
+         "is_enabled": false,
+         "is_healthy": false,
+         "last_status_frame": {
+          "can_id": 20,
+          "data": [
+           212,
+           138,
+           251,
+           127,
+           247,
+           252,
+           31,
+           30
+          ],
+          "data_hex": "D48AFB7FF7FC1F1E",
+          "timestamp": 1785895836.414694
+         },
+         "master_id": 20,
+         "motor_type": "DM4340",
+         "params": {},
+         "position": 1.0725184679031372,
+         "slave_id": 4,
+         "status": "COMM_LOST",
+         "status_code": 13,
+         "t_mos": 31.0,
+         "t_rotor": 30.0,
+         "torque": -0.047863248735666275,
+         "velocity": -0.0019536020699888468
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 5,
+        "issues": [],
+        "joint_name": "R-J5",
+        "mst_id": 21,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 21,
+          "data": [
+           5,
+           121,
+           129,
+           127,
+           248,
+           1,
+           33,
+           30
+          ],
+          "data_hex": "0579817FF801211E",
+          "timestamp": 1785895836.6956844
+         },
+         "master_id": 21,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": -0.6342030763626099,
+         "slave_id": 5,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 33.0,
+         "t_rotor": 30.0,
+         "torque": 0.007326007355004549,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 6,
+        "issues": [],
+        "joint_name": "R-J6",
+        "mst_id": 22,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 22,
+          "data": [
+           6,
+           119,
+           108,
+           127,
+           247,
+           254,
+           33,
+           30
+          ],
+          "data_hex": "06776C7FF7FE211E",
+          "timestamp": 1785895836.9764023
+         },
+         "master_id": 22,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": -0.8375295400619507,
+         "slave_id": 6,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 33.0,
+         "t_rotor": 30.0,
+         "torque": -0.007326007355004549,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 7,
+        "issues": [],
+        "joint_name": "R-J7",
+        "mst_id": 23,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 23,
+          "data": [
+           7,
+           151,
+           0,
+           127,
+           248,
+           2,
+           32,
+           30
+          ],
+          "data_hex": "0797007FF802201E",
+          "timestamp": 1785895837.257156
+         },
+         "master_id": 23,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": 2.246318817138672,
+         "slave_id": 7,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 32.0,
+         "t_rotor": 30.0,
+         "torque": 0.012210012413561344,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 8,
+        "issues": [],
+        "joint_name": "R-J8",
+        "mst_id": 24,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 24,
+          "data": [
+           8,
+           132,
+           109,
+           127,
+           248,
+           2,
+           31,
+           30
+          ],
+          "data_hex": "08846D7FF8021F1E",
+          "timestamp": 1785895837.538212
+         },
+         "master_id": 24,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": 0.43240252137184143,
+         "slave_id": 8,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 30.0,
+         "torque": 0.012210012413561344,
+         "velocity": -0.007326007355004549
+        }
+       }
+      ],
+      "started_at": "2026-08-05T02:10:35Z",
+      "target_canid": null
+     },
+     "resolved_command": [
+      "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--max-bump-deg",
+      "90.0",
+      "--max-bump-time-s",
+      "20.0",
+      "--bump-step-deg",
+      "0.2",
+      "--bump-dt-s",
+      "0.005",
+      "--restore-initial-pose",
+      "--restore-max-deg",
+      "120.0",
+      "--skip-gripper-limit-search"
+     ],
+     "returncode": 1,
+     "run_id": "8df667966f4d",
+     "started_at": "2026-08-05T02:09:27Z",
+     "status": "failed",
+     "stderr": "<stripped: command output, not read by the release gate>",
+     "stdout": "<stripped: command output, not read by the release gate>",
+     "timeout_s": 240,
+     "warnings": [
+      "restore_not_confirmed",
+      "post_recovery_not_disabled"
+     ],
+     "workflow_type": "zero_calibration",
+     "zero_summary": {
+      "blocking_items": [
+       "limit_search_failed",
+       "zero_write_refused",
+       "zero_write_not_confirmed"
+      ],
+      "limit_search_failed": true,
+      "mechanical_stops": [
+       {
+        "joint": "J4",
+        "position_deg": -0.44,
+        "position_rad": -0.0076
+       },
+       {
+        "joint": "J6",
+        "position_deg": 42.86,
+        "position_rad": 0.7481
+       }
+      ],
+      "passed": false,
+      "restore_completed": false,
+      "warning_items": [
+       "restore_not_confirmed"
+      ],
+      "zero_write_refused": true,
+      "zero_written": false
+     }
+    }
+   ],
+   "current_step_index": 6,
+   "final_notes": "Right-arm official dynamic zero passed in run 565fde8f570d; official post-zero communication verification passed 8/8; power-cycle persistence verification passed; no COMM_LOST; final state DISABLED.",
+   "finished_at": "2026-08-05T02:51:05Z",
+   "joints": [
+    "R-J1",
+    "R-J2",
+    "R-J3",
+    "R-J4",
+    "R-J5",
+    "R-J6",
+    "R-J7",
+    "R-J8"
+   ],
+   "linked_job": null,
+   "notes": "Right-arm official dynamic zero after split TIMEOUT standardization, power-cycle verification, static acceptance, no-motion readiness, and low-gain enable check.",
+   "operator": "Peng Cheng",
+   "result_status": "passed",
+   "started_at": "2026-08-05T02:08:17Z",
+   "status": "completed",
+   "steps": [
+    {
+     "completed_at": "2026-08-05T02:08:28Z",
+     "id": "official_prereq",
+     "instruction": "确认 Step 1 电机 ID、Step 2 SocketCAN、Step 3 motor-check 已完成。",
+     "label": "官方前置条件复核",
+     "notes": "Static acceptance, CAN health, no-motion readiness, and low-gain enable check passed.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:08:28Z",
+     "id": "pose_align",
+     "instruction": "断电或安全失能后，将单侧机械臂摆到官方零位姿态；夹爪按官方说明闭合为零位。",
+     "label": "人工摆到官方零位姿态",
+     "notes": "Operator instructed workstation to proceed with the official right-arm zero stage; current physical pose accepted.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:08:28Z",
+     "id": "safety_ready",
+     "instruction": "官方零位校准会自动移动机械臂；清空工作区，急停/断电手段保持在手边，只校准单侧手臂。",
+     "label": "动态校准安全确认",
+     "notes": "Workspace, estop/quick power-off, stable power, and right-arm-only conditions confirmed by operator progression.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:44:46Z",
+     "id": "official_zero_run",
+     "instruction": "通过受控按钮执行 openarm-can-zero-position-calibration，并保存命令输出和状态。",
+     "label": "运行官方动态零位命令",
+     "notes": "Official right-arm dynamic zero passed in run 565fde8f570d after J1-J8 TIMEOUT=5000. Zero written, restore reported complete, no COMM_LOST, post-recovery 8/8 DISABLED.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:47:33Z",
+     "id": "official_motor_check",
+     "instruction": "按官方 Step 4 的 Verify Motor Communication，对目标关节执行 openarm-can-motor-check。",
+     "label": "官方通信复核",
+     "notes": "Official motor-check passed sequentially for R-J1 through R-J8 with correct DM8009/DM4340/DM4310 mapping. Each joint used zero-torque keepalive, returned successfully, and was verified DISABLED afterward; no COMM_LOST.",
+     "status": "completed"
+    },
+    {
+     "completed_at": "2026-08-05T02:51:05Z",
+     "id": "power_cycle_verify",
+     "instruction": "断电重上电后重新扫描，确认 ID、波特率、零位和状态可重复。",
+     "label": "断电重上电复核",
+     "notes": "Power-cycle verification passed: R-J1 through R-J8 online, DISABLED, status 0x00, TIMEOUT=5000 persisted, position samples stable, CAN 1 Mbps ERROR-ACTIVE with zero bus errors.",
+     "status": "completed"
+    }
+   ],
+   "workflow_id": "b8744669f04a",
+   "workflow_type": "zero_calibration",
+   "zero_pose_name": "openarm_home"
+  }
+ ],
+ "zero_calibration_records": [
+  {
+   "arm_cn": "OAF26080401",
+   "calibration_scope": "right_arm",
+   "command_runs": [
+    {
+     "arm_cn": "OAF26080401",
+     "available": true,
+     "command": [
+      "openarm-can-zero-position-calibration",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--max-bump-deg",
+      "90.0",
+      "--max-bump-time-s",
+      "20.0",
+      "--bump-step-deg",
+      "0.2",
+      "--bump-dt-s",
+      "0.005",
+      "--restore-initial-pose",
+      "--restore-max-deg",
+      "120.0",
+      "--skip-gripper-limit-search"
+     ],
+     "confirmations": {
+      "estop_ready": true,
+      "one_arm_only": true,
+      "power_stable": true,
+      "workspace_clear": true,
+      "zero_pose_confirmed": true
+     },
+     "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+     "execute": true,
+     "finished_at": "2026-08-05T02:43:50Z",
+     "kind": "official_zero_calibration",
+     "missing_confirmations": [],
+     "post_recovery": {
+      "attempted": true,
+      "canport": "can0",
+      "finished_at": "2026-08-05T02:43:52Z",
+      "has_blocking": false,
+      "profile_id": "openarm_right_arm_v1",
+      "results": [
+       {
+        "disable_ok": true,
+        "esc_id": 1,
+        "issues": [],
+        "joint_name": "R-J1",
+        "mst_id": 17,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 17,
+          "data": [
+           1,
+           127,
+           255,
+           127,
+           247,
+           255,
+           30,
+           27
+          ],
+          "data_hex": "017FFF7FF7FF1E1B",
+          "timestamp": 1785897830.7002757
+         },
+         "master_id": 17,
+         "motor_type": "DM8009",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 1,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 30.0,
+         "t_rotor": 27.0,
+         "torque": -0.013186813332140446,
+         "velocity": -0.010989011265337467
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 2,
+        "issues": [],
+        "joint_name": "R-J2",
+        "mst_id": 18,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 18,
+          "data": [
+           2,
+           127,
+           255,
+           127,
+           247,
+           254,
+           29,
+           27
+          ],
+          "data_hex": "027FFF7FF7FE1D1B",
+          "timestamp": 1785897830.9818625
+         },
+         "master_id": 18,
+         "motor_type": "DM8009",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 2,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 29.0,
+         "t_rotor": 27.0,
+         "torque": -0.03956044092774391,
+         "velocity": -0.010989011265337467
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 3,
+        "issues": [],
+        "joint_name": "R-J3",
+        "mst_id": 19,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 19,
+          "data": [
+           3,
+           127,
+           255,
+           127,
+           247,
+           253,
+           31,
+           28
+          ],
+          "data_hex": "037FFF7FF7FD1F1C",
+          "timestamp": 1785897831.2630222
+         },
+         "master_id": 19,
+         "motor_type": "DM4340",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 3,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 28.0,
+         "torque": -0.03418803587555885,
+         "velocity": -0.0019536020699888468
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 4,
+        "issues": [],
+        "joint_name": "R-J4",
+        "mst_id": 20,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 20,
+          "data": [
+           4,
+           127,
+           255,
+           127,
+           247,
+           251,
+           31,
+           54
+          ],
+          "data_hex": "047FFF7FF7FB1F36",
+          "timestamp": 1785897831.5451832
+         },
+         "master_id": 20,
+         "motor_type": "DM4340",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 4,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 54.0,
+         "torque": -0.0615384615957737,
+         "velocity": -0.0019536020699888468
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 5,
+        "issues": [],
+        "joint_name": "R-J5",
+        "mst_id": 21,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 21,
+          "data": [
+           5,
+           127,
+           255,
+           127,
+           247,
+           254,
+           31,
+           28
+          ],
+          "data_hex": "057FFF7FF7FE1F1C",
+          "timestamp": 1785897831.8277757
+         },
+         "master_id": 21,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 5,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 28.0,
+         "torque": -0.007326007355004549,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 6,
+        "issues": [],
+        "joint_name": "R-J6",
+        "mst_id": 22,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 22,
+          "data": [
+           6,
+           128,
+           0,
+           127,
+           247,
+           255,
+           31,
+           29
+          ],
+          "data_hex": "0680007FF7FF1F1D",
+          "timestamp": 1785897832.1102223
+         },
+         "master_id": 22,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": 0.00019073777366429567,
+         "slave_id": 6,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 29.0,
+         "torque": -0.0024420025292783976,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 7,
+        "issues": [],
+        "joint_name": "R-J7",
+        "mst_id": 23,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 23,
+          "data": [
+           7,
+           130,
+           95,
+           127,
+           248,
+           3,
+           31,
+           29
+          ],
+          "data_hex": "07825F7FF8031F1D",
+          "timestamp": 1785897832.3924546
+         },
+         "master_id": 23,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": 0.2317463904619217,
+         "slave_id": 7,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 29.0,
+         "torque": 0.017094017937779427,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 8,
+        "issues": [],
+        "joint_name": "R-J8",
+        "mst_id": 24,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 24,
+          "data": [
+           8,
+           127,
+           255,
+           127,
+           248,
+           1,
+           30,
+           28
+          ],
+          "data_hex": "087FFF7FF8011E1C",
+          "timestamp": 1785897832.6741767
+         },
+         "master_id": 24,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": -0.00019073777366429567,
+         "slave_id": 8,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 30.0,
+         "t_rotor": 28.0,
+         "torque": 0.007326007355004549,
+         "velocity": -0.007326007355004549
+        }
+       }
+      ],
+      "started_at": "2026-08-05T02:43:50Z",
+      "target_canid": null
+     },
+     "resolved_command": [
+      "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--max-bump-deg",
+      "90.0",
+      "--max-bump-time-s",
+      "20.0",
+      "--bump-step-deg",
+      "0.2",
+      "--bump-dt-s",
+      "0.005",
+      "--restore-initial-pose",
+      "--restore-max-deg",
+      "120.0",
+      "--skip-gripper-limit-search"
+     ],
+     "returncode": 0,
+     "run_id": "565fde8f570d",
+     "started_at": "2026-08-05T02:42:18Z",
+     "status": "passed",
+     "stderr": "",
+     "stdout": "<stripped: command output, not read by the release gate>",
+     "timeout_s": 240,
+     "workflow_type": "zero_calibration",
+     "zero_summary": {
+      "blocking_items": [],
+      "limit_search_failed": false,
+      "mechanical_stops": [
+       {
+        "joint": "J4",
+        "position_deg": -0.04,
+        "position_rad": -0.0008
+       },
+       {
+        "joint": "J6",
+        "position_deg": 46.16,
+        "position_rad": 0.8057
+       },
+       {
+        "joint": "J2",
+        "position_deg": -6.99,
+        "position_rad": -0.1221
+       },
+       {
+        "joint": "J1",
+        "position_deg": -76.24,
+        "position_rad": -1.3306
+       }
+      ],
+      "passed": true,
+      "restore_completed": true,
+      "warning_items": [],
+      "zero_write_refused": false,
+      "zero_written": true
+     }
+    },
+    {
+     "arm_cn": "OAF26080401",
+     "available": true,
+     "blocking_items": [
+      "limit_search_failed",
+      "zero_write_refused",
+      "zero_write_not_confirmed"
+     ],
+     "command": [
+      "openarm-can-zero-position-calibration",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--max-bump-deg",
+      "90.0",
+      "--max-bump-time-s",
+      "20.0",
+      "--bump-step-deg",
+      "0.2",
+      "--bump-dt-s",
+      "0.005",
+      "--restore-initial-pose",
+      "--restore-max-deg",
+      "120.0",
+      "--skip-gripper-limit-search"
+     ],
+     "confirmations": {
+      "estop_ready": true,
+      "one_arm_only": true,
+      "power_stable": true,
+      "workspace_clear": true,
+      "zero_pose_confirmed": true
+     },
+     "executable_path": "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+     "execute": true,
+     "finished_at": "2026-08-05T02:10:35Z",
+     "kind": "official_zero_calibration",
+     "missing_confirmations": [],
+     "post_recovery": {
+      "attempted": true,
+      "canport": "can0",
+      "finished_at": "2026-08-05T02:10:37Z",
+      "has_blocking": true,
+      "profile_id": "openarm_right_arm_v1",
+      "results": [
+       {
+        "disable_ok": true,
+        "esc_id": 1,
+        "issues": [
+         "disable_state_not_confirmed",
+         "post_recovery_motor_error"
+        ],
+        "joint_name": "R-J1",
+        "mst_id": 17,
+        "passed": false,
+        "status": {
+         "has_error": true,
+         "is_enabled": false,
+         "is_healthy": false,
+         "last_status_frame": {
+          "can_id": 17,
+          "data": [
+           209,
+           100,
+           212,
+           127,
+           247,
+           255,
+           30,
+           26
+          ],
+          "data_hex": "D164D47FF7FF1E1A",
+          "timestamp": 1785895835.5721066
+         },
+         "master_id": 17,
+         "motor_type": "DM8009",
+         "params": {},
+         "position": -2.653353214263916,
+         "slave_id": 1,
+         "status": "COMM_LOST",
+         "status_code": 13,
+         "t_mos": 30.0,
+         "t_rotor": 26.0,
+         "torque": -0.013186813332140446,
+         "velocity": -0.010989011265337467
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 2,
+        "issues": [
+         "disable_state_not_confirmed",
+         "post_recovery_motor_error"
+        ],
+        "joint_name": "R-J2",
+        "mst_id": 18,
+        "passed": false,
+        "status": {
+         "has_error": true,
+         "is_enabled": false,
+         "is_healthy": false,
+         "last_status_frame": {
+          "can_id": 18,
+          "data": [
+           210,
+           145,
+           62,
+           127,
+           247,
+           255,
+           29,
+           28
+          ],
+          "data_hex": "D2913E7FF7FF1D1C",
+          "timestamp": 1785895835.8533165
+         },
+         "master_id": 18,
+         "motor_type": "DM8009",
+         "params": {},
+         "position": 1.6840238571166992,
+         "slave_id": 2,
+         "status": "COMM_LOST",
+         "status_code": 13,
+         "t_mos": 29.0,
+         "t_rotor": 28.0,
+         "torque": -0.013186813332140446,
+         "velocity": -0.010989011265337467
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 3,
+        "issues": [],
+        "joint_name": "R-J3",
+        "mst_id": 19,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 19,
+          "data": [
+           3,
+           110,
+           118,
+           127,
+           247,
+           255,
+           31,
+           28
+          ],
+          "data_hex": "036E767FF7FF1F1C",
+          "timestamp": 1785895836.133971
+         },
+         "master_id": 19,
+         "motor_type": "DM4340",
+         "params": {},
+         "position": -1.7126344442367554,
+         "slave_id": 3,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 28.0,
+         "torque": -0.006837606895714998,
+         "velocity": -0.0019536020699888468
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 4,
+        "issues": [
+         "disable_state_not_confirmed",
+         "post_recovery_motor_error"
+        ],
+        "joint_name": "R-J4",
+        "mst_id": 20,
+        "passed": false,
+        "status": {
+         "has_error": true,
+         "is_enabled": false,
+         "is_healthy": false,
+         "last_status_frame": {
+          "can_id": 20,
+          "data": [
+           212,
+           138,
+           251,
+           127,
+           247,
+           252,
+           31,
+           30
+          ],
+          "data_hex": "D48AFB7FF7FC1F1E",
+          "timestamp": 1785895836.414694
+         },
+         "master_id": 20,
+         "motor_type": "DM4340",
+         "params": {},
+         "position": 1.0725184679031372,
+         "slave_id": 4,
+         "status": "COMM_LOST",
+         "status_code": 13,
+         "t_mos": 31.0,
+         "t_rotor": 30.0,
+         "torque": -0.047863248735666275,
+         "velocity": -0.0019536020699888468
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 5,
+        "issues": [],
+        "joint_name": "R-J5",
+        "mst_id": 21,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 21,
+          "data": [
+           5,
+           121,
+           129,
+           127,
+           248,
+           1,
+           33,
+           30
+          ],
+          "data_hex": "0579817FF801211E",
+          "timestamp": 1785895836.6956844
+         },
+         "master_id": 21,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": -0.6342030763626099,
+         "slave_id": 5,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 33.0,
+         "t_rotor": 30.0,
+         "torque": 0.007326007355004549,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 6,
+        "issues": [],
+        "joint_name": "R-J6",
+        "mst_id": 22,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 22,
+          "data": [
+           6,
+           119,
+           108,
+           127,
+           247,
+           254,
+           33,
+           30
+          ],
+          "data_hex": "06776C7FF7FE211E",
+          "timestamp": 1785895836.9764023
+         },
+         "master_id": 22,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": -0.8375295400619507,
+         "slave_id": 6,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 33.0,
+         "t_rotor": 30.0,
+         "torque": -0.007326007355004549,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 7,
+        "issues": [],
+        "joint_name": "R-J7",
+        "mst_id": 23,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 23,
+          "data": [
+           7,
+           151,
+           0,
+           127,
+           248,
+           2,
+           32,
+           30
+          ],
+          "data_hex": "0797007FF802201E",
+          "timestamp": 1785895837.257156
+         },
+         "master_id": 23,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": 2.246318817138672,
+         "slave_id": 7,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 32.0,
+         "t_rotor": 30.0,
+         "torque": 0.012210012413561344,
+         "velocity": -0.007326007355004549
+        }
+       },
+       {
+        "disable_ok": true,
+        "esc_id": 8,
+        "issues": [],
+        "joint_name": "R-J8",
+        "mst_id": 24,
+        "passed": true,
+        "status": {
+         "has_error": false,
+         "is_enabled": false,
+         "is_healthy": true,
+         "last_status_frame": {
+          "can_id": 24,
+          "data": [
+           8,
+           132,
+           109,
+           127,
+           248,
+           2,
+           31,
+           30
+          ],
+          "data_hex": "08846D7FF8021F1E",
+          "timestamp": 1785895837.538212
+         },
+         "master_id": 24,
+         "motor_type": "DM4310",
+         "params": {},
+         "position": 0.43240252137184143,
+         "slave_id": 8,
+         "status": "DISABLED",
+         "status_code": 0,
+         "t_mos": 31.0,
+         "t_rotor": 30.0,
+         "torque": 0.012210012413561344,
+         "velocity": -0.007326007355004549
+        }
+       }
+      ],
+      "started_at": "2026-08-05T02:10:35Z",
+      "target_canid": null
+     },
+     "resolved_command": [
+      "/home/ubuntu/Projects/OpenARM/tools/openarm-can-zero-position-calibration",
+      "--canport",
+      "can0",
+      "--arm_side",
+      "right_arm",
+      "--max-bump-deg",
+      "90.0",
+      "--max-bump-time-s",
+      "20.0",
+      "--bump-step-deg",
+      "0.2",
+      "--bump-dt-s",
+      "0.005",
+      "--restore-initial-pose",
+      "--restore-max-deg",
+      "120.0",
+      "--skip-gripper-limit-search"
+     ],
+     "returncode": 1,
+     "run_id": "8df667966f4d",
+     "started_at": "2026-08-05T02:09:27Z",
+     "status": "failed",
+     "stderr": "<stripped: command output, not read by the release gate>",
+     "stdout": "<stripped: command output, not read by the release gate>",
+     "timeout_s": 240,
+     "warnings": [
+      "restore_not_confirmed",
+      "post_recovery_not_disabled"
+     ],
+     "workflow_type": "zero_calibration",
+     "zero_summary": {
+      "blocking_items": [
+       "limit_search_failed",
+       "zero_write_refused",
+       "zero_write_not_confirmed"
+      ],
+      "limit_search_failed": true,
+      "mechanical_stops": [
+       {
+        "joint": "J4",
+        "position_deg": -0.44,
+        "position_rad": -0.0076
+       },
+       {
+        "joint": "J6",
+        "position_deg": 42.86,
+        "position_rad": 0.7481
+       }
+      ],
+      "passed": false,
+      "restore_completed": false,
+      "warning_items": [
+       "restore_not_confirmed"
+      ],
+      "zero_write_refused": true,
+      "zero_written": false
+     }
+    }
+   ],
+   "joint_results": [],
+   "joints": [
+    "R-J1",
+    "R-J2",
+    "R-J3",
+    "R-J4",
+    "R-J5",
+    "R-J6",
+    "R-J7",
+    "R-J8"
+   ],
+   "linked_job": null,
+   "method": "manual_record",
+   "notes": "Right-arm official dynamic zero passed in run 565fde8f570d; official post-zero communication verification passed 8/8; power-cycle persistence verification passed; no COMM_LOST; final state DISABLED.",
+   "operator": "Peng Cheng",
+   "precheck_summary": {},
+   "record_id": "f4872efb8a81",
+   "record_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/arm_records/OAF26080401/zero_calibration/20260805_025105_f4872efb8a81.json",
+   "record_type": "zero_calibration",
+   "recorded_at": "2026-08-05T02:51:05Z",
+   "status": "passed",
+   "zero_pose_name": "openarm_home"
+  },
+  {
+   "arm_cn": "OAF26080401",
+   "calibration_scope": "left_arm",
+   "command_runs": [],
+   "joint_results": [],
+   "joints": [
+    "L-J1",
+    "L-J2",
+    "L-J3",
+    "L-J4",
+    "L-J5",
+    "L-J6",
+    "L-J7",
+    "L-J8"
+   ],
+   "linked_job": null,
+   "method": "manual_record",
+   "notes": "Left arm official dynamic zero passed after J4310 TIMEOUT=5000 and workstation keepalive/active mit_control_one fixes; gripper limit search skipped; initial pose restored.",
+   "operator": null,
+   "precheck_summary": {},
+   "record_id": "acdec664af0e",
+   "record_path": "/home/ubuntu/Projects/OpenARM/artifacts/factory/arm_records/OAF26080401/zero_calibration/20260804_101705_acdec664af0e.json",
+   "record_type": "zero_calibration",
+   "recorded_at": "2026-08-04T10:17:05Z",
+   "status": "passed",
+   "zero_pose_name": "openarm_home"
+  }
+ ]
+}

@@ -169,6 +169,7 @@ def bind_arm_identity():
             left_arm_installed=bool(data.get("left_arm_installed", True)),
             right_arm_installed=bool(data.get("right_arm_installed", True)),
             notes=data.get("notes"),
+            product_version=data.get("product_version"),
         )
     )
 

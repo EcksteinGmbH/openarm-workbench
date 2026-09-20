@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenARM 机械臂测试工作台</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=20260918-advanced-sections">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=20260920-problem-modal">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body data-primary-flow="connectTab">
@@ -1320,6 +1320,18 @@
         </div>
     </div>
 
+    <div class="modal hidden" id="problemModal">
+        <div class="modal-card problem-modal-card">
+            <div class="smw-problem-kicker">需要先处理</div>
+            <h3 id="problemModalTitle"></h3>
+            <div id="problemModalBody" class="problem-modal-body"></div>
+            <div class="button-row">
+                <button class="btn btn-secondary" id="problemModalCloseBtn" type="button">关闭</button>
+                <button class="btn btn-primary" id="problemModalRetryBtn" type="button">我已处理，重试</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal hidden" id="smwInspectModal">
         <div class="modal-card smw-inspect-card">
             <header class="smw-inspect-head">
@@ -1336,6 +1348,6 @@
         </div>
     </div>
 
-    <script type="module" src="{{ url_for('static', filename='js/main.js') }}?v=20260918-rail-fix"></script>
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}?v=20260920-problem-modal"></script>
 </body>
 </html>

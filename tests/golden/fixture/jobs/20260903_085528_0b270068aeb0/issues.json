@@ -1,0 +1,132 @@
+{
+ "issues": [
+  {
+   "blocking": false,
+   "code": "timeout_mismatch",
+   "detected_value": 0,
+   "expected_value": 5000,
+   "message": "检测到未分类问题",
+   "recommended_action": "查看详细上下文并人工确认",
+   "scope": "L-J1",
+   "severity": "info",
+   "title": "timeout_mismatch"
+  },
+  {
+   "blocking": false,
+   "code": "timeout_mismatch",
+   "detected_value": 0,
+   "expected_value": 5000,
+   "message": "检测到未分类问题",
+   "recommended_action": "查看详细上下文并人工确认",
+   "scope": "L-J2",
+   "severity": "info",
+   "title": "timeout_mismatch"
+  },
+  {
+   "blocking": false,
+   "code": "timeout_mismatch",
+   "detected_value": 0,
+   "expected_value": 5000,
+   "message": "检测到未分类问题",
+   "recommended_action": "查看详细上下文并人工确认",
+   "scope": "L-J3",
+   "severity": "info",
+   "title": "timeout_mismatch"
+  },
+  {
+   "blocking": false,
+   "code": "timeout_mismatch",
+   "detected_value": 0,
+   "expected_value": 5000,
+   "message": "检测到未分类问题",
+   "recommended_action": "查看详细上下文并人工确认",
+   "scope": "L-J4",
+   "severity": "info",
+   "title": "timeout_mismatch"
+  },
+  {
+   "blocking": false,
+   "code": "timeout_mismatch",
+   "detected_value": 0,
+   "expected_value": 5000,
+   "message": "检测到未分类问题",
+   "recommended_action": "查看详细上下文并人工确认",
+   "scope": "L-J5",
+   "severity": "info",
+   "title": "timeout_mismatch"
+  },
+  {
+   "blocking": false,
+   "code": "timeout_mismatch",
+   "detected_value": 0,
+   "expected_value": 5000,
+   "message": "检测到未分类问题",
+   "recommended_action": "查看详细上下文并人工确认",
+   "scope": "L-J6",
+   "severity": "info",
+   "title": "timeout_mismatch"
+  },
+  {
+   "blocking": false,
+   "code": "timeout_mismatch",
+   "detected_value": 0,
+   "expected_value": 5000,
+   "message": "检测到未分类问题",
+   "recommended_action": "查看详细上下文并人工确认",
+   "scope": "L-J7",
+   "severity": "info",
+   "title": "timeout_mismatch"
+  },
+  {
+   "blocking": false,
+   "code": "timeout_mismatch",
+   "detected_value": 0,
+   "expected_value": 5000,
+   "message": "检测到未分类问题",
+   "recommended_action": "查看详细上下文并人工确认",
+   "scope": "L-J8",
+   "severity": "info",
+   "title": "timeout_mismatch"
+  }
+ ],
+ "playbooks": [
+  {
+   "applies_to": [
+    "J7",
+    "J8",
+    "Gripper"
+   ],
+   "id": "gripper_non_monotonic_response",
+   "linked_issue_codes": [
+    "position_response_non_monotonic",
+    "oscillation_without_fault"
+   ],
+   "recommended_tests": [
+    "执行低速单调扫角测试，记录给定位置与反馈位置曲线，确认是否存在两处以上反向跳变",
+    "对同型号正常电机做同样扫角，比较反馈曲线是否单调",
+    "记录 enable -> MIT -> disable 期间的 candump，确认控制帧正常且无 fault 上报",
+    "在空载与负载两种条件下重复测试；若问题均复现，优先怀疑电机内部位置反馈链路"
+   ],
+   "service_recommendation": "若换线、换夹爪、空载测试后异常仍跟随电机，建议更换该电机。",
+   "title": "夹爪位置响应异常 / 无故障码摆动",
+   "when_to_use": [
+    "位置值可下发，但反馈角度随夹爪开合不单调",
+    "无显式 fault code，状态位仍为 0/1",
+    "空载和带夹爪负载都能复现",
+    "更换线束或对调接线后，问题仍跟随同一颗电机"
+   ]
+  }
+ ],
+ "severity_counts": {
+  "critical": 0,
+  "info": 8,
+  "warning": 0
+ },
+ "summary": {
+  "critical": 0,
+  "has_blocking": false,
+  "info": 8,
+  "total": 8,
+  "warning": 0
+ }
+}

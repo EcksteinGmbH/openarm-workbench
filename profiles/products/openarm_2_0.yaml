@@ -1,0 +1,107 @@
+# OpenArm 2.0 product registry.
+#
+# WARNING: nothing in this file has been confirmed on 2.0 hardware. Every entry that
+# drives a motor carries `hardware_verified: false` and a `locked_reason`, and the
+# workstation refuses to execute a locked step. Values were taken from the official
+# 2.0 documentation via docs/ARM_WORKSTATION_V5_DUAL_VERSION_PLAN.md; they are a
+# starting point for verification, not an accepted configuration.
+product_version: openarm_2_0
+label: OpenArm 2.0
+profile_revision: 2026-09-20.1
+hardware_verified: false
+
+arms:
+  right_arm:
+    profile_id: openarm_right_arm_v1
+    joint_prefix: R
+    expected_bus: can0
+    esc_ids: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+    mst_ids: [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18]
+  left_arm:
+    profile_id: openarm_left_arm_v1
+    joint_prefix: L
+    expected_bus: can0
+    # Plan A, same as 1.0: left arm keeps distinct IDs rather than official can1 0x01-0x08.
+    esc_ids: [0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]
+    mst_ids: [0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20]
+
+# Official "same motor lineup" as 1.0. Confirmed against the 16 motors already
+# commissioned for 2.0 in artifacts/factory/single_motor_records/.
+motors:
+  J1: DM-J8009P-2EC
+  J2: DM-J8009P-2EC
+  J3: DM-J4340P-2EC
+  J4: DM-J4340-2EC
+  J5: DM-J4310-2EC
+  J6: DM-J4310-2EC
+  J7: DM-J4310-2EC
+  J8: DM-J4310-2EC
+
+can:
+  # Plan A: IDs are configured over classic CAN at 1 Mbps before assembly. This half
+  # IS verified - all 16 motors were commissioned this way on 2026-09-17.
+  commissioning:
+    mode: can20
+    bitrate: 1000000
+    hardware_verified: true
+  # The assembled arm is meant to run CAN FD 1M/5M. Switching means writing can_br to
+  # Flash on all 8 joints; a mistake takes the whole arm off the bus, and Flash endures
+  # only about 10k writes. Locked until the P0 bench test answers whether a 5M motor
+  # replies to classic frames and whether any joint needs an FD frame to accept the
+  # baudrate write (see openarm#471 on J2).
+  operation:
+    mode: canfd
+    bitrate: 1000000
+    dbitrate: 5000000
+    motor_can_br_code: 9
+    hardware_verified: false
+    locked_reason: >-
+      整臂切 5M FD 需要给 8 个关节写 Flash，写错整条臂失联；R-J1 台架实测
+      （5M 电机是否回应经典帧、切换后能否切回 1M）完成前不得执行。
+
+parameters:
+  ctrl_mode: MIT
+  # Provisionally the same as 1.0. Official docs do not specify a 2.0 TIMEOUT.
+  timeout: 5000
+  timeout_hardware_verified: false
+
+gripper:
+  joint: J8
+  close_target_rad: 0.0
+  # 2.0 keys direction off the arm side, not the CN prefix: right 0 -> -90 deg,
+  # left 0 -> +90 deg. This is a different scheme from 1.0, not a different number.
+  open_target_rad_by_arm_side:
+    right_arm: -1.5708   # -90 deg
+    left_arm: 1.5708     # +90 deg
+  # Official docs publish no pass threshold. Left unset on purpose: an invented number
+  # would turn into a PASS/FAIL verdict nobody decided.
+  min_travel_rad: null
+  hardware_verified: false
+  locked_reason: >-
+    ±90° 方向与行程未在 2.0 真机验证，且验收阈值待定（V5 §9-7）。
+    open_target 会作为 --gripper-open-target 驱动电机，方向错会撞机械限位。
+
+zero:
+  # Cell jig `set_zero --arm` (no motion) vs limit search `--robot-version v2`
+  # (motion). Which one applies depends on whether a calibration jig exists - V5 §9-1.
+  method: null
+  hardware_verified: false
+  locked_reason: 2.0 零位方式待定（是否有 Cell 校准夹具），见 V5 §9-1。
+
+cameras:
+  - id: gripper
+    model: DCXGW20
+    required: true
+    mode: 1080p60
+    hardware_verified: false
+    locked_reason: 相机工位判据（帧率、丢帧、清晰度）待给出，见 V5 §9-3。
+  - id: top
+    model: D435i
+    required: per_order
+    hardware_verified: false
+    locked_reason: 选配项；未购买时记为 N/A，不算失败。
+
+firmware_baseline:
+  DM4310: V5017_04
+  DM4340: V5117_04
+  DM8009: V6417_04

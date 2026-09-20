@@ -8,7 +8,7 @@ joints:
     target_esc_id: 1
     target_mst_id: 17
     target_ctrl_mode: MIT
-    target_timeout: 1000
+    target_timeout: 5000
     target_can_br: 1000000
     expected_ctrl_mode: MIT
     expected_status:
@@ -24,7 +24,7 @@ joints:
     target_esc_id: 2
     target_mst_id: 18
     target_ctrl_mode: MIT
-    target_timeout: 1000
+    target_timeout: 5000
     target_can_br: 1000000
     expected_ctrl_mode: MIT
     expected_status:
@@ -40,7 +40,7 @@ joints:
     target_esc_id: 3
     target_mst_id: 19
     target_ctrl_mode: MIT
-    target_timeout: 1000
+    target_timeout: 5000
     target_can_br: 1000000
     expected_ctrl_mode: MIT
     expected_status:
@@ -56,7 +56,7 @@ joints:
     target_esc_id: 4
     target_mst_id: 20
     target_ctrl_mode: MIT
-    target_timeout: 1000
+    target_timeout: 5000
     target_can_br: 1000000
     expected_ctrl_mode: MIT
     expected_status:

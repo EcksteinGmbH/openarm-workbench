@@ -1744,3 +1744,54 @@ body[data-primary-flow="connectTab"]:not(.link-advanced) .right-rail {
     margin-top: 2px;
     font-size: 13px;
 }
+
+/* Blocking-problem dialog: the wizards raise this on top of the in-page panel when
+   the CAN port itself is unusable, so the operator cannot click past the message. */
+.problem-modal-card {
+    width: min(560px, calc(100vw - 40px));
+}
+
+.problem-modal-body {
+    margin: 12px 0 18px;
+    color: var(--muted);
+    max-height: min(52vh, 420px);
+    overflow-y: auto;
+}
+
+.problem-modal-body p {
+    margin-bottom: 12px;
+}
+
+.problem-modal-body strong {
+    display: block;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+
+.problem-modal-body ol {
+    margin: 0 0 12px 20px;
+}
+
+.problem-modal-body ol li {
+    margin-bottom: 6px;
+    line-height: 1.55;
+}
+
+.problem-modal-body code {
+    display: block;
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    word-break: break-all;
+}
+
+.problem-modal-body summary {
+    cursor: pointer;
+}
+
+.problem-modal-card .smw-problem-kicker,
+.problem-modal-card h3 {
+    color: var(--danger);
+}

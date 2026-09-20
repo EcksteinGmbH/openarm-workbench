@@ -5,14 +5,14 @@ import shutil
 import pytest
 
 import src.workstation as workstation
-from tests.test_workstation import FakeSerialDriver, FakeSocketCANDriver
+from tests.test_workstation import FakeSerialDriver, shared_socketcan_factory
 import web.app as web_app
 
 
 @pytest.fixture(autouse=True)
 def isolated_web_service(monkeypatch, tmp_path):
     monkeypatch.setattr(workstation, "DamiaoMotorDriver", FakeSerialDriver)
-    monkeypatch.setattr(workstation, "DamiaoSocketCANDriver", FakeSocketCANDriver)
+    monkeypatch.setattr(workstation, "DamiaoSocketCANDriver", shared_socketcan_factory())
     artifacts_dir = tmp_path / "artifacts" / "jobs"
     factory_dir = tmp_path / "artifacts" / "factory"
     monkeypatch.setattr(workstation, "ARTIFACTS_DIR", artifacts_dir)
@@ -310,3 +310,59 @@ def test_wizard_tabs_hide_task_rail_from_first_paint(client):
 
     app_js = client.get("/static/js/app.js").data.decode()
     assert "switchPrimaryTab(currentPrimaryTab());" in app_js
+
+
+def test_blocking_problems_are_flagged_for_the_dialog(client, monkeypatch):
+    # No adapter on the machine: nothing in the wizard can get past this, so the
+    # envelope must mark it blocking and the page must be able to raise a dialog.
+    monkeypatch.setattr(web_app.service, "_list_socketcan_interfaces", lambda: [])
+    payload = _json(client.post("/api/link/wizard/detect", json={}))
+    assert payload["problem"]["code"] == "adapter_missing"
+    assert payload["problem"]["blocking"] is True
+    assert payload["problem"]["solutions"]
+
+
+def test_recoverable_problems_are_not_flagged_as_blocking(client, monkeypatch):
+    # A bus with no motor on it is the operator's to fix in place; the in-page panel
+    # already says so, and a dialog on every power-up step would only be noise.
+    monkeypatch.setattr(web_app.service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    monkeypatch.setattr(web_app.service, "_inventory_scan", lambda session, scan_ids: ([], []))
+    payload = _json(client.post("/api/link/wizard/bus-check", json={"channel": "can0"}))
+    assert payload["problem"]["code"] == "bus_no_motor"
+    assert payload["problem"]["blocking"] is False
+
+
+def test_problem_dialog_is_wired_into_both_wizards(client):
+    page = client.get("/").data.decode()
+    for element_id in ("problemModal", "problemModalTitle", "problemModalBody", "problemModalRetryBtn", "problemModalCloseBtn"):
+        assert f'id="{element_id}"' in page
+
+    css = client.get("/static/css/style.css").data.decode()
+    assert ".problem-modal-body" in css
+
+    app_js = client.get("/static/js/app.js").data.decode()
+    assert "bindProblemModal();" in app_js
+
+    for module in ("single-motor-wizard", "link-wizard"):
+        source = client.get(f"/static/js/{module}.js").data.decode()
+        assert "showProblemModal" in source
+        assert "raiseIfBlocking(" in source
+
+
+def test_config_exposes_product_versions_with_their_locks(client):
+    config = _json(client.get("/api/config"))
+    by_version = {item["product_version"]: item for item in config["product_versions"]}
+    assert set(by_version) == {"openarm_1_0", "openarm_2_0"}
+    assert by_version["openarm_1_0"]["hardware_verified"] is True
+    # The page must be able to tell the operator which 2.0 steps are not usable yet.
+    assert by_version["openarm_2_0"]["hardware_verified"] is False
+    assert "can.operation" in by_version["openarm_2_0"]["locked_sections"]
+
+
+def test_binding_an_arm_accepts_and_returns_the_product_version(client):
+    payload = _json(client.post("/api/factory/arms", json={"arm_cn": "OAF26092010", "product_version": "openarm_2_0"}))
+    assert payload["product_version"] == "openarm_2_0"
+
+    gate = _json(client.get("/api/factory/release-gate/OAF26092010"))
+    assert gate["release_decision"] == "HOLD"
+    assert gate["product_version"] == "openarm_2_0"

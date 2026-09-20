@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.10.2-wizard-rail-fix`
+Current workstation version: `0.13.0-product-version-registry`
 
 ## Versioning Rule
 
@@ -13,6 +13,205 @@ Current workstation version: `0.10.2-wizard-rail-fix`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.13.0-product-version-registry - 2026-09-20
+
+Summary: one place now answers "what is a 1.0 arm" and "what is a 2.0 arm". An arm
+carries its product version for life, the release gate refuses to mix evidence across
+versions, and every 2.0 behaviour that has not been confirmed on hardware is locked.
+
+Context: no CAN adapter or arm can be attached to this machine, so nothing here was
+run against hardware. The release deliberately stops at description: the scan,
+acceptance and report paths still read their own tables, so 1.0 judgement is
+byte-for-byte unchanged. Migrating those tables onto the registry is a separate step,
+because that is the step that can change a 1.0 verdict.
+
+Changes:
+
+- `profiles/products/openarm_1_0.yaml` and `openarm_2_0.yaml` record IDs, motor types,
+  CAN modes per stage, CTRL_MODE/TIMEOUT, gripper geometry, zero method, cameras and
+  the firmware baseline. Everything in the 1.0 file is already in production and was
+  verified by the three arms that were built with it; every 2.0 entry that drives a
+  motor carries `hardware_verified: false` plus a `locked_reason`.
+- `ProductRegistry` loads and validates them at startup: exactly J1-J8, eight unique
+  in-range IDs per arm, no ID shared between the two arms, a known CAN mode, a
+  `dbitrate` whenever the mode is FD, and a stated reason behind every lock. It then
+  cross-checks each registry against the profile it names - ESC ID, MST ID, motor type,
+  TIMEOUT and bus, per joint - and `WorkstationService.__init__` refuses to start on a
+  disagreement. The registry has to describe the system, never redefine it.
+- `bind_arm_identity()` takes `product_version`. It is write-once: re-binding the same
+  version is fine, switching it raises, because it would retroactively reinterpret
+  every piece of evidence already collected under the other version's rules. Records
+  written before the registry existed carry none and are read as `openarm_1_0` - all
+  three real arms on disk are 1.0 Followers, so that is a statement of fact rather
+  than a fallback guess, and it is marked `product_version_source: default_legacy`.
+- `factory_release_gate()` now reports `product_version` and `product_version_locks`,
+  and blocks on two new grounds: linked evidence whose *stated* version differs from
+  the arm's, and any product that still has unverified locked sections - a product
+  whose motion behaviour has never been confirmed cannot produce a formal report,
+  whatever the rest of the evidence says. Evidence that states no version is not a
+  conflict; holding the existing arms would be rewriting history, not catching a
+  mistake. New job links record `product_version` so future evidence does state it.
+- `2.0` gripper direction is keyed on arm side (right 0 to -90 deg, left 0 to +90 deg)
+  while 1.0 keys on the CN prefix (OAF/OAL, +/-60 deg). That is a different scheme, not
+  a different number, and the registry keeps them as separate fields so they cannot be
+  read interchangeably. The 2.0 travel threshold is deliberately left null: no official
+  figure exists, and an invented one becomes a PASS/FAIL verdict nobody decided.
+- `/api/config` exposes `product_versions` (with each product's locked sections) and
+  `default_product_version`; `POST /api/factory/arms` accepts `product_version`.
+
+Also fixed, unrelated to the registry but found while reviewing the left-arm path:
+
+- The status-frame decoder special-cases L-J8 at ESC 0x10, which does not fit the
+  4-bit ID field, and had no test at all. Reading its high nibble as status reports a
+  DISABLED motor as ENABLED - the most dangerous misread available, since "already
+  enabled" changes what an operator does next. Four tests now pin the behaviour down,
+  including that the special case does not swallow ordinary frames sent to that motor.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 152 passed, including 23 registry tests (nine
+  malformed-registry shapes rejected at load, a contradicting registry stopping the
+  service, write-once version binding, both new gate blocks, and the explicit case
+  that unstated evidence is NOT a conflict) and the four status-frame tests.
+- The golden regression on the three real arms is unchanged: all three still PASS with
+  no blocking or warning items, and each is now reported as `openarm_1_0`.
+- Server restarted; `/api/config` serves both products with 2.0's locks.
+
+Operational Notes:
+
+- An arm bound as `openarm_2_0` is held by the gate today, by design: `can.operation`,
+  `gripper`, `zero` and both cameras are locked. Each lock names what has to be settled
+  - the R-J1 CAN-FD bench test, the gripper acceptance thresholds, whether a Cell
+  calibration jig exists.
+- Binding an existing arm to a different product version now fails. Correcting a
+  genuine mis-binding means editing the record under `artifacts/factory/arms/`
+  deliberately, not through the API.
+
+### 0.12.0-test-isolation-and-timeout-baseline - 2026-09-20
+
+Summary: tests can no longer write into the production record directories, the three
+real arms that were built on hardware are frozen as a regression baseline, and the
+operational TIMEOUT target is one value across every profile.
+
+Context: no CAN adapter or arm can be attached to this machine for the time being, so
+no change can be confirmed on hardware. This release is the groundwork that makes the
+following changes verifiable without it.
+
+Changes:
+
+- `tests/conftest.py` now redirects every workstation output path
+  (`ARTIFACTS_DIR`, all `FACTORY_*`, all `VENDOR_*`) into the test's `tmp_path` for
+  every test, present and future. Previously `tests/test_arm_can_scan_cli.py`
+  constructed a real `WorkstationService` and wrote one `arm_verification` job with
+  `status: passed` into the repo's real `artifacts/jobs` on every `pytest` run. Such a
+  job is indistinguishable from one produced on hardware, and `factory_release_gate()`
+  selects its evidence from exactly that directory.
+- `tests/test_artifact_isolation.py` guards the above: every redirected path must
+  resolve outside the repo, every `ARTIFACTS_*`/`FACTORY_*`/`VENDOR_*` directory
+  constant the module declares must be covered by the redirect (so a new one cannot
+  silently start writing to the repo), and building a service plus creating a job must
+  leave the real `artifacts/jobs` untouched.
+- 114 job directories with no reference from any arm record or single-motor record
+  were moved to `artifacts/_archive_20260920/jobs/`. Nothing was deleted. The 29
+  directories referenced by the three real arms and the 16 single-motor records stay
+  in place. The release-gate output for all three arms is byte-identical before and
+  after the move.
+- `tests/golden/release_gate_real_arms.json` freezes the release-gate verdict, linked
+  evidence and record counts of `OAF26062401`, `OAF26080401` and `OAF26090301` - the
+  three 1.0 arms that were actually built and tested on hardware.
+  `tests/test_golden_real_arms.py` asserts a change cannot move them, that a new arm
+  record on disk cannot go unguarded, and that the gate writes nothing. Refresh with
+  `tests/golden/refresh_release_gate_baseline.py`, reviewing the diff, and only when a
+  baseline move is an actual decision.
+- The operational TIMEOUT target is now `WHOLE_ARM_TARGET_TIMEOUT = 5000` in one
+  place. The generic `openarm_v1` profile (the API and CLI default) carried a
+  superseded `1000` on J1-J4 while the derived arm profiles and
+  `commissioning_policy.whole_arm_timeout_policy` both said 5000, so an arm scan run
+  with the default profile would have reported four false TIMEOUT mismatches. No
+  production job was affected: all 29 real jobs on disk used the derived
+  `openarm_left_arm_v1` / `openarm_right_arm_v1` profiles, never the generic one.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 123 passed, including the golden regression on the
+  three real arms, the artifact-isolation guards, and a new test that the generic
+  profile, both derived profiles and the commissioning policy all agree on the
+  TIMEOUT target.
+- Measured directly: a full `pytest` run left `artifacts/jobs` at 29 entries, where
+  before this change every run added one.
+- The archive move was verified by diffing the release-gate JSON for all three arms
+  before and after: byte-identical.
+
+Operational Notes:
+
+- Archived jobs are at `artifacts/_archive_20260920/jobs/` and can be moved back.
+- `artifacts/` is gitignored, so the golden baseline data lives only on this machine.
+  `tests/test_golden_real_arms.py` skips with a stated reason where it is absent.
+- No hardware behaviour changed; nothing in this release writes to a motor.
+
+### 0.11.0-scan-coverage-and-blocking-dialog - 2026-09-20
+
+Summary: a connected motor is now always found, an interface restart no longer makes
+a live motor look dead, and problems the operator cannot work around are raised in a
+blocking dialog.
+
+Changes:
+
+- `DEFAULT_SCAN_IDS` now spans 0x01-0x20 instead of 0x01-0x08 plus 0x11-0x18. The old
+  range left out left-arm ESC IDs 0x09-0x10, so a correctly configured L-J1..L-J8
+  reported `detected=0` on the advanced (engineer) path unless the operator typed the
+  ID by hand. Confirmed on hardware on 2026-09-18 with an ESC 0x10 / MST 0x20 motor.
+  The two wizards already scanned the full range and are unchanged.
+- Anything that takes a CAN link down now closes the workstation's sockets on that
+  channel first: `configure_can_interface`, `can_interface_down`, and the wizard
+  precheck, which restarts the link with raw `ip` commands and so bypassed the other
+  two. A socket opened before the restart survived as a deaf handle and reported an
+  empty bus, which reads exactly like a dead motor and sent the operator hunting for
+  power and wiring faults. Reproduced on hardware on 2026-09-18; restarting the
+  service made the same motor identify immediately.
+- A session is no longer reused when the adapter was unplugged and replugged: the
+  interface's `ifindex` is recorded when the session is opened and compared on reuse.
+- When a wizard scan comes back empty on a session it reused rather than just opened,
+  it rebuilds the session once and rescans before reporting `no_motor_found` /
+  `bus_no_motor`. An empty scan on a reused socket is ambiguous, and one reconnect
+  rules out our own side before the hardware is blamed. A session the wizard just
+  opened is not rescanned, so the happy path costs nothing extra.
+- A failed connect now raises `WizardConnectError` instead of being caught together
+  with scan failures, so a scan error keeps its own classification rather than being
+  reported as `connect_failed`.
+- Problem envelopes carry `blocking: true` for the six codes the operator cannot work
+  around from inside the wizard (`adapter_missing`, `can_interface_missing`,
+  `can_interface_down`, `interface_prepare_failed`, `connect_failed`,
+  `can_bus_error`). Both wizards raise these in a new modal dialog
+  (`web/static/js/problem-modal.js`) carrying the same title, cause and numbered fix
+  steps as the in-page panel, plus 我已处理，重试 which re-runs the failed step, and
+  关闭. The dialog does not dismiss on a click outside. Bus and motor states the
+  operator can fix in place (`bus_no_motor`, `no_motor_found`, `multiple_motors`,
+  `motor_fault`, ...) stay in the in-page panel only, so the dialog does not fire on
+  every normal power-up step.
+- Each wizard's click dispatcher and its dialog retry button now share one action
+  table, so the retry runs exactly the step the operator would have clicked.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 114 passed, including new regression tests that
+  the default scan finds a left-arm ESC 0x10 motor; that `can_interface_down`,
+  `configure_can_interface` and the wizard precheck each close the cached socketcan
+  session; that a replugged adapter (changed `ifindex`) is not reused; that a wizard
+  reconnects once and rescans before reporting no motor; that it does NOT rescan on a
+  session it just opened; that `adapter_missing` is flagged blocking while
+  `bus_no_motor` is not; and that the dialog markup, stylesheet and both wizard
+  modules are wired together.
+- `node --check` on the four touched JS modules; server restarted and the page,
+  `problem-modal.js` and the dialog markup are served.
+- Not yet exercised on hardware: no USB-CAN adapter is attached to this machine.
+
+Operational Notes:
+
+- The advanced-path single scan now probes 32 IDs instead of 16, so it takes about
+  twice as long. The wizards are unaffected.
+- Asset cache keys bumped to `20260920-problem-modal`.
 
 ### 0.10.2-wizard-rail-fix - 2026-09-18
 

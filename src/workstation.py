@@ -17,7 +17,7 @@ import subprocess
 import threading
 import time
 import uuid
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import yaml
 
@@ -36,6 +36,7 @@ from src.formal_factory_report import render_formal_factory_report
 ROOT_DIR = Path(__file__).resolve().parent.parent
 BUILTIN_PROFILE_DIR = ROOT_DIR / "profiles" / "openarm"
 OVERRIDE_PROFILE_DIR = ROOT_DIR / "config" / "profiles"
+PRODUCT_REGISTRY_DIR = ROOT_DIR / "profiles" / "products"
 ARTIFACTS_DIR = ROOT_DIR / "artifacts" / "jobs"
 FACTORY_DIR = ROOT_DIR / "artifacts" / "factory"
 FACTORY_MOTORS_DIR = FACTORY_DIR / "motors"
@@ -64,6 +65,18 @@ OPENARM_ALLOWED_COMMAND_PREFIXES = ("openarm-",)
 OFFICIAL_DEMO_DEFAULT_ENABLE_HOLD_MS = 1500
 OFFICIAL_DEMO_DEFAULT_PHASE_HOLD_S = 3.0
 OFFICIAL_DEMO_MIN_GRIPPER_TRAVEL_RAD = 0.8
+
+# Operational TIMEOUT for every assembled-arm joint, written during whole-arm
+# acceptance. Kept here so the generic profile, the derived arm profiles and
+# commissioning_policy cannot drift apart. J1-J4 used to sit at a superseded 1000
+# in the generic profile only, which would have failed a scan run with the default
+# profile; no production job ever used it (all used the derived arm profiles).
+WHOLE_ARM_TARGET_TIMEOUT = 5000
+
+# Arm records written before the product registry existed carry no product_version.
+# Every such record on disk is a 1.0 Follower, so they are read as 1.0 rather than
+# rejected or flagged.
+DEFAULT_PRODUCT_VERSION = "openarm_1_0"
 OFFICIAL_COMMAND_STDOUT_LIMIT = 60000
 OFFICIAL_COMMAND_STDERR_LIMIT = 12000
 OPENARM_SUPPORTED_BAUDRATES = [125000, 200000, 250000, 500000, 1000000, 2000000, 2500000, 3200000, 4000000, 5000000]
@@ -113,7 +126,10 @@ PUBLIC_JOB_TYPE_ALIASES = {
 SINGLE_SCAN_JOB_TYPES = {"single_id_config", "single_param_config", "single_comm_check"}
 
 
-DEFAULT_SCAN_IDS = [*range(0x01, 0x09), *range(0x11, 0x19)]
+# 0x01-0x20 spans every ID OpenARM assigns: right arm ESC 0x01-0x08 / MST 0x11-0x18
+# and left arm ESC 0x09-0x10 / MST 0x19-0x20. Anything narrower makes a correctly
+# configured motor look absent, which is the one answer a scan must never give.
+DEFAULT_SCAN_IDS = [*range(0x01, 0x21)]
 DEFAULT_ARM_SCAN_IDS = [*range(0x01, 0x21)]
 FAST_SCAN_RIDS = [
     DM_variable.ESC_ID,
@@ -172,6 +188,18 @@ SINGLE_WIZARD_ARM_PROFILES = {
 }
 SINGLE_WIZARD_PRODUCT_LINES = {"openarm_2_0": "OpenArm 2.0", "openarm_1_0": "OpenArm 1.0"}
 # Operator-facing troubleshooting catalog for the beginner single-motor wizard.
+# Problems that stop the operator dead - no CAN port, the port will not start, or it
+# cannot be opened. The wizards raise these in a blocking dialog instead of only the
+# in-page panel, because nothing further can be tried until someone fixes the port.
+BLOCKING_PROBLEM_CODES = {
+    "can_interface_missing",
+    "can_interface_down",
+    "can_bus_error",
+    "adapter_missing",
+    "interface_prepare_failed",
+    "connect_failed",
+}
+
 SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
     "can_interface_missing": {
         "title": "没有找到 USB-CAN 适配器",
@@ -1134,6 +1162,10 @@ class TransportCapabilities:
     communication_check: bool
 
 
+class WizardConnectError(RuntimeError):
+    """The workstation could not open a device session on the requested CAN port."""
+
+
 @dataclass
 class DeviceSession:
     session_id: str
@@ -1182,7 +1214,8 @@ class ProfileManager:
                     "target_esc_id": index,
                     "target_mst_id": 0x10 + index,
                     "target_ctrl_mode": "MIT",
-                    "target_timeout": 5000 if index >= 5 else 1000,
+                    # commissioning_policy.whole_arm_timeout_policy: J1-J8 = 5000 on both arms.
+                    "target_timeout": WHOLE_ARM_TARGET_TIMEOUT,
                     "target_can_br": 1000000,
                     "requires_zero": True,
                     "test_profile": "safe_mit_ping",
@@ -1295,6 +1328,173 @@ class ProfileManager:
         raise KeyError(f"joint {joint_name} not found in profile {profile_id}")
 
 
+class ProductRegistry:
+    """The product versions the workstation can build, loaded from profiles/products.
+
+    One place answers "what is a 1.0 arm" and "what is a 2.0 arm": IDs, motor types,
+    CAN modes, gripper direction and travel, zero method, cameras, firmware baseline.
+    Anything not yet confirmed on hardware carries `hardware_verified: false` and a
+    `locked_reason`; callers must consult `is_locked()` before acting on it.
+
+    This release only loads, validates and exposes the registry. The scan, acceptance
+    and report paths still read their own tables, so 1.0 judgement is unchanged.
+    """
+
+    JOINT_NAMES = [f"J{index}" for index in range(1, 9)]
+
+    def __init__(self):
+        self._products = self._load()
+
+    def _load(self) -> Dict[str, Dict[str, Any]]:
+        products: Dict[str, Dict[str, Any]] = {}
+        if not PRODUCT_REGISTRY_DIR.exists():
+            return products
+        for path in sorted(PRODUCT_REGISTRY_DIR.glob("*.yaml")):
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError(f"product registry {path.name} is not a mapping")
+            product_version = data.get("product_version")
+            if not product_version:
+                raise ValueError(f"product registry {path.name} has no product_version")
+            if product_version in products:
+                raise ValueError(f"duplicate product_version {product_version} in {path.name}")
+            self._validate(path.name, data)
+            products[str(product_version)] = data
+        return products
+
+    def _validate(self, filename: str, data: Dict[str, Any]):
+        """Fail loudly at startup rather than mid-run on the factory floor."""
+        for key in ("label", "profile_revision", "arms", "motors", "can", "parameters"):
+            if key not in data:
+                raise ValueError(f"product registry {filename} is missing '{key}'")
+
+        motors = data["motors"]
+        if sorted(motors) != sorted(self.JOINT_NAMES):
+            raise ValueError(f"product registry {filename} must list exactly J1-J8, got {sorted(motors)}")
+
+        for arm_side, arm in data["arms"].items():
+            for key in ("profile_id", "joint_prefix", "expected_bus", "esc_ids", "mst_ids"):
+                if key not in arm:
+                    raise ValueError(f"product registry {filename} arm {arm_side} is missing '{key}'")
+            for key in ("esc_ids", "mst_ids"):
+                ids = arm[key]
+                if len(ids) != 8:
+                    raise ValueError(f"product registry {filename} arm {arm_side} {key} must have 8 entries")
+                if len(set(ids)) != 8:
+                    raise ValueError(f"product registry {filename} arm {arm_side} {key} has duplicates")
+                if not all(0x01 <= int(value) <= 0x20 for value in ids):
+                    raise ValueError(f"product registry {filename} arm {arm_side} {key} outside 0x01-0x20")
+
+        sides = list(data["arms"])
+        if len(sides) == 2:
+            left, right = (data["arms"][side] for side in sides)
+            overlap = set(left["esc_ids"]) & set(right["esc_ids"])
+            if overlap:
+                raise ValueError(f"product registry {filename} arms share ESC IDs {sorted(overlap)}")
+
+        for stage in ("commissioning", "operation"):
+            if stage not in data["can"]:
+                raise ValueError(f"product registry {filename} can.{stage} is missing")
+            mode = data["can"][stage].get("mode")
+            if mode not in {"can20", "canfd"}:
+                raise ValueError(f"product registry {filename} can.{stage}.mode must be can20 or canfd")
+            if mode == "canfd" and not data["can"][stage].get("dbitrate"):
+                raise ValueError(f"product registry {filename} can.{stage} is canfd but has no dbitrate")
+
+        for section in self._lockable_sections(data):
+            if section.get("hardware_verified") is False and not section.get("locked_reason"):
+                raise ValueError(f"product registry {filename} has an unverified section with no locked_reason")
+
+    def _lockable_sections(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        sections = [data["can"]["commissioning"], data["can"]["operation"]]
+        for key in ("gripper", "zero"):
+            if isinstance(data.get(key), dict):
+                sections.append(data[key])
+        sections.extend(item for item in (data.get("cameras") or []) if isinstance(item, dict))
+        return sections
+
+    def cross_check(self, profile_manager: "ProfileManager") -> List[str]:
+        """Report where a product registry disagrees with the profile it points at.
+
+        The registry is new and the profiles are what production actually ran on. If
+        the two ever disagree about an ID, a motor type or the TIMEOUT target, the
+        registry is wrong - it must describe the system, not redefine it.
+        """
+        problems: List[str] = []
+        for product_version, product in sorted(self._products.items()):
+            for arm_side, arm in product["arms"].items():
+                where = f"{product_version}/{arm_side}"
+                try:
+                    profile = profile_manager.get_profile(arm["profile_id"])
+                except KeyError:
+                    problems.append(f"{where}: profile {arm['profile_id']} not found")
+                    continue
+                joints = profile["joints"]
+                if len(joints) != 8:
+                    problems.append(f"{where}: profile has {len(joints)} joints, expected 8")
+                    continue
+                for index, joint in enumerate(joints):
+                    joint_name = self.JOINT_NAMES[index]
+                    expected_esc = int(arm["esc_ids"][index])
+                    expected_mst = int(arm["mst_ids"][index])
+                    if int(joint["target_esc_id"]) != expected_esc:
+                        problems.append(
+                            f"{where}/{joint_name}: registry ESC 0x{expected_esc:02X} != profile 0x{int(joint['target_esc_id']):02X}"
+                        )
+                    if int(joint["target_mst_id"]) != expected_mst:
+                        problems.append(
+                            f"{where}/{joint_name}: registry MST 0x{expected_mst:02X} != profile 0x{int(joint['target_mst_id']):02X}"
+                        )
+                    if str(joint["motor_type"]) != str(product["motors"][joint_name]):
+                        problems.append(
+                            f"{where}/{joint_name}: registry motor {product['motors'][joint_name]} != profile {joint['motor_type']}"
+                        )
+                    if int(joint["target_timeout"]) != int(product["parameters"]["timeout"]):
+                        problems.append(
+                            f"{where}/{joint_name}: registry TIMEOUT {product['parameters']['timeout']} != profile {joint['target_timeout']}"
+                        )
+                    if str(joint["expected_bus"]) != str(arm["expected_bus"]):
+                        problems.append(
+                            f"{where}/{joint_name}: registry bus {arm['expected_bus']} != profile {joint['expected_bus']}"
+                        )
+        return problems
+
+    def list_products(self) -> List[Dict[str, Any]]:
+        return [self.get(product_version) for product_version in sorted(self._products)]
+
+    def get(self, product_version: str) -> Dict[str, Any]:
+        if product_version not in self._products:
+            raise KeyError(f"product_version {product_version} not found")
+        return self._products[product_version]
+
+    def known_versions(self) -> List[str]:
+        return sorted(self._products)
+
+    def is_locked(self, product_version: str, section: str) -> bool:
+        """True when this part of the product has not been confirmed on hardware."""
+        product = self.get(product_version)
+        node = product["can"].get(section) if section in ("commissioning", "operation") else product.get(section)
+        if not isinstance(node, dict):
+            return False
+        return node.get("hardware_verified") is False
+
+    def lock_reasons(self, product_version: str) -> Dict[str, str]:
+        product = self.get(product_version)
+        reasons: Dict[str, str] = {}
+        for name, node in (
+            ("can.commissioning", product["can"]["commissioning"]),
+            ("can.operation", product["can"]["operation"]),
+            ("gripper", product.get("gripper")),
+            ("zero", product.get("zero")),
+        ):
+            if isinstance(node, dict) and node.get("hardware_verified") is False:
+                reasons[name] = str(node.get("locked_reason") or "")
+        for camera in product.get("cameras") or []:
+            if isinstance(camera, dict) and camera.get("hardware_verified") is False:
+                reasons[f"camera.{camera.get('id')}"] = str(camera.get("locked_reason") or "")
+        return reasons
+
+
 def _canonical_job_type(job_type: str) -> str:
     return LEGACY_JOB_TYPE_ALIASES.get(job_type, job_type)
 
@@ -1307,6 +1507,12 @@ class WorkstationService:
     def __init__(self, socketio=None):
         self.socketio = socketio
         self.profile_manager = ProfileManager()
+        self.product_registry = ProductRegistry()
+        # The registry must describe the profiles, never contradict them. Catching a
+        # disagreement here beats discovering it against a real arm.
+        registry_problems = self.product_registry.cross_check(self.profile_manager)
+        if registry_problems:
+            raise ValueError("product registry disagrees with profiles: " + "; ".join(registry_problems))
         self.sessions: Dict[str, DeviceSession] = {}
         self.jobs: Dict[str, JobRecord] = {}
         self._lock = threading.RLock()
@@ -1319,6 +1525,18 @@ class WorkstationService:
         return {
             "workstation_version": WORKSTATION_VERSION,
             "profiles": self.profile_manager.list_profiles(),
+            "product_versions": [
+                {
+                    "product_version": product["product_version"],
+                    "label": product["label"],
+                    "profile_revision": product["profile_revision"],
+                    "hardware_verified": bool(product.get("hardware_verified")),
+                    "operation_can_mode": product["can"]["operation"]["mode"],
+                    "locked_sections": self.product_registry.lock_reasons(product["product_version"]),
+                }
+                for product in self.product_registry.list_products()
+            ],
+            "default_product_version": DEFAULT_PRODUCT_VERSION,
             "transports": [
                 {
                     "id": "serial_bridge",
@@ -1529,6 +1747,10 @@ class WorkstationService:
                 dbitrate = None
                 fd_enabled = False
 
+            # Both tools take the link down; a socket opened on the old link would
+            # survive as a deaf handle, so close ours first.
+            self._invalidate_socketcan_sessions(name)
+
             if tool == "openarm_helper":
                 helper = shutil.which("openarm-can-configure-socketcan")
                 if helper is None:
@@ -1568,6 +1790,7 @@ class WorkstationService:
     def can_interface_down(self, name: str) -> Dict[str, Any]:
         with self._lock:
             self._require_interface(name)
+            self._invalidate_socketcan_sessions(name)
             self._run_system_command(["ip", "link", "set", name, "down"])
             payload = self.system_can_interfaces()
             self._emit("interface_status", payload)
@@ -1869,6 +2092,7 @@ class WorkstationService:
         left_arm_installed: bool = True,
         right_arm_installed: bool = True,
         notes: Optional[str] = None,
+        product_version: Optional[str] = None,
     ) -> Dict[str, Any]:
         with self._lock:
             arm_cn = arm_cn.strip()
@@ -1880,10 +2104,32 @@ class WorkstationService:
             FACTORY_ARMS_DIR.mkdir(parents=True, exist_ok=True)
             path = FACTORY_ARMS_DIR / f"{_safe_name(arm_cn)}.json"
             existing = _load_json(path, {})
+
+            # The product version is the arm's identity, not a per-step choice: once an
+            # arm is on record as 1.0 or 2.0, every later step reads it from here. It is
+            # therefore write-once - changing it would retroactively reinterpret every
+            # piece of evidence already collected against the other version's rules.
+            existing_version = existing.get("product_version")
+            if product_version is None:
+                product_version = existing_version or DEFAULT_PRODUCT_VERSION
+            else:
+                product_version = str(product_version)
+                if product_version not in self.product_registry.known_versions():
+                    raise ValueError(
+                        f"unknown product_version {product_version}; known: {self.product_registry.known_versions()}"
+                    )
+                if existing_version and existing_version != product_version:
+                    raise ValueError(
+                        f"arm {arm_cn} is already recorded as {existing_version}; "
+                        "product version cannot be changed once evidence exists"
+                    )
+
             record = {
                 "arm_cn": arm_cn,
                 "arm_type": arm_type,
                 "bom_profile": bom_profile,
+                "product_version": product_version,
+                "product_version_source": "declared" if existing_version or product_version != DEFAULT_PRODUCT_VERSION else "default_legacy",
                 "left_arm_installed": bool(left_arm_installed),
                 "right_arm_installed": bool(right_arm_installed),
                 "notes": notes or existing.get("notes"),
@@ -1912,6 +2158,9 @@ class WorkstationService:
             "job_type": _public_job_type(job.job_type),
             "artifact_dir": job.artifact_dir,
             "status": job.status,
+            # Stated only when the job knew its product. Links made before the product
+            # registry existed carry None, and are read as "unstated", not as a conflict.
+            "product_version": job.product_line,
             "linked_at": _now_iso(),
         }
 
@@ -2803,9 +3052,25 @@ class WorkstationService:
             if not arm.get("factory_reports"):
                 warning_items.append("尚未挂载出厂报告")
 
+            arm_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            blocking_items.extend(self._product_version_conflicts(arm, linked_job_evidence))
+            try:
+                product_locks = self.product_registry.lock_reasons(arm_version)
+            except KeyError:
+                blocking_items.append(f"整机记录的产品版本 {arm_version} 不在产品注册表中")
+                product_locks = {}
+            if product_locks:
+                # A product whose motion behaviour has never been confirmed on hardware
+                # must not produce a formal factory report, whatever the evidence says.
+                blocking_items.append(
+                    f"产品版本 {arm_version} 仍有未经真机验证的锁定项：{'、'.join(sorted(product_locks))}"
+                )
+
             release_ready = not blocking_items
             return {
                 "arm_cn": arm_cn,
+                "product_version": arm_version,
+                "product_version_locks": product_locks,
                 "release_ready": release_ready,
                 "release_decision": "PASS" if release_ready else "HOLD",
                 "blocking_items": blocking_items,
@@ -3419,11 +3684,33 @@ class WorkstationService:
             "job_id": linked_job.get("job_id"),
             "job_type": linked_job.get("job_type"),
             "status": linked_job.get("status") or job_payload.get("job", {}).get("status"),
+            "product_version": self._linked_job_product_version(linked_job, job_payload),
             "artifact_dir": linked_job.get("artifact_dir"),
             "has_artifacts": has_artifacts,
             "has_blocking_issues": bool(issue_summary.get("has_blocking")),
             "issue_summary": issue_summary,
         }
+
+    def _linked_job_product_version(self, linked_job: Dict[str, Any], job_payload: Dict[str, Any]) -> Optional[str]:
+        """The product this job was run for, or None when it predates the registry."""
+        stated = linked_job.get("product_version") or job_payload.get("job", {}).get("product_line")
+        return str(stated) if stated else None
+
+    def _product_version_conflicts(self, arm: Dict[str, Any], linked_job_evidence: List[Dict[str, Any]]) -> List[str]:
+        """Evidence recorded under a different product version must never be mixed in.
+
+        A 1.0 job proves nothing about a 2.0 arm: different bus mode, different gripper
+        travel, different acceptance thresholds. Only a *stated* version that disagrees
+        is a conflict - evidence from before the registry existed states nothing, and
+        holding those arms would be rewriting history, not catching a mistake.
+        """
+        arm_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+        conflicts = []
+        for item in linked_job_evidence:
+            stated = item.get("product_version")
+            if stated and stated != arm_version:
+                conflicts.append(f"任务 {item.get('job_id')} 记录为 {stated}，与整机 {arm_version} 不一致")
+        return conflicts
 
     def _linked_jobs_have_raw_status_frames(self, linked_jobs: List[Dict[str, Any]]) -> bool:
         for linked_job in linked_jobs:
@@ -5526,10 +5813,9 @@ class WorkstationService:
             if problem:
                 return problem
             try:
-                session = self._wizard_session(channel, int(bitrate))
-            except Exception as error:
+                session, candidates, duplicate_ids, _ = self._wizard_scan(channel, int(bitrate), DEFAULT_ARM_SCAN_IDS)
+            except WizardConnectError as error:
                 return self._wizard_problem("connect_failed", str(error))
-            candidates, duplicate_ids = self._inventory_scan(session, DEFAULT_ARM_SCAN_IDS)
             if not candidates:
                 return self._wizard_problem("bus_no_motor", f"channel={channel}")
             motors = []
@@ -5601,11 +5887,10 @@ class WorkstationService:
             if problem:
                 return problem
             try:
-                session = self._wizard_session(channel, int(bitrate))
-            except Exception as error:
+                session, candidates, duplicate_ids, _ = self._wizard_scan(channel, int(bitrate), DEFAULT_ARM_SCAN_IDS)
+            except WizardConnectError as error:
                 return self._wizard_problem("connect_failed", str(error))
 
-            candidates, duplicate_ids = self._inventory_scan(session, DEFAULT_ARM_SCAN_IDS)
             if not candidates:
                 return self._wizard_problem("no_motor_found")
 
@@ -5672,7 +5957,16 @@ class WorkstationService:
 
     def _wizard_problem(self, code: str, detail: Optional[str] = None, **extra: Any) -> Dict[str, Any]:
         meta = SINGLE_MOTOR_PROBLEMS.get(code) or SINGLE_MOTOR_PROBLEMS["unknown_error"]
-        return {"ok": False, "problem": {"code": code, **meta, "detail": detail, **extra}}
+        return {
+            "ok": False,
+            "problem": {
+                "code": code,
+                **meta,
+                "blocking": code in BLOCKING_PROBLEM_CODES,
+                "detail": detail,
+                **extra,
+            },
+        }
 
     def _wizard_error_code(self, error: Exception, default: str) -> str:
         text = str(error).lower()
@@ -5695,6 +5989,7 @@ class WorkstationService:
         can_state = str(iface.get("can_state") or "").upper()
         needs_restart = state != "UP" or int(iface.get("bitrate") or 0) != int(bitrate) or can_state in {"BUS-OFF", "STOPPED"}
         if needs_restart:
+            self._invalidate_socketcan_sessions(channel)
             try:
                 for cmd in (
                     ["ip", "link", "set", channel, "down"],
@@ -5710,17 +6005,92 @@ class WorkstationService:
             return self._wizard_problem("can_bus_error", f"can_state={can_state}")
         return None
 
-    def _wizard_session(self, channel: str, bitrate: int) -> DeviceSession:
+    def _interface_ifindex(self, name: str) -> Optional[int]:
+        raw = self._safe_read_text(Path("/sys/class/net") / name / "ifindex")
+        try:
+            return int(str(raw).strip())
+        except (TypeError, ValueError):
+            return None
+
+    def _invalidate_socketcan_sessions(self, channel: str) -> int:
+        """Close every open socketcan session bound to ``channel``.
+
+        A socket opened before the link went down keeps answering "nothing on the
+        bus" after it comes back, which reads exactly like a dead motor and sends
+        the operator hunting for power or wiring faults. Anything that restarts the
+        link closes the sockets first so the next step reconnects for real.
+        """
+        closed = 0
         for session in self.sessions.values():
             if (
                 session.transport == "socketcan"
                 and session.connection_state != "disconnected"
                 and session.connection.get("channel") == channel
+            ):
+                try:
+                    session.driver.disconnect()
+                except Exception:
+                    pass
+                session.connection_state = "disconnected"
+                closed += 1
+        return closed
+
+    def _reusable_socketcan_session(self, channel: str, bitrate: int) -> Optional[DeviceSession]:
+        live_ifindex = self._interface_ifindex(channel)
+        for session in self.sessions.values():
+            if not (
+                session.transport == "socketcan"
+                and session.connection_state != "disconnected"
+                and session.connection.get("channel") == channel
                 and int(session.connection.get("bitrate", 0)) == int(bitrate)
             ):
-                return session
-        payload = self.connect_device("socketcan", {"channel": channel, "bitrate": int(bitrate)})
-        return self._session(payload["device_session_id"])
+                continue
+            bound_ifindex = session.connection.get("ifindex")
+            if live_ifindex is not None and bound_ifindex is not None and int(bound_ifindex) != int(live_ifindex):
+                # The adapter was unplugged and replugged: the socket is bound to an
+                # interface that no longer exists.
+                self._invalidate_socketcan_sessions(channel)
+                return None
+            return session
+        return None
+
+    def _wizard_session_ex(self, channel: str, bitrate: int, *, force_new: bool = False) -> Tuple[DeviceSession, bool]:
+        """Return the wizard session for ``channel`` plus whether it was reused."""
+        if force_new:
+            self._invalidate_socketcan_sessions(channel)
+        else:
+            session = self._reusable_socketcan_session(channel, int(bitrate))
+            if session is not None:
+                return session, True
+        try:
+            payload = self.connect_device("socketcan", {"channel": channel, "bitrate": int(bitrate)})
+        except Exception as error:
+            raise WizardConnectError(str(error)) from error
+        session = self._session(payload["device_session_id"])
+        session.connection["ifindex"] = self._interface_ifindex(channel)
+        return session, False
+
+    def _wizard_session(self, channel: str, bitrate: int, *, force_new: bool = False) -> DeviceSession:
+        session, _ = self._wizard_session_ex(channel, int(bitrate), force_new=force_new)
+        return session
+
+    def _wizard_scan(
+        self, channel: str, bitrate: int, scan_ids: List[int]
+    ) -> Tuple[DeviceSession, List[Dict[str, Any]], List[int], bool]:
+        """Inventory-scan the bus, rebuilding a reused session once if nobody answers.
+
+        An empty scan on a session we did not just open is ambiguous: the motor may
+        be off, or our socket may have gone deaf behind an interface restart we did
+        not make. Reconnecting once rules out the second case before we blame the
+        hardware. Returns ``(session, candidates, duplicate_ids, reconnected)``.
+        """
+        session, reused = self._wizard_session_ex(channel, int(bitrate))
+        candidates, duplicate_ids = self._inventory_scan(session, scan_ids)
+        if candidates or not reused:
+            return session, candidates, duplicate_ids, False
+        session, _ = self._wizard_session_ex(channel, int(bitrate), force_new=True)
+        candidates, duplicate_ids = self._inventory_scan(session, scan_ids)
+        return session, candidates, duplicate_ids, True
 
     def single_wizard_identify(
         self,
@@ -5744,11 +6114,10 @@ class WorkstationService:
             if problem:
                 return problem
             try:
-                session = self._wizard_session(channel, int(bitrate))
-            except Exception as error:
+                session, candidates, duplicate_ids, _ = self._wizard_scan(channel, int(bitrate), DEFAULT_ARM_SCAN_IDS)
+            except WizardConnectError as error:
                 return self._wizard_problem("connect_failed", str(error))
 
-            candidates, duplicate_ids = self._inventory_scan(session, DEFAULT_ARM_SCAN_IDS)
             if not candidates:
                 return self._wizard_problem("no_motor_found")
             if len(candidates) > 1 or duplicate_ids:

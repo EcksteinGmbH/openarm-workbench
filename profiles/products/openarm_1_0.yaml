@@ -1,0 +1,76 @@
+# OpenArm 1.0 product registry.
+#
+# Every value here is already in production use and was verified on hardware: three
+# 1.0 Follower arms (OAF26062401 / OAF26080401 / OAF26090301) were built and tested
+# with exactly these settings. This file records what the workstation already does;
+# it does not change it.
+product_version: openarm_1_0
+label: OpenArm 1.0
+profile_revision: 2026-09-20.1
+hardware_verified: true
+
+arms:
+  right_arm:
+    profile_id: openarm_right_arm_v1
+    joint_prefix: R
+    expected_bus: can0
+    esc_ids: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+    mst_ids: [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18]
+  left_arm:
+    profile_id: openarm_left_arm_v1
+    joint_prefix: L
+    expected_bus: can0
+    # Plan A: left arm keeps distinct IDs rather than the official can1 0x01-0x08.
+    esc_ids: [0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]
+    mst_ids: [0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20]
+
+motors:
+  J1: DM-J8009P-2EC
+  J2: DM-J8009P-2EC
+  J3: DM-J4340P-2EC
+  J4: DM-J4340-2EC
+  J5: DM-J4310-2EC
+  J6: DM-J4310-2EC
+  J7: DM-J4310-2EC
+  J8: DM-J4310-2EC
+
+can:
+  # Single-motor ID commissioning, before assembly.
+  commissioning:
+    mode: can20
+    bitrate: 1000000
+  # Assembled arm. 1.0 stays on classic CAN; shipped and in-production units are not
+  # migrated to FD.
+  operation:
+    mode: can20
+    bitrate: 1000000
+    hardware_verified: true
+
+parameters:
+  ctrl_mode: MIT
+  timeout: 5000
+
+gripper:
+  joint: J8
+  close_target_rad: 0.0
+  min_travel_rad: 0.8
+  # 1.0 direction is keyed off the arm CN prefix (Follower vs Leader), which is what
+  # `_official_demo_gripper_open_target()` implements today.
+  open_target_rad_by_arm_cn_prefix:
+    OAF: -1.0472   # -60 deg
+    OAL: 1.0472    # +60 deg
+  hardware_verified: true
+
+zero:
+  method: limit_search
+  hardware_verified: true
+
+cameras: []
+
+# From the official firmware update page, carried over via
+# docs/ARM_WORKSTATION_V5_DUAL_VERSION_PLAN.md 2.4. Read and compare only; the
+# workstation never flashes firmware.
+firmware_baseline:
+  DM4310: V5017_04
+  DM4340: V5117_04
+  DM8009: V6417_04

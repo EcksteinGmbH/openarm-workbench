@@ -1,0 +1,110 @@
+{
+  "OAF26062401": {
+    "blocking_items": [],
+    "demo_records": 2,
+    "evidence_records": 5,
+    "linked_jobs": [
+      {
+        "has_blocking_issues": false,
+        "job_id": "33ecfe4d7cdc",
+        "job_type": "arm_acceptance",
+        "status": "passed"
+      },
+      {
+        "has_blocking_issues": false,
+        "job_id": "fb84ceb38611",
+        "job_type": "arm_acceptance",
+        "status": "failed"
+      },
+      {
+        "has_blocking_issues": false,
+        "job_id": "262271c33b42",
+        "job_type": "arm_acceptance",
+        "status": "passed"
+      },
+      {
+        "has_blocking_issues": false,
+        "job_id": "9916918ece74",
+        "job_type": "arm_acceptance",
+        "status": "failed"
+      }
+    ],
+    "raw_status_frame_evidence": true,
+    "release_decision": "PASS",
+    "release_ready": true,
+    "warning_items": [],
+    "zero_records": 2
+  },
+  "OAF26080401": {
+    "blocking_items": [],
+    "demo_records": 3,
+    "evidence_records": 3,
+    "linked_jobs": [
+      {
+        "has_blocking_issues": false,
+        "job_id": "42c54238ed8b",
+        "job_type": "arm_acceptance",
+        "status": "passed"
+      },
+      {
+        "has_blocking_issues": false,
+        "job_id": "231a74aa68a0",
+        "job_type": "arm_acceptance",
+        "status": "passed"
+      }
+    ],
+    "raw_status_frame_evidence": true,
+    "release_decision": "PASS",
+    "release_ready": true,
+    "warning_items": [],
+    "zero_records": 2
+  },
+  "OAF26090301": {
+    "blocking_items": [],
+    "demo_records": 2,
+    "evidence_records": 2,
+    "linked_jobs": [
+      {
+        "has_blocking_issues": false,
+        "job_id": "0c6c1d0d45a4",
+        "job_type": "arm_acceptance",
+        "status": "passed"
+      },
+      {
+        "has_blocking_issues": false,
+        "job_id": "807ed9b64101",
+        "job_type": "arm_acceptance",
+        "status": "passed"
+      },
+      {
+        "has_blocking_issues": false,
+        "job_id": "0b270068aeb0",
+        "job_type": "arm_acceptance",
+        "status": "failed"
+      },
+      {
+        "has_blocking_issues": false,
+        "job_id": "cd4a3ee200ec",
+        "job_type": "arm_acceptance",
+        "status": "passed"
+      },
+      {
+        "has_blocking_issues": false,
+        "job_id": "c0508396cdf5",
+        "job_type": "arm_acceptance",
+        "status": "passed"
+      },
+      {
+        "has_blocking_issues": false,
+        "job_id": "76b576cd922d",
+        "job_type": "arm_acceptance",
+        "status": "failed"
+      }
+    ],
+    "raw_status_frame_evidence": true,
+    "release_decision": "PASS",
+    "release_ready": true,
+    "warning_items": [],
+    "zero_records": 2
+  }
+}

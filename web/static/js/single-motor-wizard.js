@@ -1,6 +1,7 @@
 import { api } from './api.js';
 import { addLog } from './log.js';
 import { showModal } from './modal.js';
+import { showProblemModal } from './problem-modal.js?v=20260920-problem-modal';
 
 const STEPS = [
     { id: 'select', label: '选择关节' },
@@ -623,16 +624,27 @@ async function run(busyText, request, onSuccess) {
         if (payload.ok === false) {
             wizard.problem = payload.problem;
             addLog(`单电机向导：${payload.problem.title}`, 'error', 'wizard');
+            raiseIfBlocking(payload.problem);
         } else {
             onSuccess(payload);
         }
     } catch (error) {
         wizard.problem = clientProblem(error);
         addLog(`单电机向导：${error.message}`, 'error', 'wizard');
+        raiseIfBlocking(wizard.problem);
     } finally {
         wizard.busy = '';
         render();
     }
+}
+
+// A blocking problem means the CAN port itself is unusable; nothing in the wizard
+// can get past it, so raise a dialog instead of relying on the side panel.
+function raiseIfBlocking(problem) {
+    if (!problem?.blocking) return;
+    const action = RETRY_ACTION[problem.code];
+    const retry = action ? () => ACTIONS[action]?.() : null;
+    showProblemModal(problem, retry);
 }
 
 function post(url, body) {
@@ -721,6 +733,23 @@ function setAdvanced(open) {
     document.body.classList.toggle('motor-advanced', open);
 }
 
+const ACTIONS = {
+    identify,
+    write: confirmWrite,
+    save,
+    finish,
+    restart,
+    next: () => {
+        const joints = selectedArm()?.joints || [];
+        const index = joints.findIndex(joint => joint.joint === wizard.selection.joint);
+        if (index >= 0 && index < joints.length - 1) {
+            wizard.selection.joint = joints[index + 1].joint;
+        }
+        restart();
+        refreshInterfaces();
+    }
+};
+
 function handleClick(event) {
     const selectButton = event.target.closest('[data-select]');
     if (selectButton) {
@@ -734,21 +763,7 @@ function handleClick(event) {
     }
     const actionButton = event.target.closest('[data-action]');
     if (!actionButton || actionButton.disabled) return;
-    const action = actionButton.dataset.action;
-    if (action === 'identify') identify();
-    if (action === 'write') confirmWrite();
-    if (action === 'save') save();
-    if (action === 'finish') finish();
-    if (action === 'restart') restart();
-    if (action === 'next') {
-        const joints = selectedArm()?.joints || [];
-        const index = joints.findIndex(joint => joint.joint === wizard.selection.joint);
-        if (index >= 0 && index < joints.length - 1) {
-            wizard.selection.joint = joints[index + 1].joint;
-        }
-        restart();
-        refreshInterfaces();
-    }
+    ACTIONS[actionButton.dataset.action]?.();
 }
 
 function handleChange(event) {
