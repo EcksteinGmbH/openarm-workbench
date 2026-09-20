@@ -1,7 +1,6 @@
 import { api } from './api.js';
 import { addLog } from './log.js';
 import { showProblemModal } from './problem-modal.js?v=20260920-arm-wizard';
-import { showModal } from './modal.js';
 
 // Beginner wizard for tab 03 (整臂测试). Every step is laid out on the page with its
 // own button - the operator sees the whole flow, what is done, what is next and what
@@ -36,6 +35,7 @@ const arm = {
     open: null,
     creating: false,
     showCompleted: false,
+    phase: null,
     draft: { product_version: 'openarm_2_0', arm_type: 'OpenARM Follower', arm_cn: '' }
 };
 
@@ -143,33 +143,62 @@ function renderProgress() {
     target.textContent = `${done} / ${steps.length} 已完成${skipped ? `（${skipped} 步本版本不需要）` : ''}`;
 }
 
+const MOTOR_VIEW = 'motors';
+
+function phaseViews() {
+    const groups = (arm.status?.groups || []).map(group => {
+        const steps = arm.status.steps.filter(step => step.group === group.id);
+        const counted = steps.filter(step => step.state !== 'skipped');
+        return {
+            id: group.id,
+            label: group.label,
+            purpose: group.purpose,
+            steps,
+            done: counted.filter(step => step.state === 'done').length,
+            total: counted.length
+        };
+    }).filter(group => group.steps.length);
+    const attached = (arm.status?.motor_records || []).length;
+    groups.push({ id: MOTOR_VIEW, label: '电机记录', purpose: '', steps: [], done: attached, total: 16 });
+    return groups;
+}
+
+function activePhase(views) {
+    if (arm.phase && views.some(view => view.id === arm.phase)) return arm.phase;
+    // Open on the phase the arm is actually in, so the operator lands where they left.
+    const current = arm.status?.steps.find(step => step.state === 'current');
+    return current?.group || views[0]?.id;
+}
+
 function renderSteps() {
-    const target = document.getElementById('awSteps');
     document.getElementById('awStepsSection').classList.toggle('hidden', !arm.status);
-    document.getElementById('awMotorsSection').classList.toggle('hidden', !arm.status);
+    const nav = document.getElementById('awPhases');
+    const body = document.getElementById('awPhaseBody');
     if (!arm.status) {
-        target.innerHTML = '';
+        nav.innerHTML = '';
+        body.innerHTML = '';
         return;
     }
-    // Three short blocks rather than one list of twelve: an operator reads the phase
-    // they are in, and cannot lose a step between two that look alike.
-    let index = 0;
-    target.innerHTML = (arm.status.groups || []).map(group => {
-        const steps = arm.status.steps.filter(step => step.group === group.id);
-        if (!steps.length) return '';
-        const counted = steps.filter(step => step.state !== 'skipped');
-        const done = counted.filter(step => step.state === 'done').length;
-        const body = steps.map(step => renderStep(step, index++)).join('');
-        return `
-            <section class="aw-group ${done === counted.length ? 'complete' : ''}">
-                <header class="aw-group-head">
-                    <h4>${esc(group.label)}</h4>
-                    <span class="aw-group-count">${done} / ${counted.length}</span>
-                    <p>${esc(group.purpose)}</p>
-                </header>
-                <div class="aw-steps-inner">${body}</div>
-            </section>`;
-    }).join('');
+    const views = phaseViews();
+    const active = activePhase(views);
+
+    nav.innerHTML = views.map(view => `
+        <button class="aw-phase ${view.id === active ? 'active' : ''} ${view.done === view.total ? 'complete' : ''}"
+            data-phase="${esc(view.id)}">
+            <span class="aw-phase-name">${esc(view.label)}</span>
+            <span class="aw-phase-count">${view.done} / ${view.total}</span>
+        </button>`).join('');
+
+    if (active === MOTOR_VIEW) {
+        body.innerHTML = '<div id="awMotors"></div>';
+        renderMotors();
+        return;
+    }
+    const view = views.find(item => item.id === active);
+    let index = arm.status.steps.findIndex(step => step.group === active);
+    body.innerHTML = `
+        <p class="aw-phase-purpose">${esc(view.purpose)}</p>
+        <div class="aw-steps">${view.steps.map(step => renderStep(step, index++)).join('')}</div>`;
 }
 
 function renderStep(step, index) {
@@ -226,7 +255,7 @@ function renderStep(step, index) {
 
 function renderMotors() {
     const target = document.getElementById('awMotors');
-    if (!arm.status) {
+    if (!target || !arm.status) {
         target.innerHTML = '';
         return;
     }
@@ -273,7 +302,7 @@ function renderBadge() {
 function renderProblem() {
     // Put the message where the action that failed was: creating an arm fails in the
     // picker, running a step fails among the steps.
-    const target = document.getElementById(arm.creating || !arm.status ? 'awPicker' : 'awSteps');
+    const target = document.getElementById(arm.creating || !arm.status ? 'awPicker' : 'awPhaseBody');
     target.insertAdjacentHTML('afterbegin', `
         <div class="smw-card smw-problem">
             <div class="smw-problem-kicker">需要处理</div>
@@ -293,7 +322,6 @@ function render() {
     renderBadge();
     renderProgress();
     renderSteps();
-    renderMotors();
     if (arm.problem) renderProblem();
 }
 
@@ -341,22 +369,33 @@ async function loadArms() {
     if (!known) arm.armCn = arm.arms[0]?.arm_cn || null;
 }
 
-function deleteArm() {
+function openDeleteDialog() {
+    document.getElementById('awDeleteTitle').textContent = `删除 ${arm.armCn}？`;
+    document.getElementById('awDeleteBody').textContent =
+        '这台机械臂还没有任何测试记录，所以可以删除。选一种方式：';
+    document.getElementById('awDeleteModal').classList.remove('hidden');
+}
+
+function closeDeleteDialog() {
+    document.getElementById('awDeleteModal').classList.add('hidden');
+}
+
+function deleteArm(mode) {
     const armCn = arm.armCn;
-    // Destructive and outward-facing enough to confirm, even though the archive is
-    // empty and the file is moved rather than removed.
-    showModal(
-        '删除这台机械臂？',
-        `将删除 ${armCn} 的档案。它目前没有任何测试记录，文件会移到 deleted_arms/ 备查，不会真正丢失。`,
-        () => run('正在删除…', () => api(`/api/arm/wizard/${encodeURIComponent(armCn)}`, { method: 'DELETE' }), async () => {
-            addLog(`整臂向导：${armCn} 档案已删除`, 'info', 'arm');
-            arm.armCn = null;
-            arm.status = null;
-            arm.records = null;
-            await loadArms();
-            if (arm.armCn) await loadArm(arm.armCn);
-        })
-    );
+    closeDeleteDialog();
+    return run('正在删除…', () => api(`/api/arm/wizard/${encodeURIComponent(armCn)}?mode=${mode}`, { method: 'DELETE' }), async payload => {
+        addLog(
+            `整臂向导：${armCn} 档案已${payload.mode === 'purge' ? '彻底删除' : `删除（记录保留在 ${payload.kept_at}）`}`,
+            'info',
+            'arm'
+        );
+        arm.armCn = null;
+        arm.status = null;
+        arm.records = null;
+        arm.phase = null;
+        await loadArms();
+        if (arm.armCn) await loadArm(arm.armCn);
+    });
 }
 
 function createArm(form) {
@@ -389,6 +428,7 @@ async function loadArm(armCn) {
         arm.armCn = armCn;
         arm.status = payload;
         arm.open = null;
+        arm.phase = null;
         try {
             arm.records = await api(`/api/arm/wizard/${encodeURIComponent(armCn)}/motor-records`);
         } catch (error) {
@@ -449,7 +489,14 @@ function handleClick(event) {
         return;
     }
     if (event.target.closest('[data-delete-arm]')) {
-        deleteArm();
+        openDeleteDialog();
+        return;
+    }
+    const phase = event.target.closest('[data-phase]');
+    if (phase) {
+        arm.phase = phase.dataset.phase;
+        arm.open = null;
+        render();
         return;
     }
     if (event.target.closest('[data-toggle-completed]')) {
@@ -499,6 +546,12 @@ export async function initArmWizard() {
         if (!arm.busy) createArm(event.target);
     });
     document.getElementById('awAdvancedBtn').addEventListener('click', () => setAdvanced(true));
+    document.getElementById('awDeleteArchiveBtn').addEventListener('click', () => deleteArm('archive'));
+    document.getElementById('awDeletePurgeBtn').addEventListener('click', () => deleteArm('purge'));
+    document.getElementById('awDeleteCancelBtn').addEventListener('click', closeDeleteDialog);
+    document.getElementById('awDeleteModal').addEventListener('click', event => {
+        if (event.target.id === 'awDeleteModal') closeDeleteDialog();
+    });
     document.getElementById('awBackBtn').addEventListener('click', () => setAdvanced(false));
     render();
     try {

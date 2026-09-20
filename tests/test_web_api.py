@@ -407,7 +407,10 @@ def test_the_arm_wizard_page_is_wired_like_the_other_two_wizards(client):
     assert 'data-tab="officialDynamicTab"' not in page
     assert '<span>04</span> 报告归档' in page
 
-    for element_id in ("armWizard", "awPicker", "awSteps", "awMotors", "awProgress", "awAdvancedBtn", "awBackBtn"):
+    for element_id in ("armWizard", "awPicker", "awPhases", "awPhaseBody", "awProgress", "awAdvancedBtn", "awBackBtn"):
+        assert f'id="{element_id}"' in page
+    # Deleting offers the two choices rather than picking one for the operator.
+    for element_id in ("awDeleteModal", "awDeleteArchiveBtn", "awDeletePurgeBtn", "awDeleteCancelBtn"):
         assert f'id="{element_id}"' in page
     # The engineer workbench is preserved whole, as a hidden advanced section.
     assert 'id="armAdvancedTools"' in page
@@ -419,6 +422,7 @@ def test_the_arm_wizard_page_is_wired_like_the_other_two_wizards(client):
     css = client.get("/static/css/style.css").data.decode()
     assert 'body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .left-rail' in css
     assert ".aw-safety" in css and ".aw-tag.motion" in css and ".aw-arm.selected" in css
+    assert ".aw-phase.active" in css and ".aw-delete-options" in css
 
     app_js = client.get("/static/js/app.js").data.decode()
     assert "initArmWizard();" in app_js
@@ -432,9 +436,10 @@ def test_the_arm_wizard_page_is_wired_like_the_other_two_wizards(client):
     # Building a new arm is the starting point; shipped arms fold away behind a toggle.
     assert "+ 新建机械臂" in source and "data-new-arm" in source
     assert "已出厂的机械臂" in source and "data-toggle-completed" in source
-    # Steps render in three phase blocks, and a fresh archive can be discarded.
-    assert "arm.status.groups" in source and "aw-group-count" in source
-    assert "data-delete-arm" in source and "showModal" in source
+    # One phase on screen at a time, plus a view for the commissioned motors.
+    assert "data-phase=" in source and "MOTOR_VIEW" in source and "activePhase(" in source
+    assert "data-delete-arm" in source and "openDeleteDialog(" in source
+    assert "mode=${mode}" in source, "delete must pass the chosen mode through"
 
 
 def test_deleting_an_arm_through_the_wizard_api(client):
@@ -442,7 +447,8 @@ def test_deleting_an_arm_through_the_wizard_api(client):
     _json(client.post("/api/arm/wizard/create", json={"arm_cn": suggested, "product_version": "openarm_1_0"}))
     assert _json(client.get(f"/api/arm/wizard/{suggested}/status"))["deletable"] is True
 
-    assert _json(client.delete(f"/api/arm/wizard/{suggested}"))["ok"] is True
+    deleted = _json(client.delete(f"/api/arm/wizard/{suggested}"))
+    assert deleted["ok"] is True and deleted["mode"] == "archive"
     assert suggested not in [item["arm_cn"] for item in _json(client.get("/api/arm/wizard/arms"))["arms"]]
     # The serial is free again, so a mistyped one can be retyped.
     assert _json(client.get("/api/arm/wizard/arms"))["next_arm_cn"] == suggested

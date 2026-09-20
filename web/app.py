@@ -780,7 +780,11 @@ def arm_wizard_create():
 
 @app.delete("/api/arm/wizard/<arm_cn>")
 def arm_wizard_delete(arm_cn: str):
-    return _wizard_call(service.arm_wizard_delete, arm_cn=arm_cn)
+    return _wizard_call(
+        service.arm_wizard_delete,
+        arm_cn=arm_cn,
+        mode=str(request.args.get("mode") or "archive"),
+    )
 
 
 @app.get("/api/arm/wizard/<arm_cn>/status")

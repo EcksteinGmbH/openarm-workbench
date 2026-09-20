@@ -2036,41 +2036,6 @@ body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .right-rail {
 .aw-arm.muted-arm { opacity: 0.7; }
 .aw-arm.muted-arm.selected { opacity: 1; }
 
-/* --- steps grouped by phase: three short blocks beat one list of twelve --- */
-.aw-group {
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 14px;
-    margin-bottom: 14px;
-}
-
-.aw-group.complete { border-color: var(--ok, #38a169); }
-
-.aw-group-head {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 2px 10px;
-    margin-bottom: 12px;
-}
-
-.aw-group-head h4 { margin: 0; font-size: 15px; }
-.aw-group-head p {
-    grid-column: 1 / -1;
-    margin: 0;
-    color: var(--muted);
-    font-size: 12px;
-}
-
-.aw-group-count {
-    color: var(--muted);
-    font-size: 13px;
-    font-variant-numeric: tabular-nums;
-}
-
-.aw-group.complete .aw-group-count { color: var(--ok, #38a169); font-weight: 700; }
-
-.aw-steps-inner { display: flex; flex-direction: column; gap: 8px; }
-
 .aw-delete-row {
     display: flex;
     align-items: center;
@@ -2079,5 +2044,73 @@ body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .right-rail {
     margin-top: 14px;
     padding-top: 12px;
     border-top: 1px dashed var(--line);
+    font-size: 12px;
+}
+
+/* --- one phase per view: twelve steps on one screen was too much at once --- */
+.aw-phases {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 14px;
+}
+
+.aw-phase {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 9px 14px;
+    background: none;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    margin-bottom: -1px;
+}
+
+.aw-phase:hover { color: var(--text); }
+
+.aw-phase.active {
+    color: var(--text);
+    border-color: var(--line);
+    background: var(--panel-strong);
+}
+
+.aw-phase-name { font-weight: 700; }
+.aw-phase-count { font-size: 12px; font-variant-numeric: tabular-nums; }
+.aw-phase.complete .aw-phase-count { color: var(--ok, #38a169); font-weight: 700; }
+.aw-phase.active.complete .aw-phase-name { color: var(--ok, #38a169); }
+
+.aw-phase-purpose {
+    margin: 0 0 14px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.aw-steps { display: flex; flex-direction: column; gap: 8px; }
+
+/* --- delete: keeping the record and erasing it are different decisions --- */
+.aw-delete-options {
+    display: grid;
+    gap: 10px;
+    margin: 16px 0;
+}
+
+.aw-delete-options .btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    text-align: left;
+    padding: 12px 14px;
+    height: auto;
+}
+
+.aw-delete-options .btn small {
+    font-weight: 400;
+    opacity: 0.85;
     font-size: 12px;
 }

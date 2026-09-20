@@ -421,13 +421,54 @@ def test_deleting_an_unknown_arm_says_so(service):
     assert service.arm_wizard_delete("OAF00000000")["problem"]["code"] == "arm_not_found"
 
 
-def test_the_three_shipped_arms_could_never_be_deleted(service, monkeypatch):
-    # The real records carry dozens of entries each; this is the guard that matters.
+def test_the_shipped_arms_are_all_undeletable(service):
+    """Every real arm on this machine carries evidence, so none of them can be deleted.
+
+    Checked through the read-only path on copies of the records. Calling the delete
+    method against the production directory would be one changed condition away from
+    destroying a factory record, which is not a risk a test should take.
+    """
     real = Path(__file__).resolve().parent.parent / "artifacts" / "factory" / "arms"
     if not real.exists():
         pytest.skip("production records are not on this machine")
-    monkeypatch.setattr(workstation, "FACTORY_ARMS_DIR", real)
-    service = workstation.WorkstationService()
-    for path in real.glob("*.json"):
-        assert service.arm_wizard_delete(path.stem)["problem"]["code"] == "arm_has_evidence"
-        assert path.exists()
+    records = [json.loads(path.read_text(encoding="utf-8")) for path in real.glob("*.json")]
+    assert records, "expected at least one real arm record"
+    for record in records:
+        assert service._arm_evidence_count(record) > 0, record.get("arm_cn")
+
+
+def test_deleting_can_keep_the_record_or_erase_it(service):
+    # Two different decisions: a serial that might come back, versus one typed wrong
+    # thirty seconds ago that should leave no trace.
+    service.arm_wizard_create("OAF26092090", product_version="openarm_1_0")
+    kept = service.arm_wizard_delete("OAF26092090", mode="archive")
+    assert kept["mode"] == "archive" and kept["kept_at"]
+    archived = workstation.FACTORY_DIR / "deleted_arms" / "OAF26092090.json"
+    assert archived.exists()
+    assert json.loads(archived.read_text(encoding="utf-8"))["deleted_mode"] == "archive"
+
+    service.arm_wizard_create("OAF26092091", product_version="openarm_1_0")
+    purged = service.arm_wizard_delete("OAF26092091", mode="purge")
+    assert purged["mode"] == "purge" and purged["kept_at"] is None
+    assert not (workstation.FACTORY_DIR / "deleted_arms" / "OAF26092091.json").exists()
+    assert not (workstation.FACTORY_ARMS_DIR / "OAF26092091.json").exists()
+
+
+def test_both_delete_modes_respect_the_evidence_guard(service):
+    for index, mode in enumerate(("archive", "purge")):
+        arm_cn = f"OAF2609209{index + 2}"
+        service.arm_wizard_create(arm_cn, product_version="openarm_1_0")
+        path = workstation.FACTORY_ARMS_DIR / f"{arm_cn}.json"
+        record = json.loads(path.read_text(encoding="utf-8"))
+        record["factory_reports"] = [{"report_id": "r"}]
+        path.write_text(json.dumps(record), encoding="utf-8")
+
+        assert service.arm_wizard_delete(arm_cn, mode=mode)["problem"]["code"] == "arm_has_evidence"
+        assert path.exists(), f"{mode} must not touch an arm with evidence"
+
+
+def test_an_unknown_delete_mode_is_refused(service):
+    service.arm_wizard_create("OAF26092094", product_version="openarm_1_0")
+    with pytest.raises(ValueError, match="mode must be one of"):
+        service.arm_wizard_delete("OAF26092094", mode="shred")
+    assert (workstation.FACTORY_ARMS_DIR / "OAF26092094.json").exists()

@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.20.0-arm-wizard-groups-and-delete`
+Current workstation version: `0.21.0-arm-wizard-phase-views`
 
 ## Versioning Rule
 
@@ -13,6 +13,47 @@ Current workstation version: `0.20.0-arm-wizard-groups-and-delete`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.21.0-arm-wizard-phase-views - 2026-09-20
+
+Summary: one phase on screen at a time instead of twelve steps stacked together, and
+deleting an arm asks which kind of delete is meant.
+
+Changes:
+
+- The three phases are now separate views behind a tab strip - 静态测试, 动态测试,
+  出厂放行 - each showing only its own steps and carrying its own progress count. The
+  commissioned motors get a fourth view, 电机记录, so that evidence is findable without
+  crowding a test phase. Grouping them into blocks on one page (0.20.0) still left
+  everything on one screen; this is what was actually asked for.
+- The wizard opens on the phase the arm is actually in, so an operator lands where they
+  left off rather than at the top.
+- Deleting asks rather than deciding: 仅删除，保留记录 moves the file to
+  `deleted_arms/` and can be looked up later, 彻底删除 removes it outright. Each button
+  says underneath exactly what it does. The archived copy records which mode was used.
+  Both modes keep the evidence guard: anything recorded against the arm refuses both.
+
+Also fixed:
+
+- `test_the_three_shipped_arms_could_never_be_deleted` called the real delete method
+  against the production arms directory. It passed only because all three carry
+  evidence - one changed condition away from destroying a factory record. It now checks
+  the same property through the read-only evidence count, on copies of the records.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 228 passed, including that both delete modes respect
+  the evidence guard, that an archived delete leaves a copy carrying `deleted_mode`,
+  that a purge leaves nothing in either directory, and that an unrecognised mode is
+  refused without touching the record.
+- Checked live: a new 2.0 arm shows 静态测试 1/5, 动态测试 0/5, 出厂放行 0/2 and
+  电机记录 0/16 as four views, opening on 静态测试; a purge removed it from both the
+  arms directory and `deleted_arms/`.
+
+Operational Notes:
+
+- `deleted_arms/` currently holds one record from an archived delete. Records from a
+  purge are not recoverable, which is the point of offering both.
 
 ### 0.20.0-arm-wizard-groups-and-delete - 2026-09-20
 

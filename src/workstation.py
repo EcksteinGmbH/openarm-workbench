@@ -6226,15 +6226,24 @@ class WorkstationService:
             arm.get("joint_bindings") or {}
         )
 
-    def arm_wizard_delete(self, arm_cn: str) -> Dict[str, Any]:
+    ARM_DELETE_MODES = ("archive", "purge")
+
+    def arm_wizard_delete(self, arm_cn: str, mode: str = "archive") -> Dict[str, Any]:
         """Discard an archive created by mistake - wrong product version, wrong serial.
 
-        Refused the moment anything has been recorded against the arm: at that point the
-        archive is evidence, and evidence is not something an operator deletes from a
-        wizard. The file is moved to `deleted_arms/`, not removed, so a wrong call costs
-        nothing.
+        Two ways, because they answer different questions. `archive` takes the arm out
+        of the wizard but keeps its file under `deleted_arms/`, which is what you want
+        when a serial might come back or someone may ask what happened to it. `purge`
+        removes the file, for a serial typed wrong thirty seconds ago that should leave
+        no trace at all.
+
+        Either way it is refused the moment anything has been recorded against the arm:
+        at that point the archive is evidence, and evidence is not something an operator
+        deletes from a wizard.
         """
         with self._lock:
+            if mode not in self.ARM_DELETE_MODES:
+                raise ValueError(f"mode must be one of {self.ARM_DELETE_MODES}")
             try:
                 path, arm = self._load_arm_record(arm_cn)
             except KeyError:
@@ -6244,12 +6253,17 @@ class WorkstationService:
                 return self._wizard_problem(
                     "arm_has_evidence", f"{arm_cn} 上已有 {evidence} 条记录"
                 )
-            target_dir = FACTORY_DIR / "deleted_arms"
-            target_dir.mkdir(parents=True, exist_ok=True)
-            arm["deleted_at"] = _now_iso()
-            _atomic_json(target_dir / f"{_safe_name(arm_cn)}.json", arm)
+
+            kept_at = None
+            if mode == "archive":
+                target_dir = FACTORY_DIR / "deleted_arms"
+                target_dir.mkdir(parents=True, exist_ok=True)
+                arm["deleted_at"] = _now_iso()
+                arm["deleted_mode"] = mode
+                _atomic_json(target_dir / f"{_safe_name(arm_cn)}.json", arm)
+                kept_at = str(target_dir)
             path.unlink(missing_ok=True)
-            return {"ok": True, "arm_cn": arm_cn, "moved_to": str(target_dir)}
+            return {"ok": True, "arm_cn": arm_cn, "mode": mode, "kept_at": kept_at}
 
     def arm_wizard_status(self, arm_cn: str) -> Dict[str, Any]:
         """Where this arm stands: which steps are done, which is next, what blocks it."""

@@ -675,14 +675,11 @@
                         <section class="aw-section" id="awStepsSection">
                             <div class="aw-section-head">
                                 <span class="aw-section-no">2</span>
-                                <h3>按顺序完成下面的步骤</h3>
+                                <h3>按顺序完成测试</h3>
                                 <span class="aw-progress" id="awProgress"></span>
                             </div>
-                            <div class="aw-steps" id="awSteps"></div>
-                        </section>
-                        <section class="aw-section" id="awMotorsSection">
-                            <div class="aw-section-head"><span class="aw-section-no">3</span><h3>这台臂的电机记录</h3></div>
-                            <div id="awMotors"></div>
+                            <nav class="aw-phases" id="awPhases"></nav>
+                            <div class="aw-phase-body" id="awPhaseBody"></div>
                         </section>
                     </div>
                     <div class="smw-advanced hidden" id="armAdvancedTools">
@@ -1352,6 +1349,27 @@
             <div class="button-row">
                 <button class="btn btn-secondary" id="modalCancelBtn">取消</button>
                 <button class="btn btn-warning" id="modalConfirmBtn">确认</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal hidden" id="awDeleteModal">
+        <div class="modal-card">
+            <div class="smw-problem-kicker">删除机械臂档案</div>
+            <h3 id="awDeleteTitle"></h3>
+            <p id="awDeleteBody" class="muted"></p>
+            <div class="aw-delete-options">
+                <button class="btn btn-secondary" id="awDeleteArchiveBtn" type="button">
+                    仅删除，保留记录
+                    <small>从列表里移走，档案存到 deleted_arms/，以后还能查到</small>
+                </button>
+                <button class="btn btn-warning" id="awDeletePurgeBtn" type="button">
+                    彻底删除
+                    <small>档案文件一并删掉，不留痕迹，无法恢复</small>
+                </button>
+            </div>
+            <div class="button-row">
+                <button class="btn btn-secondary" id="awDeleteCancelBtn" type="button">取消</button>
             </div>
         </div>
     </div>
