@@ -136,10 +136,13 @@ def test_the_gate_writes_nothing(golden_service, tmp_path):
 def test_the_fixture_still_matches_the_real_records(monkeypatch):
     """The committed fixture is a reduction of the real records - it must stay faithful.
 
-    Where the real records exist, the reduced copy has to produce the same verdict. If
-    it stops doing so, the fixture is stale and `build_fixture.py` needs re-running.
+    Only the arms in the baseline are checked. Arms built after it was taken are normal
+    production work and are none of this test's business; comparing the whole directory
+    would turn every new arm into a failure.
     """
     monkeypatch.setattr(workstation, "FACTORY_ARMS_DIR", REAL_ARMS_DIR)
     service = workstation.WorkstationService()
-    real = {path.stem: _gate_view(service.factory_release_gate(path.stem)) for path in sorted(REAL_ARMS_DIR.glob("*.json"))}
-    assert real == BASELINE
+    for arm_cn, expected in BASELINE.items():
+        if not (REAL_ARMS_DIR / f"{arm_cn}.json").exists():
+            pytest.skip(f"{arm_cn} is no longer on this machine")
+        assert _gate_view(service.factory_release_gate(arm_cn)) == expected, arm_cn

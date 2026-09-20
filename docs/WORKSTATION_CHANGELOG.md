@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.21.0-arm-wizard-phase-views`
+Current workstation version: `0.21.1-motor-records-explained`
 
 ## Versioning Rule
 
@@ -13,6 +13,40 @@ Current workstation version: `0.21.0-arm-wizard-phase-views`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.21.1-motor-records-explained - 2026-09-20
+
+Summary: the 电机记录 view said nothing about what those records are or where they came
+from, and two golden tests treated any newly built arm as a failure.
+
+Changes:
+
+- The view is renamed 关节电机 and opens by explaining itself: each motor was configured
+  on its own at the single-motor station before assembly, the workstation kept a record
+  per motor, and attaching one to a joint states which physical motor this arm's R-J1
+  actually is. It also says the report cites these records, and that attaching sends
+  nothing to the motor.
+- Each joint card shows the date the motor was commissioned, so the evidence carries
+  its date on the face of it. The attach button reads 挂到这个关节 and a joint with no
+  record reads 还没配过这颗, instead of the bare 缺记录.
+- `arm_wizard_status()` now returns each attached record's commissioning date, not only
+  when it was linked to the arm. The commissioning date is the evidence.
+
+Two tests fixed, both the same mistake:
+
+- `test_the_fixture_still_matches_the_real_records` compared the *whole* production arms
+  directory against the baseline, and `test_the_shipped_arms_are_all_undeletable`
+  asserted that every arm on disk carries evidence. Now that the wizard can build arms,
+  both turned ordinary production work into a test failure - an arm being built right
+  now legitimately has no evidence yet, which is exactly why it can be discarded. Both
+  now check only the arms named in the baseline.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 228 passed, with a new 2.0 arm present in the
+  production directory - the case that broke both tests before.
+- Checked live: the view lists all 16 motors commissioned on 2026-09-17 for that arm,
+  with their joint, model and date.
 
 ### 0.21.0-arm-wizard-phase-views - 2026-09-20
 

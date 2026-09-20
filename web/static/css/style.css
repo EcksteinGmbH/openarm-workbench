@@ -2114,3 +2114,25 @@ body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .right-rail {
     opacity: 0.85;
     font-size: 12px;
 }
+
+/* --- where these motors came from: the label alone explained nothing --- */
+.aw-motors-intro {
+    border-left: 3px solid var(--accent);
+    padding: 2px 0 2px 14px;
+    margin-bottom: 16px;
+}
+
+.aw-motors-intro h4 { margin: 0 0 8px; font-size: 15px; }
+
+.aw-motors-intro p {
+    margin: 0 0 8px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.aw-motors-intro p:last-child { margin-bottom: 0; }
+.aw-motors-intro strong { color: var(--text); }
+
+.aw-motor-count { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.aw-motor-count strong { color: var(--text); font-size: 15px; }

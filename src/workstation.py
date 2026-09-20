@@ -6360,6 +6360,9 @@ class WorkstationService:
                 "joint_name": item.get("joint_name"),
                 "motor_type": item.get("motor_type"),
                 "result": item.get("result"),
+                # When the motor was commissioned, as opposed to when it was linked to
+                # this arm. The page shows the former: that is the evidence date.
+                "created_at": item.get("commissioned_at"),
                 "attached_at": item.get("attached_at"),
             }
             for item in attached

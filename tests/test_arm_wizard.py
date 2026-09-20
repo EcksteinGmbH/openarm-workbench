@@ -164,15 +164,20 @@ def test_attaching_a_record_records_the_joint_it_belongs_to(service_with_records
     assert len(attached) == 1
     assert attached[0]["record_id"] == record_id
     assert attached[0]["joint_name"] and attached[0]["attached_at"]
-    assert service_with_records.arm_wizard_status("OAF26092045")["motor_records"] == [
+    shown = service_with_records.arm_wizard_status("OAF26092045")["motor_records"]
+    assert shown == [
         {
             "record_id": attached[0]["record_id"],
             "joint_name": attached[0]["joint_name"],
             "motor_type": attached[0]["motor_type"],
             "result": "PASS",
+            "created_at": attached[0]["commissioned_at"],
             "attached_at": attached[0]["attached_at"],
         }
     ]
+    # The page shows when the motor was commissioned, not when it was linked here:
+    # that date is the evidence, and it comes from the single-motor station.
+    assert shown[0]["created_at"].startswith("2026-09-17")
 
 
 def test_attaching_a_record_from_the_other_product_is_refused(service_with_records):
@@ -422,19 +427,30 @@ def test_deleting_an_unknown_arm_says_so(service):
 
 
 def test_the_shipped_arms_are_all_undeletable(service):
-    """Every real arm on this machine carries evidence, so none of them can be deleted.
+    """The arms that have shipped carry evidence, so none of them can be deleted.
 
     Checked through the read-only path on copies of the records. Calling the delete
     method against the production directory would be one changed condition away from
     destroying a factory record, which is not a risk a test should take.
+
+    Only the shipped arms are checked. An arm being built right now legitimately has no
+    evidence yet - that is the whole point of being able to discard it.
     """
+    from tests.test_golden_real_arms import BASELINE
+
     real = Path(__file__).resolve().parent.parent / "artifacts" / "factory" / "arms"
     if not real.exists():
         pytest.skip("production records are not on this machine")
-    records = [json.loads(path.read_text(encoding="utf-8")) for path in real.glob("*.json")]
-    assert records, "expected at least one real arm record"
-    for record in records:
-        assert service._arm_evidence_count(record) > 0, record.get("arm_cn")
+    checked = 0
+    for arm_cn in BASELINE:
+        path = real / f"{arm_cn}.json"
+        if not path.exists():
+            continue
+        record = json.loads(path.read_text(encoding="utf-8"))
+        assert service._arm_evidence_count(record) > 0, arm_cn
+        checked += 1
+    if not checked:
+        pytest.skip("none of the baseline arms are on this machine")
 
 
 def test_deleting_can_keep_the_record_or_erase_it(service):

@@ -159,7 +159,14 @@ function phaseViews() {
         };
     }).filter(group => group.steps.length);
     const attached = (arm.status?.motor_records || []).length;
-    groups.push({ id: MOTOR_VIEW, label: '电机记录', purpose: '', steps: [], done: attached, total: 16 });
+    groups.push({
+        id: MOTOR_VIEW,
+        label: '关节电机',
+        purpose: '',
+        steps: [],
+        done: attached,
+        total: 16
+    });
     return groups;
 }
 
@@ -256,32 +263,50 @@ function renderStep(step, index) {
 function renderMotors() {
     const target = document.getElementById('awMotors');
     if (!target || !arm.status) {
-        target.innerHTML = '';
+        target && (target.innerHTML = '');
         return;
     }
     const attached = arm.status.motor_records || [];
     const available = (arm.records?.records) || [];
+
+    // Say where these come from. "电机记录" alone told nobody that these are the
+    // motors configured at the single-motor station, or why they matter here.
+    const intro = `
+        <div class="aw-motors-intro">
+            <h4>这台臂用的是哪 16 颗电机</h4>
+            <p>装配之前，每颗电机都在「<strong>02 单电机测试</strong>」里单独配过 ID 和参数，
+            工作站为每颗存了一条记录。在这里把记录挂到对应关节上，就等于说明
+            「这台臂的 R-J1 用的是那一颗」。</p>
+            <p>出厂报告会引用这些记录，作为每个关节的电机配置凭证。<strong>挂载只是建立关联，
+            不会给电机发任何指令。</strong></p>
+        </div>`;
+
     if (!attached.length && !available.length) {
-        target.innerHTML = '<p class="muted">还没有属于这台臂的单电机记录。先在「02 单电机测试」里配置电机，记录会自动出现在这里。</p>';
+        target.innerHTML = `${intro}
+            <p class="muted">还没有属于这台臂的单电机记录。先到「02 单电机测试」把电机配好，
+            记录会自动出现在这里（只显示和本台产品版本一致的记录）。</p>`;
         return;
     }
+
     const byJoint = new Map(attached.map(item => [item.joint_name, item]));
     const joints = [...new Set([...available.map(item => item.joint_name), ...byJoint.keys()])].sort();
-    target.innerHTML = `
-        <p class="muted aw-hint">单电机工位配好的电机挂到对应关节后，出厂报告会引用它们（已挂 ${attached.length} / ${joints.length}）。</p>
+    target.innerHTML = `${intro}
+        <p class="aw-motor-count">已挂 <strong>${attached.length}</strong> / ${joints.length} 个关节</p>
         <div class="aw-motor-grid">
             ${joints.map(joint => {
                 const done = byJoint.get(joint);
                 const candidate = available.find(item => item.joint_name === joint);
+                const source = done || candidate;
                 return `
                 <div class="aw-motor ${done ? 'done' : ''}">
                     <strong>${esc(joint)}</strong>
-                    <small>${esc((done || candidate)?.motor_type || '-')}</small>
+                    <small>${esc(source?.motor_type || '-')}</small>
+                    <small>${source?.created_at ? `配置于 ${esc(String(source.created_at).slice(0, 10))}` : ''}</small>
                     ${done
                         ? '<span class="aw-motor-state">已挂载</span>'
                         : candidate
-                            ? `<button class="btn btn-secondary slim" data-attach="${esc(candidate.record_id)}" ${arm.busy ? 'disabled' : ''}>挂载</button>`
-                            : '<span class="aw-motor-state missing">缺记录</span>'}
+                            ? `<button class="btn btn-secondary slim" data-attach="${esc(candidate.record_id)}" ${arm.busy ? 'disabled' : ''}>挂到这个关节</button>`
+                            : '<span class="aw-motor-state missing">还没配过这颗</span>'}
                 </div>`;
             }).join('')}
         </div>`;
