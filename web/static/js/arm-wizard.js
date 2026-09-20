@@ -1,6 +1,7 @@
 import { api } from './api.js';
 import { addLog } from './log.js';
 import { showProblemModal } from './problem-modal.js?v=20260920-arm-wizard';
+import { showModal } from './modal.js';
 
 // Beginner wizard for tab 03 (整臂测试). Every step is laid out on the page with its
 // own button - the operator sees the whole flow, what is done, what is next and what
@@ -113,6 +114,11 @@ function renderPicker() {
             <div class="aw-group-title">正在测试的机械臂</div>
             <div class="aw-arm-list">${inProgress.map(item => armCard(item)).join('')}</div>`
         : (arm.creating ? '' : '<p class="muted aw-hint">目前没有正在测试的机械臂。</p>')}
+        ${arm.status?.deletable ? `
+            <div class="aw-delete-row">
+                <span class="muted">${esc(arm.armCn)} 还没有任何测试记录。版本或编号填错了可以删掉重建。</span>
+                <button class="btn btn-secondary slim" data-delete-arm="1" ${arm.busy ? 'disabled' : ''}>删除这台机械臂</button>
+            </div>` : ''}
         ${arm.completed.length ? `
             <button class="aw-toggle" data-toggle-completed="1">
                 ${arm.showCompleted ? '▾' : '▸'} 已出厂的机械臂（${arm.completed.length}）
@@ -145,7 +151,25 @@ function renderSteps() {
         target.innerHTML = '';
         return;
     }
-    target.innerHTML = arm.status.steps.map((step, index) => renderStep(step, index)).join('');
+    // Three short blocks rather than one list of twelve: an operator reads the phase
+    // they are in, and cannot lose a step between two that look alike.
+    let index = 0;
+    target.innerHTML = (arm.status.groups || []).map(group => {
+        const steps = arm.status.steps.filter(step => step.group === group.id);
+        if (!steps.length) return '';
+        const counted = steps.filter(step => step.state !== 'skipped');
+        const done = counted.filter(step => step.state === 'done').length;
+        const body = steps.map(step => renderStep(step, index++)).join('');
+        return `
+            <section class="aw-group ${done === counted.length ? 'complete' : ''}">
+                <header class="aw-group-head">
+                    <h4>${esc(group.label)}</h4>
+                    <span class="aw-group-count">${done} / ${counted.length}</span>
+                    <p>${esc(group.purpose)}</p>
+                </header>
+                <div class="aw-steps-inner">${body}</div>
+            </section>`;
+    }).join('');
 }
 
 function renderStep(step, index) {
@@ -317,6 +341,24 @@ async function loadArms() {
     if (!known) arm.armCn = arm.arms[0]?.arm_cn || null;
 }
 
+function deleteArm() {
+    const armCn = arm.armCn;
+    // Destructive and outward-facing enough to confirm, even though the archive is
+    // empty and the file is moved rather than removed.
+    showModal(
+        '删除这台机械臂？',
+        `将删除 ${armCn} 的档案。它目前没有任何测试记录，文件会移到 deleted_arms/ 备查，不会真正丢失。`,
+        () => run('正在删除…', () => api(`/api/arm/wizard/${encodeURIComponent(armCn)}`, { method: 'DELETE' }), async () => {
+            addLog(`整臂向导：${armCn} 档案已删除`, 'info', 'arm');
+            arm.armCn = null;
+            arm.status = null;
+            arm.records = null;
+            await loadArms();
+            if (arm.armCn) await loadArm(arm.armCn);
+        })
+    );
+}
+
 function createArm(form) {
     const data = new FormData(form);
     arm.draft = {
@@ -404,6 +446,10 @@ function handleClick(event) {
         arm.creating = false;
         arm.problem = null;
         render();
+        return;
+    }
+    if (event.target.closest('[data-delete-arm]')) {
+        deleteArm();
         return;
     }
     if (event.target.closest('[data-toggle-completed]')) {

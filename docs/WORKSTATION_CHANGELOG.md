@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.19.0-arm-wizard-new-arm-first`
+Current workstation version: `0.20.0-arm-wizard-groups-and-delete`
 
 ## Versioning Rule
 
@@ -13,6 +13,48 @@ Current workstation version: `0.19.0-arm-wizard-new-arm-first`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.20.0-arm-wizard-groups-and-delete - 2026-09-20
+
+Summary: the twelve steps are grouped into three phase blocks, and an archive created
+by mistake can be discarded.
+
+Changes:
+
+- Each step now declares which phase it belongs to, and the wizard renders one block
+  per phase with its own progress count: 静态测试 (建档, 连接自检, 静态验收, 参数标准化,
+  切换 CAN-FD), 动态测试 (低增益使能检查, 零位校准, 夹爪测试, 相机测试, 官方 Demo) and
+  出厂放行 (放行检查, 报告签核). Each block carries one line about what that phase is,
+  so an operator reads where they are instead of scanning twelve similar rows. The
+  official order is unchanged; the blocks only break it into readable pieces.
+- `arm_wizard_delete()` discards an arm archive, for the case it exists for: the wrong
+  product version or a mistyped serial, caught straight away. It refuses the moment
+  anything has been recorded against the arm - a linked job, a zero or demo record,
+  evidence, a report, a command run, an attached motor record, a joint binding - since
+  at that point the archive is evidence, and evidence is not something an operator
+  deletes from a wizard. The file is moved to `deleted_arms/`, not removed, and the
+  page confirms before calling. `arm_wizard_status()` reports `evidence_count` and
+  `deletable`, and the delete button only appears when the archive is empty.
+- A new problem entry `arm_has_evidence` explains the refusal and says that an arm you
+  simply do not want to continue can be left alone; it affects nothing else.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 225 passed, including that nothing which moves the
+  arm sits in the 静态测试 group, that the official order survives the grouping, that a
+  single attached motor record is enough to block a delete, and that each of the three
+  shipped arms is refused (they carry 34, 39 and 16 entries).
+- Checked live end to end: create a 2.0 arm, read back three blocks with 1/5, 0/5 and
+  0/2 and the five 2.0 steps locked, delete it, and see the serial become available
+  again.
+- Tried against a real arm: `OAF26080401` is refused with "上已有 34 条记录".
+
+Operational Notes:
+
+- An arm archive created by hand while the wizard was being built (`OAF26092001`) was
+  found in the production directory by the golden regression and removed through this
+  new path, which is what it is for.
+- The eleven steps after 整机建档 still hand over to the engineer tools.
 
 ### 0.19.0-arm-wizard-new-arm-first - 2026-09-20
 

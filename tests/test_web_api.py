@@ -432,6 +432,20 @@ def test_the_arm_wizard_page_is_wired_like_the_other_two_wizards(client):
     # Building a new arm is the starting point; shipped arms fold away behind a toggle.
     assert "+ 新建机械臂" in source and "data-new-arm" in source
     assert "已出厂的机械臂" in source and "data-toggle-completed" in source
+    # Steps render in three phase blocks, and a fresh archive can be discarded.
+    assert "arm.status.groups" in source and "aw-group-count" in source
+    assert "data-delete-arm" in source and "showModal" in source
+
+
+def test_deleting_an_arm_through_the_wizard_api(client):
+    suggested = _json(client.get("/api/arm/wizard/arms"))["next_arm_cn"]
+    _json(client.post("/api/arm/wizard/create", json={"arm_cn": suggested, "product_version": "openarm_1_0"}))
+    assert _json(client.get(f"/api/arm/wizard/{suggested}/status"))["deletable"] is True
+
+    assert _json(client.delete(f"/api/arm/wizard/{suggested}"))["ok"] is True
+    assert suggested not in [item["arm_cn"] for item in _json(client.get("/api/arm/wizard/arms"))["arms"]]
+    # The serial is free again, so a mistyped one can be retyped.
+    assert _json(client.get("/api/arm/wizard/arms"))["next_arm_cn"] == suggested
 
 
 def test_creating_an_arm_through_the_wizard_api(client):

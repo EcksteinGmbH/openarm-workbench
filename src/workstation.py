@@ -269,6 +269,15 @@ SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
             "如果这是另一台新臂，把序号加一（例如 ...01 改成 ...02）。",
         ],
     },
+    "arm_has_evidence": {
+        "title": "这台机械臂不能删除",
+        "message": "它上面已经有测试记录了，删掉就等于销毁证据。",
+        "solutions": [
+            "只有刚建好、还没做过任何测试的档案才能删除。",
+            "如果产品版本或编号填错了，而且已经测过：请交给工程师处理，不要自行删除。",
+            "如果只是不想继续测这台，直接不管它即可，它不会影响别的机械臂。",
+        ],
+    },
     "arm_not_found": {
         "title": "找不到这台机械臂的档案",
         "message": "输入的整机编号在工作站里没有对应记录。",
@@ -5959,27 +5968,49 @@ class WorkstationService:
     # `products` limits a step to the product versions it applies to. A step whose
     # product section is unverified is shown but locked, with the reason spelled out -
     # that is how 2.0 keeps its place in the flow while its hardware is out of reach.
+    ARM_WIZARD_GROUPS: List[Dict[str, str]] = [
+        {
+            "id": "static",
+            "label": "静态测试",
+            "purpose": "机械臂通电但不运动。建档、连通、核对参数，全部做完再进入动态。",
+        },
+        {
+            "id": "dynamic",
+            "label": "动态测试",
+            "purpose": "在装配好的整臂上做。带红色标记的步骤会让机械臂运动，做之前要清场。",
+        },
+        {
+            "id": "release",
+            "label": "出厂放行",
+            "purpose": "核对证据是否齐全，出具正式报告。只读，不动电机。",
+        },
+    ]
+
     ARM_WIZARD_STEPS: List[Dict[str, Any]] = [
         {
             "id": "identity",
+            "group": "static",
             "label": "整机建档",
             "purpose": "给这台臂建立档案，确定它是 1.0 还是 2.0。版本一经确定不可更改。",
             "motion": False,
         },
         {
             "id": "link",
+            "group": "static",
             "label": "连接自检",
             "purpose": "确认 CAN 口可用、总线上能看到电机。只读，不动电机。",
             "motion": False,
         },
         {
             "id": "static",
+            "group": "static",
             "label": "静态验收",
             "purpose": "逐关节核对 ID、模式、波特率、故障和温度，并复扫确认通信稳定。只读。",
             "motion": False,
         },
         {
             "id": "timeout",
+            "group": "static",
             "label": "参数标准化",
             "purpose": "按 Profile 给每个关节写入 TIMEOUT 并保存。会写入电机，但不发运动指令。",
             "motion": False,
@@ -5987,6 +6018,7 @@ class WorkstationService:
         },
         {
             "id": "fd_switch",
+            "group": "static",
             "label": "切换 CAN-FD",
             "purpose": "把整臂从 1 Mbps 经典 CAN 切到 CAN-FD 1M/5M，逐关节写入并保存。",
             "motion": False,
@@ -5996,12 +6028,14 @@ class WorkstationService:
         },
         {
             "id": "enable",
+            "group": "dynamic",
             "label": "低增益使能检查",
             "purpose": "逐关节低增益使能再失能，确认链路正常且无故障。电机会有极轻微动作。",
             "motion": True,
         },
         {
             "id": "zero",
+            "group": "dynamic",
             "label": "零位校准",
             "purpose": "官方动态零位，保存整臂零点，随后恢复初始姿态。机械臂会运动。",
             "motion": True,
@@ -6009,6 +6043,7 @@ class WorkstationService:
         },
         {
             "id": "gripper",
+            "group": "dynamic",
             "label": "夹爪测试",
             "purpose": "按本产品的方向和行程开合夹爪，记录实测行程。夹爪会运动。",
             "motion": True,
@@ -6016,6 +6051,7 @@ class WorkstationService:
         },
         {
             "id": "camera",
+            "group": "dynamic",
             "label": "相机测试",
             "purpose": "枚举相机、检查分辨率与帧率并留存快照。不动电机。",
             "motion": False,
@@ -6024,6 +6060,7 @@ class WorkstationService:
         },
         {
             "id": "demo",
+            "group": "dynamic",
             "label": "官方 Demo",
             "purpose": "跑官方 Demo 验证整臂动作，结束后强制失能。机械臂会运动。",
             "motion": True,
@@ -6031,12 +6068,14 @@ class WorkstationService:
         },
         {
             "id": "gate",
+            "group": "release",
             "label": "放行检查",
             "purpose": "核对证据是否齐全、版本是否一致，给出 PASS 或 HOLD。只读。",
             "motion": False,
         },
         {
             "id": "report",
+            "group": "release",
             "label": "报告签核",
             "purpose": "生成正式出厂报告并归档证据。只读。",
             "motion": False,
@@ -6052,6 +6091,7 @@ class WorkstationService:
         return {
             "id": step["id"],
             "label": step["label"],
+            "group": step["group"],
             "purpose": step["purpose"],
             "motion": bool(step.get("motion")),
             "writes": bool(step.get("writes")),
@@ -6081,6 +6121,7 @@ class WorkstationService:
                     {"id": side, "label": "右臂" if side == "right_arm" else "左臂", "expected_bus": arm["expected_bus"]}
                     for side, arm in product["arms"].items()
                 ],
+                "groups": [dict(group) for group in self.ARM_WIZARD_GROUPS],
                 "steps": [self._arm_wizard_step_view(step, selected) for step in self.ARM_WIZARD_STEPS],
                 "operation_bus": dict(product["can"]["operation"]),
                 "locked_sections": self.product_registry.lock_reasons(selected),
@@ -6167,6 +6208,49 @@ class WorkstationService:
             )
             return {"ok": True, "arm_cn": record["arm_cn"], "product_version": record["product_version"]}
 
+    ARM_EVIDENCE_FIELDS = (
+        "linked_jobs",
+        "zero_calibration_records",
+        "demo_validation_records",
+        "evidence_records",
+        "factory_reports",
+        "command_run_history",
+        "single_motor_records",
+        "workflow_history",
+        "bundle_history",
+    )
+
+    def _arm_evidence_count(self, arm: Dict[str, Any]) -> int:
+        """How much has been recorded against this arm. Zero means nothing was tested."""
+        return sum(len(arm.get(field) or []) for field in self.ARM_EVIDENCE_FIELDS) + len(
+            arm.get("joint_bindings") or {}
+        )
+
+    def arm_wizard_delete(self, arm_cn: str) -> Dict[str, Any]:
+        """Discard an archive created by mistake - wrong product version, wrong serial.
+
+        Refused the moment anything has been recorded against the arm: at that point the
+        archive is evidence, and evidence is not something an operator deletes from a
+        wizard. The file is moved to `deleted_arms/`, not removed, so a wrong call costs
+        nothing.
+        """
+        with self._lock:
+            try:
+                path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+            evidence = self._arm_evidence_count(arm)
+            if evidence:
+                return self._wizard_problem(
+                    "arm_has_evidence", f"{arm_cn} 上已有 {evidence} 条记录"
+                )
+            target_dir = FACTORY_DIR / "deleted_arms"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            arm["deleted_at"] = _now_iso()
+            _atomic_json(target_dir / f"{_safe_name(arm_cn)}.json", arm)
+            path.unlink(missing_ok=True)
+            return {"ok": True, "arm_cn": arm_cn, "moved_to": str(target_dir)}
+
     def arm_wizard_status(self, arm_cn: str) -> Dict[str, Any]:
         """Where this arm stands: which steps are done, which is next, what blocks it."""
         with self._lock:
@@ -6205,11 +6289,17 @@ class WorkstationService:
                     view["state"] = "pending"
                 steps.append(view)
 
+            evidence = self._arm_evidence_count(arm)
             return {
                 "ok": True,
                 "arm_cn": arm_cn,
                 "product_version": product_version,
                 "product_label": self.product_registry.get(product_version)["label"],
+                "groups": [dict(group) for group in self.ARM_WIZARD_GROUPS],
+                "evidence_count": evidence,
+                # Only an archive with nothing in it can be discarded; once a test has
+                # recorded anything against this arm, that evidence is the record.
+                "deletable": evidence == 0,
                 "arm_type": arm.get("arm_type"),
                 "steps": steps,
                 "next_step": next_step,

@@ -346,3 +346,88 @@ def test_an_unknown_product_version_cannot_be_recorded(service):
     payload = service.arm_wizard_create("OAF26092073", product_version="openarm_9_9")
     assert payload["problem"]["code"] == "arm_cn_invalid"
     assert not (workstation.FACTORY_ARMS_DIR / "OAF26092073.json").exists()
+
+
+# ---- grouping and deleting -------------------------------------------------------
+
+
+def test_the_steps_are_grouped_into_three_phases(service):
+    options = service.arm_wizard_options()
+    assert [group["id"] for group in options["groups"]] == ["static", "dynamic", "release"]
+    assert all(group["label"] and group["purpose"] for group in options["groups"])
+
+    by_group = {}
+    for step in options["steps"]:
+        by_group.setdefault(step["group"], []).append(step["id"])
+    assert by_group["static"] == ["identity", "link", "static", "timeout", "fd_switch"]
+    assert by_group["dynamic"] == ["enable", "zero", "gripper", "camera", "demo"]
+    assert by_group["release"] == ["gate", "report"]
+
+
+def test_nothing_that_moves_the_arm_sits_in_the_static_group(service):
+    # The group names are a promise to the operator: 静态测试 means the arm stays still.
+    for step in service.arm_wizard_options()["steps"]:
+        if step["group"] == "static":
+            assert step["motion"] is False, step["id"]
+        if step["group"] == "release":
+            assert step["motion"] is False and step["writes"] is False, step["id"]
+
+
+def test_the_steps_keep_the_official_order_within_their_groups(service):
+    ids = [step["id"] for step in service.arm_wizard_options()["steps"]]
+    assert ids.index("identity") < ids.index("link") < ids.index("static") < ids.index("timeout")
+    assert ids.index("timeout") < ids.index("enable") < ids.index("zero") < ids.index("demo")
+    assert ids.index("demo") < ids.index("gate") < ids.index("report")
+
+
+def test_a_brand_new_arm_can_be_deleted(service):
+    # The case this exists for: wrong product version or a mistyped serial, caught
+    # straight away.
+    service.arm_wizard_create("OAF26092080", product_version="openarm_2_0")
+    assert service.arm_wizard_status("OAF26092080")["deletable"] is True
+
+    payload = service.arm_wizard_delete("OAF26092080")
+    assert payload["ok"] is True
+    assert not (workstation.FACTORY_ARMS_DIR / "OAF26092080.json").exists()
+    # Moved, not destroyed.
+    assert (workstation.FACTORY_DIR / "deleted_arms" / "OAF26092080.json").exists()
+    assert "OAF26092080" not in [item["arm_cn"] for item in service.arm_wizard_arms()["arms"]]
+
+
+def test_an_arm_with_any_evidence_cannot_be_deleted(service):
+    service.arm_wizard_create("OAF26092081", product_version="openarm_1_0")
+    path = workstation.FACTORY_ARMS_DIR / "OAF26092081.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["linked_jobs"] = [{"job_id": "x", "job_type": "arm_acceptance", "status": "failed"}]
+    path.write_text(json.dumps(record), encoding="utf-8")
+
+    assert service.arm_wizard_status("OAF26092081")["deletable"] is False
+    payload = service.arm_wizard_delete("OAF26092081")
+    assert payload["problem"]["code"] == "arm_has_evidence"
+    assert path.exists(), "the record must survive a refused delete"
+
+
+def test_even_one_attached_motor_record_blocks_deletion(service_with_records):
+    # A record attached to a joint is evidence about a motor, not just about the arm.
+    service_with_records.arm_wizard_create("OAF26092082", product_version="openarm_2_0")
+    record_id = service_with_records.arm_wizard_available_motor_records("OAF26092082")["records"][0]["record_id"]
+    service_with_records.arm_wizard_attach_motor_record("OAF26092082", record_id)
+
+    assert service_with_records.arm_wizard_status("OAF26092082")["deletable"] is False
+    assert service_with_records.arm_wizard_delete("OAF26092082")["problem"]["code"] == "arm_has_evidence"
+
+
+def test_deleting_an_unknown_arm_says_so(service):
+    assert service.arm_wizard_delete("OAF00000000")["problem"]["code"] == "arm_not_found"
+
+
+def test_the_three_shipped_arms_could_never_be_deleted(service, monkeypatch):
+    # The real records carry dozens of entries each; this is the guard that matters.
+    real = Path(__file__).resolve().parent.parent / "artifacts" / "factory" / "arms"
+    if not real.exists():
+        pytest.skip("production records are not on this machine")
+    monkeypatch.setattr(workstation, "FACTORY_ARMS_DIR", real)
+    service = workstation.WorkstationService()
+    for path in real.glob("*.json"):
+        assert service.arm_wizard_delete(path.stem)["problem"]["code"] == "arm_has_evidence"
+        assert path.exists()
