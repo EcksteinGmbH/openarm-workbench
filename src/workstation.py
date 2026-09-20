@@ -45,6 +45,9 @@ FACTORY_BUNDLES_DIR = FACTORY_DIR / "bundles"
 FACTORY_ARM_RECORDS_DIR = FACTORY_DIR / "arm_records"
 FACTORY_REPORTS_DIR = FACTORY_DIR / "reports"
 FACTORY_EVIDENCE_DIR = FACTORY_DIR / "evidence"
+# Formal acceptance reports live beside the factory dir, not inside it. Declared as
+# a constant so the test redirect and its guard can both see it.
+FORMAL_REPORTS_DIR = ROOT_DIR / "artifacts" / "reports"
 VENDOR_MAINTENANCE_DIR = FACTORY_DIR / "vendor_maintenance"
 VENDOR_MAINTENANCE_RECORDS_DIR = VENDOR_MAINTENANCE_DIR / "records"
 VENDOR_MAINTENANCE_LOGS_DIR = VENDOR_MAINTENANCE_DIR / "logs"
@@ -3292,7 +3295,7 @@ class WorkstationService:
             report_arm = self._formal_factory_report_arm_view(arm, selected_profile_id, profile)
             report = render_formal_factory_report(
                 root_dir=ROOT_DIR,
-                reports_dir=ROOT_DIR / "artifacts" / "reports",
+                reports_dir=FORMAL_REPORTS_DIR,
                 arm=report_arm,
                 profile=profile,
                 operator=operator,

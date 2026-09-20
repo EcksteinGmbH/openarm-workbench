@@ -24,14 +24,30 @@ def test_every_workstation_output_dir_is_redirected_away_from_the_repo():
 
 
 def test_the_guard_covers_every_output_path_the_module_declares():
-    # A new FACTORY_*/VENDOR_*/ARTIFACTS_* constant must be added to the conftest
-    # redirect, or it silently starts writing to the repo again.
-    declared = {
-        name
-        for name in dir(workstation)
-        if name.endswith("_DIR") and name.startswith(("ARTIFACTS", "FACTORY", "VENDOR"))
-    }
-    assert declared <= set(WORKSTATION_OUTPUT_DIRS), f"not redirected: {sorted(declared - set(WORKSTATION_OUTPUT_DIRS))}"
+    # Keyed on where a constant points, not on what it is called: FORMAL_REPORTS_DIR
+    # slipped past an earlier name-prefix version of this check. Anything under
+    # artifacts/ is production output and must be redirected during tests.
+    real_artifacts = REPO_ROOT / "artifacts"
+    declared = set()
+    for name in dir(workstation):
+        if not name.endswith("_DIR") or name in WORKSTATION_OUTPUT_DIRS:
+            continue
+        value = getattr(workstation, name)
+        if isinstance(value, Path) and value.is_relative_to(real_artifacts):
+            declared.add(name)
+    assert declared == set(), f"points into artifacts/ but is not redirected: {sorted(declared)}"
+
+
+def test_no_production_path_is_written_inline_instead_of_declared():
+    # An inline `ROOT_DIR / "artifacts" / ...` cannot be redirected or guarded, which
+    # is exactly how the formal report path escaped. Output paths must be constants.
+    source = (REPO_ROOT / "src" / "workstation.py").read_text(encoding="utf-8")
+    offenders = [
+        line.strip()
+        for line in source.splitlines()
+        if 'ROOT_DIR / "artifacts"' in line and not line.lstrip().startswith(("#", "ARTIFACTS", "FACTORY", "FORMAL", "VENDOR"))
+    ]
+    assert offenders == [], f"inline production path: {offenders}"
 
 
 def test_building_a_service_does_not_touch_the_real_artifacts_dir(monkeypatch):

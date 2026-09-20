@@ -24,6 +24,7 @@ WORKSTATION_OUTPUT_DIRS = {
     "FACTORY_ARM_RECORDS_DIR": ("artifacts", "factory", "arm_records"),
     "FACTORY_REPORTS_DIR": ("artifacts", "factory", "reports"),
     "FACTORY_EVIDENCE_DIR": ("artifacts", "factory", "evidence"),
+    "FORMAL_REPORTS_DIR": ("artifacts", "reports"),
     "VENDOR_MAINTENANCE_DIR": ("artifacts", "factory", "vendor_maintenance"),
     "VENDOR_MAINTENANCE_RECORDS_DIR": ("artifacts", "factory", "vendor_maintenance", "records"),
     "VENDOR_MAINTENANCE_LOGS_DIR": ("artifacts", "factory", "vendor_maintenance", "logs"),
