@@ -400,24 +400,32 @@ def test_arm_wizard_status_of_an_unknown_arm_is_a_problem_envelope(client):
 
 def test_the_arm_wizard_page_is_wired_like_the_other_two_wizards(client):
     page = client.get("/").data.decode()
-    # Tab 03 is the wizard; the engineer workbench keeps its own tab as 04.
+    # Tab 03 is the wizard, and it is the only entry: the engineer workbench moved
+    # inside it as an advanced view, so there is no second door to the same room.
     assert '<button class="tab-button" data-tab="armWizardTab"><span>03</span> 整臂测试</button>' in page
-    assert 'data-tab="staticAcceptanceTab"' in page and "整臂工程工具" in page
-    for element_id in ("armWizard", "awPicker", "awRail", "awMain", "awHelp", "awAdvancedBtn", "awArmBadge"):
-        assert f'id="{element_id}"' in page
+    assert 'data-tab="staticAcceptanceTab"' not in page
+    assert 'data-tab="officialDynamicTab"' not in page
+    assert '<span>04</span> 报告归档' in page
 
-    # Collapsing the old tab 04 would have stranded the official-dynamic panel, whose
-    # only way in was that tab button.
+    for element_id in ("armWizard", "awPicker", "awSteps", "awMotors", "awProgress", "awAdvancedBtn", "awBackBtn"):
+        assert f'id="{element_id}"' in page
+    # The engineer workbench is preserved whole, as a hidden advanced section.
+    assert 'id="armAdvancedTools"' in page
+    for element_id in ("scanWorkbenchPanel", "factoryWorkbenchPanel", "issueWorkbenchPanel"):
+        assert f'id="{element_id}"' in page
+    # Collapsing the old tabs would otherwise have stranded the official-dynamic panel.
     assert 'data-test-subtab="factoryWorkbenchPanel">官方动态测试</button>' in page
 
     css = client.get("/static/css/style.css").data.decode()
-    assert 'body[data-primary-flow="armWizardTab"] .left-rail' in css, "wizard must own the full width"
-    assert ".aw-safety" in css and ".aw-badge.motion" in css
+    assert 'body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .left-rail' in css
+    assert ".aw-safety" in css and ".aw-tag.motion" in css and ".aw-arm.selected" in css
 
     app_js = client.get("/static/js/app.js").data.decode()
     assert "initArmWizard();" in app_js
 
     source = client.get("/static/js/arm-wizard.js").data.decode()
-    assert "showProblemModal" in source and "raiseIfBlocking(" in source
-    # A step that moves the arm cannot start until the safety items are ticked.
+    # Every step is on the page with its own button; dialogs are for blocking failures.
+    assert "data-run=" in source and "data-toggle=" in source
+    assert "重新测这一步" in source, "re-running a finished step must be reachable"
     assert "SAFETY_CHECKS" in source and "safetyReady(" in source
+    assert "showProblemModal" in source

@@ -1321,17 +1321,14 @@ select:focus {
 
 /* ---- Beginner wizards (single motor + link): the wizard owns the full width ---- */
 body[data-primary-flow="motorWorkbenchTab"]:not(.motor-advanced) .workspace,
-body[data-primary-flow="connectTab"]:not(.link-advanced) .workspace,
-body[data-primary-flow="armWizardTab"] .workspace {
+body[data-primary-flow="connectTab"]:not(.link-advanced) .workspace {
     grid-template-columns: minmax(0, 1fr);
 }
 
 body[data-primary-flow="motorWorkbenchTab"]:not(.motor-advanced) .left-rail,
 body[data-primary-flow="motorWorkbenchTab"]:not(.motor-advanced) .right-rail,
 body[data-primary-flow="connectTab"]:not(.link-advanced) .left-rail,
-body[data-primary-flow="connectTab"]:not(.link-advanced) .right-rail,
-body[data-primary-flow="armWizardTab"] .left-rail,
-body[data-primary-flow="armWizardTab"] .right-rail {
+body[data-primary-flow="connectTab"]:not(.link-advanced) .right-rail {
     display: none;
 }
 
@@ -1799,126 +1796,153 @@ body[data-primary-flow="armWizardTab"] .right-rail {
     color: var(--danger);
 }
 
+
 /* ---- Whole-arm wizard (tab 03) -------------------------------------------------
-   Twelve steps do not fit the horizontal strip the shorter wizards use, so the rail
-   runs down the left and the current step owns the middle column. */
-.aw-picker {
+   Twelve steps, all of them on the page. The operator sees the whole flow at once:
+   what is done, what is next, what is blocked and why, and can reopen any step to
+   run it again. Dialogs are kept for failures that cannot be cleared from here. */
+.aw-section { margin-top: 26px; }
+.aw-section:first-of-type { margin-top: 18px; }
+
+.aw-section-head {
     display: flex;
     align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-    padding: 14px 0 18px;
-    border-bottom: 1px solid var(--line);
-    margin-bottom: 18px;
+    gap: 10px;
+    margin-bottom: 12px;
 }
 
-.aw-picker-label {
-    font-weight: 700;
-    color: var(--muted);
+.aw-section-head h3 { margin: 0; font-size: 17px; }
+
+.aw-section-no {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
     font-size: 13px;
+    font-weight: 800;
 }
 
-.aw-select {
-    min-width: min(420px, 100%);
-    padding: 9px 12px;
+.aw-progress { margin-left: auto; color: var(--muted); font-size: 13px; }
+.aw-hint { font-size: 12px; margin-bottom: 10px; }
+
+.aw-empty {
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    padding: 16px;
+}
+.aw-empty strong { display: block; margin-bottom: 4px; }
+
+/* --- arm picker: rows, not a dropdown; each says what state that arm is in --- */
+.aw-arm-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px;
+}
+
+.aw-arm {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    text-align: left;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
     background: var(--panel);
     color: var(--text);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    font-size: 14px;
+    cursor: pointer;
 }
 
-.aw-picker-hint { font-size: 12px; }
-
-.aw-picker-empty strong { display: block; margin-bottom: 4px; }
-
-.aw-body {
-    display: grid;
-    grid-template-columns: 250px minmax(0, 1fr) 280px;
-    gap: 20px;
-    align-items: start;
+.aw-arm:hover { border-color: var(--accent); }
+.aw-arm.selected {
+    border-color: var(--accent);
+    background: var(--panel-strong);
+    box-shadow: inset 3px 0 0 var(--accent);
 }
+.aw-arm-cn { font-weight: 800; font-size: 15px; }
+.aw-arm-meta { color: var(--muted); font-size: 12px; }
 
-.aw-rail {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+/* --- the steps --- */
+.aw-steps { display: flex; flex-direction: column; gap: 8px; }
+
+.aw-step {
     border: 1px solid var(--line);
     border-radius: 10px;
     overflow: hidden;
 }
 
-.aw-step {
+.aw-step.current { border-color: var(--accent); }
+.aw-step.locked { border-color: var(--warning, #d69e2e); }
+.aw-step.skipped { opacity: 0.55; }
+
+.aw-step-head {
     display: grid;
-    grid-template-columns: 22px 26px 1fr;
-    align-items: baseline;
-    gap: 8px;
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--line);
-    font-size: 13px;
+    grid-template-columns: 24px 28px minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 14px;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    text-align: left;
+    font-size: 14px;
 }
 
-.aw-step:last-child { border-bottom: none; }
-
+.aw-step.open .aw-step-head { background: var(--panel-strong); }
 .aw-step-mark { text-align: center; font-weight: 800; }
-.aw-step-no { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
-.aw-step-text strong { display: block; }
-.aw-step-text small { color: var(--muted); font-size: 11px; }
-
 .aw-step.done .aw-step-mark { color: var(--ok, #38a169); }
-.aw-step.current {
-    background: var(--panel-strong);
-    box-shadow: inset 3px 0 0 var(--accent);
-}
-.aw-step.current .aw-step-text strong { color: var(--accent); }
-.aw-step.pending { opacity: 0.75; }
 .aw-step.locked .aw-step-mark { color: var(--warning, #d69e2e); }
-.aw-step.locked .aw-step-text small { color: var(--warning, #d69e2e); }
-.aw-step.skipped { opacity: 0.4; }
+.aw-step-no { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.aw-step-name { font-weight: 700; }
+.aw-step.current .aw-step-name { color: var(--accent); }
+.aw-step-state { color: var(--muted); font-size: 12px; }
+.aw-step.current .aw-step-state { color: var(--accent); font-weight: 700; }
+.aw-step.locked .aw-step-state { color: var(--warning, #d69e2e); }
 
-.aw-step-card h3 { margin: 4px 0 8px; font-size: 20px; }
-
-.aw-badges {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin: 12px 0;
-}
-
-.aw-badge {
-    font-size: 12px;
+.aw-tag {
+    font-size: 11px;
     font-weight: 700;
-    padding: 3px 9px;
+    padding: 2px 8px;
     border-radius: 999px;
     border: 1px solid var(--line);
+    white-space: nowrap;
 }
+.aw-tag.motion { color: var(--danger); border-color: var(--danger); }
+.aw-tag.writes { color: var(--warning, #d69e2e); border-color: var(--warning, #d69e2e); }
+.aw-tag.readonly { color: var(--muted); }
 
-.aw-badge.motion { color: var(--danger); border-color: var(--danger); }
-.aw-badge.writes { color: var(--warning, #d69e2e); border-color: var(--warning, #d69e2e); }
-.aw-badge.readonly { color: var(--muted); }
+.aw-step-body {
+    padding: 4px 14px 16px 62px;
+    border-top: 1px solid var(--line);
+}
+.aw-step-body > p { margin: 10px 0; color: var(--muted); }
+
+.aw-lock {
+    border: 1px solid var(--warning, #d69e2e);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 10px 0;
+}
+.aw-lock strong { color: var(--warning, #d69e2e); display: block; margin-bottom: 4px; }
+.aw-lock p { margin: 4px 0; }
 
 .aw-safety {
     border: 1px solid var(--danger);
     border-radius: 8px;
     padding: 12px 14px;
-    margin: 14px 0;
+    margin: 12px 0;
 }
+.aw-safety strong { display: block; margin-bottom: 8px; color: var(--danger); }
 
-.aw-safety strong {
-    display: block;
-    margin-bottom: 8px;
-    color: var(--danger);
-}
-
-.aw-pass { border-color: var(--ok, #38a169); }
-
-.aw-motors { margin-top: 18px; }
-
+/* --- motor records --- */
 .aw-motor-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 10px;
-    margin-top: 12px;
 }
 
 .aw-motor {
@@ -1930,24 +1954,23 @@ body[data-primary-flow="armWizardTab"] .right-rail {
     border-radius: 8px;
     font-size: 13px;
 }
-
 .aw-motor.done { border-color: var(--ok, #38a169); }
 .aw-motor small { color: var(--muted); font-size: 11px; }
 .aw-motor-state { font-size: 12px; color: var(--ok, #38a169); font-weight: 700; }
 .aw-motor-state.missing { color: var(--muted); font-weight: 400; }
 
-.aw-locked-card { border-color: var(--warning, #d69e2e); }
-.aw-locked-card h4 { color: var(--warning, #d69e2e); }
-
-@media (max-width: 1180px) {
-    .aw-body { grid-template-columns: 220px minmax(0, 1fr); }
-    .aw-body .smw-help { grid-column: 1 / -1; }
+@media (max-width: 720px) {
+    .aw-step-head { grid-template-columns: 24px 28px minmax(0, 1fr); row-gap: 4px; }
+    .aw-step-state, .aw-tag { grid-column: 3; }
+    .aw-step-body { padding-left: 14px; }
 }
 
-@media (max-width: 820px) {
-    .aw-body { grid-template-columns: 1fr; }
+/* The wizard owns the full width until the engineer tools are opened. */
+body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .workspace {
+    grid-template-columns: minmax(0, 1fr);
 }
 
-.aw-step.no_record { opacity: 0.6; }
-.aw-step.no_record .aw-step-mark,
-.aw-step.no_record .aw-step-text small { color: var(--muted); }
+body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .left-rail,
+body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .right-rail {
+    display: none;
+}

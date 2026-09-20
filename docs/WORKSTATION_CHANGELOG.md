@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.17.0-arm-wizard-page`
+Current workstation version: `0.18.0-arm-wizard-layout`
 
 ## Versioning Rule
 
@@ -13,6 +13,54 @@ Current workstation version: `0.17.0-arm-wizard-page`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.18.0-arm-wizard-layout - 2026-09-20
+
+Summary: reworked the arm wizard after the first version was tried. All twelve steps
+are now laid out on the page with their own buttons, the engineer tools are one place
+instead of two, and picking an arm is a list of arms rather than a bare dropdown.
+
+What was wrong with 0.17.0, in the order it was reported:
+
+- The arm dropdown did not say what it was for. It is now a section headed 选择要测试的
+  机械臂 with one card per arm showing its product, type and how many motor records are
+  attached, plus a line explaining that the 整机编号 is that arm's identity and that the
+  report is filed under it.
+- Selecting an arm appeared to do nothing. All three real arms have passed, so the old
+  layout - which only rendered the single "current" step - had nothing to show and fell
+  back to a completion card. With every step listed, the state of each one is visible
+  whatever the arm's progress.
+- Steps were driven through a dialog. They are not any more: each step is a row that
+  expands in place to show what it does, the safety checks if it moves the arm, and its
+  own button. Dialogs are back to what they are for in the other two wizards - failures
+  the operator cannot clear from the page.
+- Re-testing was not reachable. A finished step now carries 重新测这一步, and any step
+  can be opened by clicking its row.
+- 高级工具（工程师）and tab 04 整臂工程工具 were two doors to the same room. The
+  engineer workbench moved inside tab 03 as a hidden advanced view, exactly as tabs 01
+  and 02 hold theirs, and its tab is gone. Tabs are now 01 准备建链, 02 单电机测试,
+  03 整臂测试, 04 报告归档.
+- The old 官方动态测试 view had become hard to find. It is reachable again from the
+  advanced view's own subtab bar, which gained a button for it - that panel previously
+  had no way in except the tab that 0.17.0 removed.
+
+The move was mechanical and checked: all 110 element ids inside the engineer workbench
+survive, none duplicated, section tags balanced.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 208 passed. The page test now asserts there is no
+  second tab for the engineer tools, that the workbench panels are still present inside
+  the advanced section, and that re-running a finished step is reachable.
+- The golden regression caught a real slip while this was being built: a 2.0 arm
+  created by hand to inspect the locked steps had landed in the production
+  `artifacts/factory/arms/`. It was moved to the archive, not deleted. This is exactly
+  the case that baseline exists for.
+
+Operational Notes:
+
+- Step execution is still not wired; pressing a step explains, on the step itself, that
+  the entry point is in the engineer tools for now.
 
 ### 0.17.0-arm-wizard-page - 2026-09-20
 

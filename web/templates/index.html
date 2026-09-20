@@ -24,8 +24,7 @@
             <button class="tab-button active" data-tab="connectTab"><span>01</span> 准备建链</button>
             <button class="tab-button" data-tab="motorWorkbenchTab"><span>02</span> 单电机测试</button>
             <button class="tab-button" data-tab="armWizardTab"><span>03</span> 整臂测试</button>
-            <button class="tab-button" data-tab="staticAcceptanceTab" data-tab-target="armWorkbenchTab" data-test-subtab="scanWorkbenchPanel"><span>04</span> 整臂工程工具</button>
-            <button class="tab-button" data-tab="reportTab"><span>05</span> 报告归档</button>
+            <button class="tab-button" data-tab="reportTab"><span>04</span> 报告归档</button>
         </nav>
 
         <main class="workspace">
@@ -669,16 +668,29 @@
                                 <button class="btn btn-secondary slim" id="awAdvancedBtn" type="button">高级工具（工程师）</button>
                             </div>
                         </header>
-                        <div class="aw-picker" id="awPicker"></div>
-                        <div class="aw-body">
-                            <ol class="aw-rail" id="awRail"></ol>
-                            <div class="aw-main" id="awMain"></div>
-                            <aside class="smw-help" id="awHelp"></aside>
-                        </div>
+                        <section class="aw-section">
+                            <div class="aw-section-head"><span class="aw-section-no">1</span><h3>选择要测试的机械臂</h3></div>
+                            <div class="aw-picker" id="awPicker"></div>
+                        </section>
+                        <section class="aw-section" id="awStepsSection">
+                            <div class="aw-section-head">
+                                <span class="aw-section-no">2</span>
+                                <h3>按顺序完成下面的步骤</h3>
+                                <span class="aw-progress" id="awProgress"></span>
+                            </div>
+                            <div class="aw-steps" id="awSteps"></div>
+                        </section>
+                        <section class="aw-section" id="awMotorsSection">
+                            <div class="aw-section-head"><span class="aw-section-no">3</span><h3>这台臂的电机记录</h3></div>
+                            <div id="awMotors"></div>
+                        </section>
                     </div>
-                </section>
-
-                <section class="tab-panel" id="armWorkbenchTab">
+                    <div class="smw-advanced hidden" id="armAdvancedTools">
+                    <div class="smw-advanced-bar">
+                        <strong>高级工具（工程师使用）</strong>
+                        <span class="muted">整臂静态验收、问题诊断、官方动态测试与出厂放行的完整工程界面；操作员请使用整臂向导。</span>
+                        <button class="btn btn-primary slim" id="awBackBtn" type="button">返回整臂向导</button>
+                    </div>
                     <div class="panel split-panel wide-side">
                         <div class="panel-body">
                             <div class="panel-heading">
@@ -1236,7 +1248,9 @@
                             </div>
                         </div>
                     </div>
+                    </div>
                 </section>
+
 
                 <section class="tab-panel" id="reportTab">
                     <div class="panel split-panel wide-side">
