@@ -761,6 +761,11 @@ def arm_wizard_options():
     return _wizard_call(service.arm_wizard_options, product_version=request.args.get("product_version"))
 
 
+@app.get("/api/arm/wizard/arms")
+def arm_wizard_arms():
+    return _wizard_call(service.arm_wizard_arms)
+
+
 @app.get("/api/arm/wizard/<arm_cn>/status")
 def arm_wizard_status(arm_cn: str):
     return _wizard_call(service.arm_wizard_status, arm_cn=arm_cn)

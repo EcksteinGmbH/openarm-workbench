@@ -38,6 +38,7 @@ import { state } from './store.js';
 import { initSingleMotorWizard } from './single-motor-wizard.js?v=20260920-problem-modal';
 import { initLinkWizard } from './link-wizard.js?v=20260920-problem-modal';
 import { bindProblemModal } from './problem-modal.js?v=20260920-problem-modal';
+import { initArmWizard } from './arm-wizard.js?v=20260920-arm-wizard';
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, character => ({
@@ -3601,6 +3602,7 @@ export async function startApp() {
     bindProblemModal();
     initSingleMotorWizard();
     initLinkWizard();
+    initArmWizard();
     try {
         await loadConfig();
         renderMeta();

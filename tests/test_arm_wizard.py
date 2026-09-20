@@ -197,3 +197,69 @@ def test_an_unknown_record_is_refused(service_with_records):
     service_with_records.bind_arm_identity("OAF26092048", product_version="openarm_2_0")
     payload = service_with_records.arm_wizard_attach_motor_record("OAF26092048", "smr_does_not_exist")
     assert payload["problem"]["code"] == "arm_motor_record_mismatch"
+
+
+def test_a_passed_arm_is_not_told_to_redo_steps_that_left_no_record(service):
+    # TIMEOUT standardization and the low-gain enable check wrote nothing to the arm
+    # record before 0.16.0, so the three arms already shipped have no trace of them.
+    # Calling those steps "current" would send an operator to repeat a Flash write on
+    # a finished arm.
+    service.bind_arm_identity("OAF26092060")
+    path = workstation.FACTORY_ARMS_DIR / "OAF26092060.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["zero_calibration_records"] = [{"status": "passed"}]
+    record["demo_validation_records"] = [{"status": "passed"}]
+    record["evidence_records"] = [{"evidence_type": "can_health_snapshot", "status": "passed"}]
+    record["linked_jobs"] = [{"job_id": "x", "job_type": "arm_acceptance", "status": "passed"}]
+    path.write_text(json.dumps(record), encoding="utf-8")
+
+    status = service.arm_wizard_status("OAF26092060")
+    assert status["release_decision"] == "PASS"
+    assert status["next_step"] is None
+    by_id = {step["id"]: step for step in status["steps"]}
+    assert by_id["timeout"]["state"] == "no_record"
+    assert by_id["enable"]["state"] == "no_record"
+    assert "current" not in {step["state"] for step in status["steps"]}
+
+
+def test_a_step_that_runs_now_leaves_a_record_on_the_arm(service, monkeypatch):
+    # The fix for the above: give the step an arm_cn and it records itself, so the
+    # next arm through the wizard shows real progress.
+    from tests.test_workstation import _openarm_arm_registry
+
+    service.bind_arm_identity("OAF26092061")
+    session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
+    driver = service.sessions[session["device_session_id"]].driver
+    driver.registry = _openarm_arm_registry()
+    driver.ensure_motor = driver.addMotor
+
+    service.arm_timeout_standardization(
+        session["device_session_id"],
+        profile_id="openarm_right_arm_v1",
+        confirmed=True,
+        arm_cn="OAF26092061",
+    )
+
+    record = json.loads((workstation.FACTORY_ARMS_DIR / "OAF26092061.json").read_text(encoding="utf-8"))
+    kinds = {run["kind"]: run for run in record["command_run_history"]}
+    assert kinds["arm_timeout_standardization"]["status"] == "passed"
+    assert kinds["arm_timeout_standardization"]["motion_command_sent"] is False
+
+    by_id = {step["id"]: step for step in service.arm_wizard_status("OAF26092061")["steps"]}
+    assert by_id["timeout"]["state"] == "done"
+
+
+def test_recording_is_skipped_when_no_arm_is_named(service):
+    # Every existing caller passes no arm_cn and must behave exactly as before.
+    from tests.test_workstation import _openarm_arm_registry
+
+    session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
+    driver = service.sessions[session["device_session_id"]].driver
+    driver.registry = _openarm_arm_registry()
+    driver.ensure_motor = driver.addMotor
+
+    result = service.arm_timeout_standardization(
+        session["device_session_id"], profile_id="openarm_right_arm_v1", confirmed=True
+    )
+    assert result["ok"] is True
+    assert list(workstation.FACTORY_ARMS_DIR.glob("*.json")) == []

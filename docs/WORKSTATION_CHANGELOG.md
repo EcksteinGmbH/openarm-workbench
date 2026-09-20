@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.16.0-arm-wizard-backend`
+Current workstation version: `0.17.0-arm-wizard-page`
 
 ## Versioning Rule
 
@@ -13,6 +13,63 @@ Current workstation version: `0.16.0-arm-wizard-backend`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.17.0-arm-wizard-page - 2026-09-20
+
+Summary: tab 03 is now the whole-arm wizard, in the same shape as the link and
+single-motor wizards. Twelve steps in the official order, each saying in plain words
+what it does and whether the arm will move; 2.0's steps are visible and locked.
+
+Changes:
+
+- Tab 03 is 整臂测试, the new wizard. The two engineer views collapse into one tab 04
+  整臂工程工具, reachable from the wizard's 高级工具（工程师）button, matching how 01
+  and 02 keep their advanced tools out of the operator's way. The official-dynamic
+  panel gained an in-panel subtab button, since the old tab 04 was its only way in and
+  collapsing the tabs would otherwise have stranded it.
+- The step rail runs down the left rather than across the top: twelve steps do not fit
+  the horizontal strip the shorter wizards use. Each rail entry shows its state and a
+  one-word note - 只读 / 写入电机，不运动 / 机械臂会运动 / 待真机验证 / 本版本不需要.
+- Before any step that moves the arm, three safety items must be ticked (急停在手边,
+  活动范围无人无障碍, 手远离夹爪). The primary button stays disabled until they are.
+- A locked step raises the blocking dialog carrying the registry's reason; the side
+  panel lists every locked step so an operator can see what the arm is waiting on
+  without clicking through.
+- The commissioned motors are shown as a joint grid with a 挂载 button per joint, so
+  the 16 records configured on 2026-09-17 can be attached to the arm that will carry
+  them into its report.
+
+Two defects found by running the wizard against the three real arms:
+
+- TIMEOUT standardization and the low-gain enable check wrote nothing to the arm
+  record - not to `command_run_history`, not anywhere - so nothing could tell whether
+  they had run. Both now take an optional `arm_cn` and record themselves when given
+  one; every existing caller passes nothing and behaves exactly as before.
+- Because of that, the wizard first showed a passed 1.0 arm with 参数标准化 as its
+  current step, which would have sent an operator to repeat a Flash write on a
+  finished arm. An applicable step with no evidence on an arm that already cleared the
+  release gate is now `no_record` - 无执行记录 - and the completion card names those
+  steps and says plainly that it does not mean they were skipped.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 208 passed, including that a passed arm is never
+  pointed at a no-record step, that a step run with an `arm_cn` records itself and
+  then reads back as done, and that one run without an `arm_cn` writes no arm file.
+- Checked against live data: `OAF26080401` (1.0, PASS) shows 下一步=None with 参数标准化
+  and 低增益使能检查 as 无执行记录, and skips 切换 CAN-FD and 相机测试. A fresh 2.0 arm
+  shows HOLD, 连接自检 as current, and 切换 CAN-FD / 零位校准 / 夹爪测试 / 相机测试 /
+  官方 Demo locked with their reasons.
+- The golden release-gate and formal-report baselines are unchanged.
+
+Operational Notes:
+
+- Step execution is not wired yet: pressing a step opens a dialog pointing to the
+  engineer tools, and progress updates when you come back. The per-step handlers are
+  the next release.
+- **Not exercised on hardware.** The methods each step will call are the ones the three
+  shipped arms went through, but the wizard's own sequencing has never run against a
+  real arm. Worth a supervised first run.
 
 ### 0.16.0-arm-wizard-backend - 2026-09-20
 

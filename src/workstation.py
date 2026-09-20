@@ -4570,6 +4570,7 @@ class WorkstationService:
         profile_id: str = "openarm_right_arm_v1",
         save_flash: bool = True,
         confirmed: bool = False,
+        arm_cn: Optional[str] = None,
     ) -> Dict[str, Any]:
         if not confirmed:
             return {
@@ -4676,7 +4677,7 @@ class WorkstationService:
                         pass
                 results.append(item)
             ok = all(item["ok"] for item in results) and len(results) == len(profile["joints"])
-            return {
+            payload = {
                 "profile_id": profile_id,
                 "arm_side": profile.get("arm_side"),
                 "timeout_standardization": True,
@@ -4697,12 +4698,15 @@ class WorkstationService:
                 "results": results,
                 "ok": ok,
             }
+            self._record_arm_step_run(arm_cn, "arm_timeout_standardization", payload)
+            return payload
 
     def arm_safe_enable_check(
         self,
         session_id: str,
         profile_id: str = "openarm_right_arm_v1",
         hold_ms: int = 300,
+        arm_cn: Optional[str] = None,
     ) -> Dict[str, Any]:
         with self._lock:
             session = self._session(session_id)
@@ -4769,8 +4773,9 @@ class WorkstationService:
                             "passed": not issues,
                         }
                     )
-                return {
+                payload = {
                     "profile_id": profile_id,
+                    "arm_side": profile.get("arm_side"),
                     "hold_ms": int(hold_ms),
                     "motion_command_sent": False,
                     "control_keepalive_sent": True,
@@ -4791,6 +4796,8 @@ class WorkstationService:
                     "results": results,
                     "ok": completed.returncode == 0 and summary.get("passed"),
                 }
+                self._record_arm_step_run(arm_cn, "arm_safe_enable_check", payload)
+                return payload
             results = []
             motors: list[tuple[dict[str, Any], Motor, dict[str, Any]]] = []
             for joint in profile["joints"]:
@@ -4946,8 +4953,9 @@ class WorkstationService:
             abort_reason = (
                 f"{failed_joint['joint_name']} failed with {','.join(failed_joint['issues'])}" if failed_joint else None
             )
-            return {
+            payload = {
                 "profile_id": profile_id,
+                "arm_side": profile.get("arm_side"),
                 "hold_ms": int(round(hold_s * 1000.0)),
                 "motion_command_sent": False,
                 "control_keepalive_sent": True,
@@ -4967,6 +4975,41 @@ class WorkstationService:
                 "results": results,
                 "ok": all(item["passed"] for item in results),
             }
+            self._record_arm_step_run(arm_cn, "arm_safe_enable_check", payload)
+            return payload
+
+    def _record_arm_step_run(self, arm_cn: Optional[str], kind: str, payload: Dict[str, Any]):
+        """Note on the arm record that a wizard step ran, and how it went.
+
+        Without this, TIMEOUT standardization and the low-gain enable check leave no
+        machine-readable trace anywhere on the arm - the three arms already shipped
+        have none - so nothing can tell whether they were done. Writing to the arm is
+        skipped entirely when no arm_cn is given, which is how every existing caller
+        behaves.
+        """
+        if not arm_cn:
+            return
+        try:
+            path, arm = self._load_arm_record(str(arm_cn))
+        except (KeyError, ValueError, TypeError):
+            return
+        history = list(arm.get("command_run_history") or [])
+        history.append(
+            {
+                "run_id": uuid.uuid4().hex[:12],
+                "kind": kind,
+                "arm_cn": str(arm_cn),
+                "profile_id": payload.get("profile_id"),
+                "arm_side": payload.get("arm_side"),
+                "status": "passed" if payload.get("ok") else "failed",
+                "motion_command_sent": bool(payload.get("motion_command_sent")),
+                "summary": payload.get("summary"),
+                "finished_at": _now_iso(),
+            }
+        )
+        arm["command_run_history"] = history
+        arm["updated_at"] = _now_iso()
+        _atomic_json(path, arm)
 
     def _record_joint_runtime_result(self, job_id: Optional[str], result_key: str, result: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
@@ -6027,6 +6070,33 @@ class WorkstationService:
                 "defaults": {"channel": "can0", "arm_side": "right_arm"},
             }
 
+    def arm_wizard_arms(self) -> Dict[str, Any]:
+        """Arms already on file, newest first, for the wizard's picker."""
+        with self._lock:
+            FACTORY_ARMS_DIR.mkdir(parents=True, exist_ok=True)
+            arms = []
+            for path in FACTORY_ARMS_DIR.glob("*.json"):
+                arm = _load_json(path, {})
+                if not arm.get("arm_cn"):
+                    continue
+                product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+                try:
+                    label = self.product_registry.get(product_version)["label"]
+                except KeyError:
+                    label = product_version
+                arms.append(
+                    {
+                        "arm_cn": arm["arm_cn"],
+                        "arm_type": arm.get("arm_type"),
+                        "product_version": product_version,
+                        "product_label": label,
+                        "updated_at": arm.get("updated_at"),
+                        "attached_motor_records": len(arm.get("single_motor_records") or []),
+                    }
+                )
+            arms.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+            return {"ok": True, "arms": arms}
+
     def arm_wizard_status(self, arm_cn: str) -> Dict[str, Any]:
         """Where this arm stands: which steps are done, which is next, what blocks it."""
         with self._lock:
@@ -6037,6 +6107,13 @@ class WorkstationService:
             product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
             gate = self.factory_release_gate(arm_cn)
             done = self._arm_wizard_completed_steps(arm, gate)
+
+            # An arm that already cleared the release gate is finished, whatever traces
+            # its individual steps left. TIMEOUT standardization and the low-gain enable
+            # check wrote nothing to the arm record before 0.16.0, so the three arms
+            # already shipped have no evidence of them - pointing an operator at those
+            # steps would have them redo a Flash write on a passed arm.
+            released = gate["release_decision"] == "PASS"
 
             steps = []
             next_step = None
@@ -6049,6 +6126,8 @@ class WorkstationService:
                     view["state"] = "done"
                 elif view["locked"]:
                     view["state"] = "locked"
+                elif released:
+                    view["state"] = "no_record"
                 elif next_step is None:
                     view["state"] = "current"
                     next_step = step["id"]

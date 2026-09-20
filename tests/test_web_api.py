@@ -396,3 +396,28 @@ def test_arm_wizard_status_of_an_unknown_arm_is_a_problem_envelope(client):
     payload = _json(client.get("/api/arm/wizard/OAF00000000/status"))
     assert payload["ok"] is False
     assert payload["problem"]["code"] == "arm_not_found"
+
+
+def test_the_arm_wizard_page_is_wired_like_the_other_two_wizards(client):
+    page = client.get("/").data.decode()
+    # Tab 03 is the wizard; the engineer workbench keeps its own tab as 04.
+    assert '<button class="tab-button" data-tab="armWizardTab"><span>03</span> 整臂测试</button>' in page
+    assert 'data-tab="staticAcceptanceTab"' in page and "整臂工程工具" in page
+    for element_id in ("armWizard", "awPicker", "awRail", "awMain", "awHelp", "awAdvancedBtn", "awArmBadge"):
+        assert f'id="{element_id}"' in page
+
+    # Collapsing the old tab 04 would have stranded the official-dynamic panel, whose
+    # only way in was that tab button.
+    assert 'data-test-subtab="factoryWorkbenchPanel">官方动态测试</button>' in page
+
+    css = client.get("/static/css/style.css").data.decode()
+    assert 'body[data-primary-flow="armWizardTab"] .left-rail' in css, "wizard must own the full width"
+    assert ".aw-safety" in css and ".aw-badge.motion" in css
+
+    app_js = client.get("/static/js/app.js").data.decode()
+    assert "initArmWizard();" in app_js
+
+    source = client.get("/static/js/arm-wizard.js").data.decode()
+    assert "showProblemModal" in source and "raiseIfBlocking(" in source
+    # A step that moves the arm cannot start until the safety items are ticked.
+    assert "SAFETY_CHECKS" in source and "safetyReady(" in source

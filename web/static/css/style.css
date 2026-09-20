@@ -1321,14 +1321,17 @@ select:focus {
 
 /* ---- Beginner wizards (single motor + link): the wizard owns the full width ---- */
 body[data-primary-flow="motorWorkbenchTab"]:not(.motor-advanced) .workspace,
-body[data-primary-flow="connectTab"]:not(.link-advanced) .workspace {
+body[data-primary-flow="connectTab"]:not(.link-advanced) .workspace,
+body[data-primary-flow="armWizardTab"] .workspace {
     grid-template-columns: minmax(0, 1fr);
 }
 
 body[data-primary-flow="motorWorkbenchTab"]:not(.motor-advanced) .left-rail,
 body[data-primary-flow="motorWorkbenchTab"]:not(.motor-advanced) .right-rail,
 body[data-primary-flow="connectTab"]:not(.link-advanced) .left-rail,
-body[data-primary-flow="connectTab"]:not(.link-advanced) .right-rail {
+body[data-primary-flow="connectTab"]:not(.link-advanced) .right-rail,
+body[data-primary-flow="armWizardTab"] .left-rail,
+body[data-primary-flow="armWizardTab"] .right-rail {
     display: none;
 }
 
@@ -1795,3 +1798,156 @@ body[data-primary-flow="connectTab"]:not(.link-advanced) .right-rail {
 .problem-modal-card h3 {
     color: var(--danger);
 }
+
+/* ---- Whole-arm wizard (tab 03) -------------------------------------------------
+   Twelve steps do not fit the horizontal strip the shorter wizards use, so the rail
+   runs down the left and the current step owns the middle column. */
+.aw-picker {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding: 14px 0 18px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 18px;
+}
+
+.aw-picker-label {
+    font-weight: 700;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.aw-select {
+    min-width: min(420px, 100%);
+    padding: 9px 12px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.aw-picker-hint { font-size: 12px; }
+
+.aw-picker-empty strong { display: block; margin-bottom: 4px; }
+
+.aw-body {
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr) 280px;
+    gap: 20px;
+    align-items: start;
+}
+
+.aw-rail {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.aw-step {
+    display: grid;
+    grid-template-columns: 22px 26px 1fr;
+    align-items: baseline;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+}
+
+.aw-step:last-child { border-bottom: none; }
+
+.aw-step-mark { text-align: center; font-weight: 800; }
+.aw-step-no { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.aw-step-text strong { display: block; }
+.aw-step-text small { color: var(--muted); font-size: 11px; }
+
+.aw-step.done .aw-step-mark { color: var(--ok, #38a169); }
+.aw-step.current {
+    background: var(--panel-strong);
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+.aw-step.current .aw-step-text strong { color: var(--accent); }
+.aw-step.pending { opacity: 0.75; }
+.aw-step.locked .aw-step-mark { color: var(--warning, #d69e2e); }
+.aw-step.locked .aw-step-text small { color: var(--warning, #d69e2e); }
+.aw-step.skipped { opacity: 0.4; }
+
+.aw-step-card h3 { margin: 4px 0 8px; font-size: 20px; }
+
+.aw-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+}
+
+.aw-badge {
+    font-size: 12px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+}
+
+.aw-badge.motion { color: var(--danger); border-color: var(--danger); }
+.aw-badge.writes { color: var(--warning, #d69e2e); border-color: var(--warning, #d69e2e); }
+.aw-badge.readonly { color: var(--muted); }
+
+.aw-safety {
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 14px 0;
+}
+
+.aw-safety strong {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--danger);
+}
+
+.aw-pass { border-color: var(--ok, #38a169); }
+
+.aw-motors { margin-top: 18px; }
+
+.aw-motor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.aw-motor {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.aw-motor.done { border-color: var(--ok, #38a169); }
+.aw-motor small { color: var(--muted); font-size: 11px; }
+.aw-motor-state { font-size: 12px; color: var(--ok, #38a169); font-weight: 700; }
+.aw-motor-state.missing { color: var(--muted); font-weight: 400; }
+
+.aw-locked-card { border-color: var(--warning, #d69e2e); }
+.aw-locked-card h4 { color: var(--warning, #d69e2e); }
+
+@media (max-width: 1180px) {
+    .aw-body { grid-template-columns: 220px minmax(0, 1fr); }
+    .aw-body .smw-help { grid-column: 1 / -1; }
+}
+
+@media (max-width: 820px) {
+    .aw-body { grid-template-columns: 1fr; }
+}
+
+.aw-step.no_record { opacity: 0.6; }
+.aw-step.no_record .aw-step-mark,
+.aw-step.no_record .aw-step-text small { color: var(--muted); }
