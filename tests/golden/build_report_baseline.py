@@ -30,11 +30,18 @@ from tests.test_golden_real_arms import materialise_fixture  # noqa: E402
 
 REPORTS_DIR = Path(__file__).parent / "fixture" / "reports"
 PINNED_DATE = "20260101"
-# The generation timestamp, in the HTML table and in the JSON payload. Nothing else
-# differs between two runs of the same input once `report_date` is pinned.
+# Values that legitimately differ between two runs of the same input:
+#
+#   - the generation timestamp, in the HTML table and the JSON payload
+#   - the workstation version, which changes on every release
+#
+# Freezing the version would redden this test on every version bump, and a baseline
+# that cries wolf gets refreshed without being read. That the version is present and
+# correct is asserted dynamically in test_golden_formal_report.py instead.
 GENERATED_PATTERNS = (
     (re.compile(r"(<td>Generated UTC</td><td>)[^<]*(</td>)"), r"\1<GENERATED-UTC>\2"),
     (re.compile(r'("generated_at":\s*")[^"]*(")'), r"\1<GENERATED-UTC>\2"),
+    (re.compile(r"(<td>Workstation Version</td><td>)[^<]*(</td>)"), r"\1<WORKSTATION-VERSION>\2"),
 )
 
 

@@ -761,6 +761,11 @@ def arm_wizard_options():
     return _wizard_call(service.arm_wizard_options, product_version=request.args.get("product_version"))
 
 
+@app.get("/api/reports/archive")
+def report_archive():
+    return _wizard_call(service.report_archive)
+
+
 @app.get("/api/arm/wizard/arms")
 def arm_wizard_arms():
     return _wizard_call(service.arm_wizard_arms)

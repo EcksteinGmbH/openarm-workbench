@@ -2233,3 +2233,56 @@ body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .right-rail {
     color: var(--danger);
     font-size: 13px;
 }
+
+/* --- report archive (tab 04): find a report first, generate second --- */
+.ra-rules {
+    margin: 22px 0;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+
+.ra-rules summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.ra-rules[open] summary { margin-bottom: 10px; color: var(--text); }
+.ra-rules .info-list { margin: 0; }
+
+.ra-table { width: 100%; }
+.ra-table td { vertical-align: top; }
+
+.ra-file {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    margin-right: 6px;
+}
+
+.ra-file.ok { color: var(--ok, #38a169); border-color: var(--ok, #38a169); }
+.ra-file.missing { color: var(--muted); }
+
+.ra-generate {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    margin-top: 18px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+
+.ra-generate p { margin: 4px 0 0; font-size: 12px; max-width: 60ch; }
+
+/* The archive owns the full width, like the three wizards. */
+body[data-primary-flow="reportTab"] .workspace { grid-template-columns: minmax(0, 1fr); }
+body[data-primary-flow="reportTab"] .left-rail,
+body[data-primary-flow="reportTab"] .right-rail { display: none; }

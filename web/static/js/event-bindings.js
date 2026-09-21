@@ -190,7 +190,6 @@ export function bindEvents(actions) {
     document.getElementById('writeParamsBtn').addEventListener('click', confirmWriteParams);
     document.getElementById('verifyParamsBtn').addEventListener('click', () => handleAction(verifyParams));
     document.getElementById('saveFlashBtn').addEventListener('click', confirmSaveFlash);
-    document.getElementById('refreshReportBtn').addEventListener('click', () => handleAction(refreshReport));
     document.getElementById('refreshFactoryBtn').addEventListener('click', () => handleAction(refreshFactoryOverview));
     document.getElementById('factoryWorkflowActionBtn').addEventListener('click', () => handleAction(executeFactoryWorkflowPrimaryAction));
     document.getElementById('generateArmCnBtn').addEventListener('click', () => handleAction(generateFactoryArmCn));
@@ -240,7 +239,6 @@ export function bindEvents(actions) {
     document.getElementById('generateZeroReportBtn').addEventListener('click', () => handleAction(() => generateArmReport('zero')));
     document.getElementById('generateSafetyReportBtn').addEventListener('click', () => handleAction(() => generateArmReport('safety')));
     document.getElementById('generateFactoryAcceptanceReportBtn').addEventListener('click', () => handleAction(() => generateArmReport('factory')));
-    document.getElementById('generateFactoryAcceptanceReportArchiveBtn').addEventListener('click', () => handleAction(() => generateArmReport('factory')));
     document.getElementById('factoryArmCn').addEventListener('change', () => handleAction(() => validateFactorySerial('arm_cn', document.getElementById('factoryArmCn').value.trim())));
     document.getElementById('factoryMotorSn').addEventListener('change', () => handleAction(() => validateFactorySerial('motor_sn', document.getElementById('factoryMotorSn').value.trim())));
     ['factoryArmCn', 'factoryMotorSn', 'factoryArmType', 'factoryBomProfile', 'factoryMotorType', 'factoryEscId', 'factoryMstId', 'factorySerialRole', 'factorySerialDate', 'factorySerialSequence', 'factoryZeroScope', 'factoryZeroStatus', 'factoryZeroPoseName', 'factoryZeroOperator', 'factoryZeroNotes', 'factoryDemoScope', 'factoryDemoStatus', 'factoryDemoName', 'factoryDemoOperator', 'factoryDemoCommand', 'factoryDemoNotes']

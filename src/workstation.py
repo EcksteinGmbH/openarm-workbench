@@ -6376,6 +6376,59 @@ class WorkstationService:
                 return candidate
         return f"OAF{date_code}01"
 
+    def report_archive(self) -> Dict[str, Any]:
+        """Every factory report on file, grouped by the arm it belongs to.
+
+        The archive tab used to offer a generate button and no way to see what had
+        already been produced, or even which arm the button would act on. Looking a
+        report up is the thing an operator actually comes here to do.
+        """
+        with self._lock:
+            FACTORY_ARMS_DIR.mkdir(parents=True, exist_ok=True)
+            arms = []
+            for path in sorted(FACTORY_ARMS_DIR.glob("*.json")):
+                arm = _load_json(path, {})
+                if not arm.get("arm_cn"):
+                    continue
+                product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+                try:
+                    label = self.product_registry.get(product_version)["label"]
+                except KeyError:
+                    label = product_version
+                reports = []
+                for report in arm.get("factory_reports") or []:
+                    html_path = report.get("html_path") or ""
+                    pdf_path = report.get("pdf_path") or ""
+                    reports.append(
+                        {
+                            "report_id": report.get("report_id"),
+                            "title": report.get("title"),
+                            "report_type": report.get("report_type"),
+                            "generated_at": report.get("generated_at") or report.get("created_at"),
+                            # Say whether each file is actually on disk: a listed report
+                            # whose PDF never rendered is worse than no entry at all.
+                            "html_available": bool(html_path and Path(html_path).exists()),
+                            "pdf_available": bool(pdf_path and Path(pdf_path).exists()),
+                            "directory": str(Path(html_path).parent) if html_path else None,
+                        }
+                    )
+                arms.append(
+                    {
+                        "arm_cn": arm["arm_cn"],
+                        "arm_type": arm.get("arm_type"),
+                        "product_version": product_version,
+                        "product_label": label,
+                        "updated_at": arm.get("updated_at"),
+                        "reports": sorted(reports, key=lambda item: str(item.get("generated_at") or ""), reverse=True),
+                    }
+                )
+            arms.sort(key=lambda item: (len(item["reports"]) == 0, str(item.get("updated_at") or "")), reverse=True)
+            return {
+                "ok": True,
+                "arms": arms,
+                "total_reports": sum(len(item["reports"]) for item in arms),
+            }
+
     def arm_wizard_create(
         self,
         arm_cn: str,

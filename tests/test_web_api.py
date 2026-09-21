@@ -467,3 +467,54 @@ def test_creating_an_arm_through_the_wizard_api(client):
     refused = _json(client.post("/api/arm/wizard/create", json={
         "arm_cn": suggested, "product_version": "openarm_2_0"}))
     assert refused["problem"]["code"] == "arm_cn_taken"
+
+
+def test_the_page_does_not_state_a_policy_the_workstation_no_longer_follows(client):
+    """UI text is a claim about behaviour, and a stale one misleads an operator.
+
+    The left arm carried a tiered TIMEOUT until 0.12.0 unified both arms. Two places on
+    the page still said J1-J4 = 1000 afterwards, which is the kind of statement someone
+    acts on.
+    """
+    page = client.get("/").data.decode()
+    assert "J1-J4=1000" not in page
+    assert "左臂保留分级" not in page
+    assert str(workstation.WHOLE_ARM_TARGET_TIMEOUT) in page
+
+    # The subtitle described five tabs after they became four.
+    assert "整臂静态验收、官方动态测试" not in page
+
+
+def test_the_report_tab_lets_you_see_which_arm_it_acts_on(client):
+    """The tab used to offer one button that said "use the current arm CN".
+
+    It never named, showed or let you choose that arm - the thing the button acted on
+    was hidden state. Now the archive leads and generating follows the arm you picked.
+    """
+    page = client.get("/").data.decode()
+    for element_id in ("reportArchive", "raArms", "raDetail", "raCount", "refreshReportBtn"):
+        assert f'id="{element_id}"' in page
+    # The old hidden-state button is gone.
+    assert "generateFactoryAcceptanceReportArchiveBtn" not in page
+    # The data rules are still available, but behind a fold rather than before the action.
+    assert '<details class="ra-rules">' in page
+
+    source = client.get("/static/js/report-archive.js").data.decode()
+    assert "data-ra-arm" in source and "data-ra-generate" in source
+    assert "showModal" in source, "generating a factory record should be confirmed"
+
+    app_js = client.get("/static/js/app.js").data.decode()
+    assert "initReportArchive(refreshReport);" in app_js
+    # One handler per button: two racing handlers refreshed half the tab each.
+    bindings = client.get("/static/js/event-bindings.js").data.decode()
+    assert "refreshReportBtn" not in bindings
+
+
+def test_the_report_archive_api_lists_reports_per_arm(client):
+    _json(client.post("/api/factory/arms", json={"arm_cn": "OAF26092130", "product_version": "openarm_1_0"}))
+    payload = _json(client.get("/api/reports/archive"))
+    assert payload["ok"] is True
+    by_cn = {item["arm_cn"]: item for item in payload["arms"]}
+    assert "OAF26092130" in by_cn
+    assert by_cn["OAF26092130"]["reports"] == []
+    assert by_cn["OAF26092130"]["product_label"] == "OpenArm 1.0"

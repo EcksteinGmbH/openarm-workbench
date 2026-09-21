@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.25.0-report-states-its-method`
+Current workstation version: `0.26.0-ui-pass-report-tab`
 
 ## Versioning Rule
 
@@ -13,6 +13,46 @@ Current workstation version: `0.25.0-report-states-its-method`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.26.0-ui-pass-report-tab - 2026-09-21
+
+Summary: first pass of a whole-workstation interface review. Three statements on the
+page had gone stale, and tab 04 acted on an arm it never named.
+
+Stale claims fixed - UI text is a claim about behaviour, and operators act on it:
+
+- Two places still said the left arm ran a tiered TIMEOUT (J1-J4 = 1000). Both arms
+  were unified to 5000 in 0.12.0. Now read from `WHOLE_ARM_TARGET_TIMEOUT`.
+- The page subtitle still described the five-tab flow that became four in 0.18.0.
+- A test now fails on either claim returning.
+
+Tab 04 rebuilt:
+
+- It offered one button whose help text said "uses the current arm CN", while never
+  naming, showing or letting you choose that arm. The thing it acted on was hidden
+  state. Now the tab leads with the arms on file, each showing how many reports it
+  has, and generating follows whichever you picked.
+- `GET /api/reports/archive` lists every factory report grouped by arm, and says for
+  each whether its HTML and PDF are actually on disk - a listed report whose PDF never
+  rendered is worse than no entry.
+- The four data rules moved behind a fold. A beginner does not need to read a policy
+  before pressing a button; an engineer can still open it.
+- Generating now confirms first: it writes a signed factory record.
+- "JOB REPORT" and "工件" are gone; the engineer job view is labelled as such and says
+  when it is the thing you want.
+
+Also fixed:
+
+- Two handlers were bound to the same refresh button, each refreshing half the tab.
+  The archive module owns it and refreshes both halves.
+- The golden report baseline normalises the workstation version. Freezing it made the
+  test fail on every version bump, and a baseline that cries wolf gets refreshed
+  without being read. That the version is present and correct is asserted dynamically.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 248 passed.
+- Checked live: the archive lists 9 reports across 4 arms with their file status.
 
 ### 0.25.0-report-states-its-method - 2026-09-21
 
