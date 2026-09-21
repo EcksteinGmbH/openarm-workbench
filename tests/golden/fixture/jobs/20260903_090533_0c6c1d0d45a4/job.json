@@ -1,0 +1,1424 @@
+{
+ "allowed_actions": [],
+ "current_step": "reported",
+ "events": [
+  {
+   "message": "任务已创建",
+   "severity": "info",
+   "step": "job_created",
+   "timestamp": "2026-09-03T09:05:33Z"
+  },
+  {
+   "message": "开始整臂 CAN2.0 验收扫描",
+   "severity": "info",
+   "step": "bus_scanning",
+   "timestamp": "2026-09-03T09:05:37Z"
+  },
+  {
+   "message": "整臂验收完成，结论 PASS",
+   "severity": "info",
+   "step": "acceptance_checked",
+   "timestamp": "2026-09-03T09:06:05Z"
+  },
+  {
+   "message": "整臂 CAN2.0 验收通过",
+   "severity": "info",
+   "step": "arm_acceptance",
+   "timestamp": "2026-09-03T09:06:05Z"
+  }
+ ],
+ "issues_summary": {
+  "critical": 0,
+  "has_blocking": false,
+  "info": 0,
+  "total": 0,
+  "warning": 0
+ },
+ "job": {
+  "artifact_dir": "/home/ubuntu/Projects/OpenARM/artifacts/jobs/20260903_090533_0c6c1d0d45a4",
+  "current_step": "reported",
+  "expert_mode": false,
+  "failure_reason": null,
+  "finished_at": "2026-09-03T09:06:05Z",
+  "job_id": "0c6c1d0d45a4",
+  "job_type": "arm_acceptance",
+  "profile_id": "openarm_left_arm_v1",
+  "started_at": "2026-09-03T09:05:33Z",
+  "status": "passed",
+  "target_joint": null
+ },
+ "motors": {
+  "L-J1": {
+   "comm_ok": true,
+   "consistency_matrix": [
+    {
+     "actual": 9,
+     "expected": 9,
+     "field": "ESC_ID",
+     "matches": true
+    },
+    {
+     "actual": 25,
+     "expected": 25,
+     "field": "MST_ID",
+     "matches": true
+    },
+    {
+     "actual": 1,
+     "expected": 1,
+     "field": "CTRL_MODE",
+     "matches": true
+    },
+    {
+     "actual": 5000,
+     "expected": 5000,
+     "field": "TIMEOUT",
+     "matches": true
+    },
+    {
+     "actual": 1000000,
+     "expected": 1000000,
+     "field": "can_br",
+     "matches": true
+    },
+    {
+     "actual": 9.0,
+     "expected": null,
+     "field": "Gr",
+     "matches": null
+    },
+    {
+     "actual": 0.0,
+     "expected": null,
+     "field": "KT_Value",
+     "matches": null
+    },
+    {
+     "actual": 12.5,
+     "expected": null,
+     "field": "PMAX",
+     "matches": null
+    },
+    {
+     "actual": 45.0,
+     "expected": null,
+     "field": "VMAX",
+     "matches": null
+    },
+    {
+     "actual": 54.0,
+     "expected": null,
+     "field": "TMAX",
+     "matches": null
+    }
+   ],
+   "expected": {
+    "allow_write": true,
+    "arm_side": "left_arm",
+    "expected_bus": "can0",
+    "expected_ctrl_mode": "MIT",
+    "expected_status": [
+     "DISABLED",
+     "ENABLED"
+    ],
+    "joint_name": "L-J1",
+    "motor_type": "DM-J8009P-2EC",
+    "required_online": true,
+    "requires_zero": true,
+    "target_can_br": 1000000,
+    "target_ctrl_mode": "MIT",
+    "target_esc_id": 9,
+    "target_mst_id": 25,
+    "target_timeout": 5000,
+    "test_profile": "safe_mit_ping"
+   },
+   "issues": [],
+   "joint_name": "L-J1",
+   "params": {
+    "CTRL_MODE": 1,
+    "ESC_ID": 9,
+    "Gr": 9.0,
+    "KT_Value": 0.0,
+    "MST_ID": 25,
+    "PMAX": 12.5,
+    "SN": 1412444213,
+    "TIMEOUT": 5000,
+    "TMAX": 54.0,
+    "VMAX": 45.0,
+    "can_br": 4,
+    "sub_ver": 54,
+    "sw_ver": 942748471
+   },
+   "present": true,
+   "result_label": "PASS",
+   "stability": {
+    "issue_variants": [
+     []
+    ],
+    "parameter_changed_fields": [],
+    "presence_changed": false,
+    "present_count": 3,
+    "repeat_count": 3,
+    "stable": true
+   },
+   "status": {
+    "has_error": false,
+    "is_enabled": false,
+    "is_healthy": true,
+    "last_status_frame": {
+     "can_id": 25,
+     "data": [
+      9,
+      127,
+      255,
+      127,
+      247,
+      255,
+      30,
+      27
+     ],
+     "data_hex": "097FFF7FF7FF1E1B",
+     "timestamp": 1788426359.5031214
+    },
+    "master_id": 25,
+    "motor_type": "DM-J8009P-2EC",
+    "params": {
+     "1": 0.0,
+     "10": 1,
+     "14": 942748471,
+     "15": 1412444213,
+     "20": 9.0,
+     "21": 12.5,
+     "22": 45.0,
+     "23": 54.0,
+     "35": 4,
+     "36": 54,
+     "7": 25,
+     "8": 9,
+     "9": 5000
+    },
+    "position": -0.00019073777366429567,
+    "protocol_motor_type": "DM8009",
+    "slave_id": 9,
+    "status": "DISABLED",
+    "status_code": 0,
+    "t_mos": 30.0,
+    "t_rotor": 27.0,
+    "torque": -0.013186813332140446,
+    "velocity": -0.010989011265337467
+   }
+  },
+  "L-J2": {
+   "comm_ok": true,
+   "consistency_matrix": [
+    {
+     "actual": 10,
+     "expected": 10,
+     "field": "ESC_ID",
+     "matches": true
+    },
+    {
+     "actual": 26,
+     "expected": 26,
+     "field": "MST_ID",
+     "matches": true
+    },
+    {
+     "actual": 1,
+     "expected": 1,
+     "field": "CTRL_MODE",
+     "matches": true
+    },
+    {
+     "actual": 5000,
+     "expected": 5000,
+     "field": "TIMEOUT",
+     "matches": true
+    },
+    {
+     "actual": 1000000,
+     "expected": 1000000,
+     "field": "can_br",
+     "matches": true
+    },
+    {
+     "actual": 9.0,
+     "expected": null,
+     "field": "Gr",
+     "matches": null
+    },
+    {
+     "actual": 0.0,
+     "expected": null,
+     "field": "KT_Value",
+     "matches": null
+    },
+    {
+     "actual": 12.5,
+     "expected": null,
+     "field": "PMAX",
+     "matches": null
+    },
+    {
+     "actual": 45.0,
+     "expected": null,
+     "field": "VMAX",
+     "matches": null
+    },
+    {
+     "actual": 54.0,
+     "expected": null,
+     "field": "TMAX",
+     "matches": null
+    }
+   ],
+   "expected": {
+    "allow_write": true,
+    "arm_side": "left_arm",
+    "expected_bus": "can0",
+    "expected_ctrl_mode": "MIT",
+    "expected_status": [
+     "DISABLED",
+     "ENABLED"
+    ],
+    "joint_name": "L-J2",
+    "motor_type": "DM-J8009P-2EC",
+    "required_online": true,
+    "requires_zero": true,
+    "target_can_br": 1000000,
+    "target_ctrl_mode": "MIT",
+    "target_esc_id": 10,
+    "target_mst_id": 26,
+    "target_timeout": 5000,
+    "test_profile": "safe_mit_ping"
+   },
+   "issues": [],
+   "joint_name": "L-J2",
+   "params": {
+    "CTRL_MODE": 1,
+    "ESC_ID": 10,
+    "Gr": 9.0,
+    "KT_Value": 0.0,
+    "MST_ID": 26,
+    "PMAX": 12.5,
+    "SN": 1412444213,
+    "TIMEOUT": 5000,
+    "TMAX": 54.0,
+    "VMAX": 45.0,
+    "can_br": 4,
+    "sub_ver": 54,
+    "sw_ver": 942748471
+   },
+   "present": true,
+   "result_label": "PASS",
+   "stability": {
+    "issue_variants": [
+     []
+    ],
+    "parameter_changed_fields": [],
+    "presence_changed": false,
+    "present_count": 3,
+    "repeat_count": 3,
+    "stable": true
+   },
+   "status": {
+    "has_error": false,
+    "is_enabled": false,
+    "is_healthy": true,
+    "last_status_frame": {
+     "can_id": 26,
+     "data": [
+      10,
+      127,
+      255,
+      127,
+      248,
+      0,
+      28,
+      27
+     ],
+     "data_hex": "0A7FFF7FF8001C1B",
+     "timestamp": 1788426360.3587437
+    },
+    "master_id": 26,
+    "motor_type": "DM-J8009P-2EC",
+    "params": {
+     "1": 0.0,
+     "10": 1,
+     "14": 942748471,
+     "15": 1412444213,
+     "20": 9.0,
+     "21": 12.5,
+     "22": 45.0,
+     "23": 54.0,
+     "35": 4,
+     "36": 54,
+     "7": 26,
+     "8": 10,
+     "9": 5000
+    },
+    "position": -0.00019073777366429567,
+    "protocol_motor_type": "DM8009",
+    "slave_id": 10,
+    "status": "DISABLED",
+    "status_code": 0,
+    "t_mos": 28.0,
+    "t_rotor": 27.0,
+    "torque": 0.013186813332140446,
+    "velocity": -0.010989011265337467
+   }
+  },
+  "L-J3": {
+   "comm_ok": true,
+   "consistency_matrix": [
+    {
+     "actual": 11,
+     "expected": 11,
+     "field": "ESC_ID",
+     "matches": true
+    },
+    {
+     "actual": 27,
+     "expected": 27,
+     "field": "MST_ID",
+     "matches": true
+    },
+    {
+     "actual": 1,
+     "expected": 1,
+     "field": "CTRL_MODE",
+     "matches": true
+    },
+    {
+     "actual": 5000,
+     "expected": 5000,
+     "field": "TIMEOUT",
+     "matches": true
+    },
+    {
+     "actual": 1000000,
+     "expected": 1000000,
+     "field": "can_br",
+     "matches": true
+    },
+    {
+     "actual": 40.0,
+     "expected": null,
+     "field": "Gr",
+     "matches": null
+    },
+    {
+     "actual": 0.0,
+     "expected": null,
+     "field": "KT_Value",
+     "matches": null
+    },
+    {
+     "actual": 12.5,
+     "expected": null,
+     "field": "PMAX",
+     "matches": null
+    },
+    {
+     "actual": 10.0,
+     "expected": null,
+     "field": "VMAX",
+     "matches": null
+    },
+    {
+     "actual": 28.0,
+     "expected": null,
+     "field": "TMAX",
+     "matches": null
+    }
+   ],
+   "expected": {
+    "allow_write": true,
+    "arm_side": "left_arm",
+    "expected_bus": "can0",
+    "expected_ctrl_mode": "MIT",
+    "expected_status": [
+     "DISABLED",
+     "ENABLED"
+    ],
+    "joint_name": "L-J3",
+    "motor_type": "DM-J4340P-2EC",
+    "required_online": true,
+    "requires_zero": true,
+    "target_can_br": 1000000,
+    "target_ctrl_mode": "MIT",
+    "target_esc_id": 11,
+    "target_mst_id": 27,
+    "target_timeout": 5000,
+    "test_profile": "safe_mit_ping"
+   },
+   "issues": [],
+   "joint_name": "L-J3",
+   "params": {
+    "CTRL_MODE": 1,
+    "ESC_ID": 11,
+    "Gr": 40.0,
+    "KT_Value": 0.0,
+    "MST_ID": 27,
+    "PMAX": 12.5,
+    "SN": 1412444213,
+    "TIMEOUT": 5000,
+    "TMAX": 28.0,
+    "VMAX": 10.0,
+    "can_br": 4,
+    "sub_ver": 57,
+    "sw_ver": 942747703
+   },
+   "present": true,
+   "result_label": "PASS",
+   "stability": {
+    "issue_variants": [
+     []
+    ],
+    "parameter_changed_fields": [],
+    "presence_changed": false,
+    "present_count": 3,
+    "repeat_count": 3,
+    "stable": true
+   },
+   "status": {
+    "has_error": false,
+    "is_enabled": false,
+    "is_healthy": true,
+    "last_status_frame": {
+     "can_id": 27,
+     "data": [
+      11,
+      127,
+      255,
+      127,
+      248,
+      0,
+      30,
+      27
+     ],
+     "data_hex": "0B7FFF7FF8001E1B",
+     "timestamp": 1788426361.215488
+    },
+    "master_id": 27,
+    "motor_type": "DM-J4340P-2EC",
+    "params": {
+     "1": 0.0,
+     "10": 1,
+     "14": 942747703,
+     "15": 1412444213,
+     "20": 40.0,
+     "21": 12.5,
+     "22": 10.0,
+     "23": 28.0,
+     "35": 4,
+     "36": 57,
+     "7": 27,
+     "8": 11,
+     "9": 5000
+    },
+    "position": -0.00019073777366429567,
+    "protocol_motor_type": "DM4340",
+    "slave_id": 11,
+    "status": "DISABLED",
+    "status_code": 0,
+    "t_mos": 30.0,
+    "t_rotor": 27.0,
+    "torque": 0.006837606895714998,
+    "velocity": -0.0019536020699888468
+   }
+  },
+  "L-J4": {
+   "comm_ok": true,
+   "consistency_matrix": [
+    {
+     "actual": 12,
+     "expected": 12,
+     "field": "ESC_ID",
+     "matches": true
+    },
+    {
+     "actual": 28,
+     "expected": 28,
+     "field": "MST_ID",
+     "matches": true
+    },
+    {
+     "actual": 1,
+     "expected": 1,
+     "field": "CTRL_MODE",
+     "matches": true
+    },
+    {
+     "actual": 5000,
+     "expected": 5000,
+     "field": "TIMEOUT",
+     "matches": true
+    },
+    {
+     "actual": 1000000,
+     "expected": 1000000,
+     "field": "can_br",
+     "matches": true
+    },
+    {
+     "actual": 40.0,
+     "expected": null,
+     "field": "Gr",
+     "matches": null
+    },
+    {
+     "actual": 0.0,
+     "expected": null,
+     "field": "KT_Value",
+     "matches": null
+    },
+    {
+     "actual": 12.5,
+     "expected": null,
+     "field": "PMAX",
+     "matches": null
+    },
+    {
+     "actual": 10.0,
+     "expected": null,
+     "field": "VMAX",
+     "matches": null
+    },
+    {
+     "actual": 28.0,
+     "expected": null,
+     "field": "TMAX",
+     "matches": null
+    }
+   ],
+   "expected": {
+    "allow_write": true,
+    "arm_side": "left_arm",
+    "expected_bus": "can0",
+    "expected_ctrl_mode": "MIT",
+    "expected_status": [
+     "DISABLED",
+     "ENABLED"
+    ],
+    "joint_name": "L-J4",
+    "motor_type": "DM-J4340-2EC",
+    "required_online": true,
+    "requires_zero": true,
+    "target_can_br": 1000000,
+    "target_ctrl_mode": "MIT",
+    "target_esc_id": 12,
+    "target_mst_id": 28,
+    "target_timeout": 5000,
+    "test_profile": "safe_mit_ping"
+   },
+   "issues": [],
+   "joint_name": "L-J4",
+   "params": {
+    "CTRL_MODE": 1,
+    "ESC_ID": 12,
+    "Gr": 40.0,
+    "KT_Value": 0.0,
+    "MST_ID": 28,
+    "PMAX": 12.5,
+    "SN": 1412444213,
+    "TIMEOUT": 5000,
+    "TMAX": 28.0,
+    "VMAX": 10.0,
+    "can_br": 4,
+    "sub_ver": 57,
+    "sw_ver": 942747703
+   },
+   "present": true,
+   "result_label": "PASS",
+   "stability": {
+    "issue_variants": [
+     []
+    ],
+    "parameter_changed_fields": [],
+    "presence_changed": false,
+    "present_count": 3,
+    "repeat_count": 3,
+    "stable": true
+   },
+   "status": {
+    "has_error": false,
+    "is_enabled": false,
+    "is_healthy": true,
+    "last_status_frame": {
+     "can_id": 28,
+     "data": [
+      12,
+      127,
+      255,
+      127,
+      248,
+      0,
+      30,
+      31
+     ],
+     "data_hex": "0C7FFF7FF8001E1F",
+     "timestamp": 1788426362.0713518
+    },
+    "master_id": 28,
+    "motor_type": "DM-J4340-2EC",
+    "params": {
+     "1": 0.0,
+     "10": 1,
+     "14": 942747703,
+     "15": 1412444213,
+     "20": 40.0,
+     "21": 12.5,
+     "22": 10.0,
+     "23": 28.0,
+     "35": 4,
+     "36": 57,
+     "7": 28,
+     "8": 12,
+     "9": 5000
+    },
+    "position": -0.00019073777366429567,
+    "protocol_motor_type": "DM4340",
+    "slave_id": 12,
+    "status": "DISABLED",
+    "status_code": 0,
+    "t_mos": 30.0,
+    "t_rotor": 31.0,
+    "torque": 0.006837606895714998,
+    "velocity": -0.0019536020699888468
+   }
+  },
+  "L-J5": {
+   "comm_ok": true,
+   "consistency_matrix": [
+    {
+     "actual": 13,
+     "expected": 13,
+     "field": "ESC_ID",
+     "matches": true
+    },
+    {
+     "actual": 29,
+     "expected": 29,
+     "field": "MST_ID",
+     "matches": true
+    },
+    {
+     "actual": 1,
+     "expected": 1,
+     "field": "CTRL_MODE",
+     "matches": true
+    },
+    {
+     "actual": 5000,
+     "expected": 5000,
+     "field": "TIMEOUT",
+     "matches": true
+    },
+    {
+     "actual": 1000000,
+     "expected": 1000000,
+     "field": "can_br",
+     "matches": true
+    },
+    {
+     "actual": 10.0,
+     "expected": null,
+     "field": "Gr",
+     "matches": null
+    },
+    {
+     "actual": 0.0,
+     "expected": null,
+     "field": "KT_Value",
+     "matches": null
+    },
+    {
+     "actual": 12.5,
+     "expected": null,
+     "field": "PMAX",
+     "matches": null
+    },
+    {
+     "actual": 30.0,
+     "expected": null,
+     "field": "VMAX",
+     "matches": null
+    },
+    {
+     "actual": 10.0,
+     "expected": null,
+     "field": "TMAX",
+     "matches": null
+    }
+   ],
+   "expected": {
+    "allow_write": true,
+    "arm_side": "left_arm",
+    "expected_bus": "can0",
+    "expected_ctrl_mode": "MIT",
+    "expected_status": [
+     "DISABLED",
+     "ENABLED"
+    ],
+    "joint_name": "L-J5",
+    "motor_type": "DM-J4310-2EC",
+    "required_online": true,
+    "requires_zero": true,
+    "target_can_br": 1000000,
+    "target_ctrl_mode": "MIT",
+    "target_esc_id": 13,
+    "target_mst_id": 29,
+    "target_timeout": 5000,
+    "test_profile": "safe_mit_ping"
+   },
+   "issues": [],
+   "joint_name": "L-J5",
+   "params": {
+    "CTRL_MODE": 1,
+    "ESC_ID": 13,
+    "Gr": 10.0,
+    "KT_Value": 0.0,
+    "MST_ID": 29,
+    "PMAX": 12.5,
+    "SN": 1412444213,
+    "TIMEOUT": 5000,
+    "TMAX": 10.0,
+    "VMAX": 30.0,
+    "can_br": 4,
+    "sub_ver": 57,
+    "sw_ver": 942747703
+   },
+   "present": true,
+   "result_label": "PASS",
+   "stability": {
+    "issue_variants": [
+     []
+    ],
+    "parameter_changed_fields": [],
+    "presence_changed": false,
+    "present_count": 3,
+    "repeat_count": 3,
+    "stable": true
+   },
+   "status": {
+    "has_error": false,
+    "is_enabled": false,
+    "is_healthy": true,
+    "last_status_frame": {
+     "can_id": 29,
+     "data": [
+      13,
+      128,
+      20,
+      127,
+      247,
+      255,
+      30,
+      28
+     ],
+     "data_hex": "0D80147FF7FF1E1C",
+     "timestamp": 1788426362.9266036
+    },
+    "master_id": 29,
+    "motor_type": "DM-J4310-2EC",
+    "params": {
+     "1": 0.0,
+     "10": 1,
+     "14": 942747703,
+     "15": 1412444213,
+     "20": 10.0,
+     "21": 12.5,
+     "22": 30.0,
+     "23": 10.0,
+     "35": 4,
+     "36": 57,
+     "7": 29,
+     "8": 13,
+     "9": 5000
+    },
+    "position": 0.0078202486038208,
+    "protocol_motor_type": "DM4310",
+    "slave_id": 13,
+    "status": "DISABLED",
+    "status_code": 0,
+    "t_mos": 30.0,
+    "t_rotor": 28.0,
+    "torque": -0.0024420025292783976,
+    "velocity": -0.007326007355004549
+   }
+  },
+  "L-J6": {
+   "comm_ok": true,
+   "consistency_matrix": [
+    {
+     "actual": 14,
+     "expected": 14,
+     "field": "ESC_ID",
+     "matches": true
+    },
+    {
+     "actual": 30,
+     "expected": 30,
+     "field": "MST_ID",
+     "matches": true
+    },
+    {
+     "actual": 1,
+     "expected": 1,
+     "field": "CTRL_MODE",
+     "matches": true
+    },
+    {
+     "actual": 5000,
+     "expected": 5000,
+     "field": "TIMEOUT",
+     "matches": true
+    },
+    {
+     "actual": 1000000,
+     "expected": 1000000,
+     "field": "can_br",
+     "matches": true
+    },
+    {
+     "actual": 10.0,
+     "expected": null,
+     "field": "Gr",
+     "matches": null
+    },
+    {
+     "actual": 0.0,
+     "expected": null,
+     "field": "KT_Value",
+     "matches": null
+    },
+    {
+     "actual": 12.5,
+     "expected": null,
+     "field": "PMAX",
+     "matches": null
+    },
+    {
+     "actual": 30.0,
+     "expected": null,
+     "field": "VMAX",
+     "matches": null
+    },
+    {
+     "actual": 10.0,
+     "expected": null,
+     "field": "TMAX",
+     "matches": null
+    }
+   ],
+   "expected": {
+    "allow_write": true,
+    "arm_side": "left_arm",
+    "expected_bus": "can0",
+    "expected_ctrl_mode": "MIT",
+    "expected_status": [
+     "DISABLED",
+     "ENABLED"
+    ],
+    "joint_name": "L-J6",
+    "motor_type": "DM-J4310-2EC",
+    "required_online": true,
+    "requires_zero": true,
+    "target_can_br": 1000000,
+    "target_ctrl_mode": "MIT",
+    "target_esc_id": 14,
+    "target_mst_id": 30,
+    "target_timeout": 5000,
+    "test_profile": "safe_mit_ping"
+   },
+   "issues": [],
+   "joint_name": "L-J6",
+   "params": {
+    "CTRL_MODE": 1,
+    "ESC_ID": 14,
+    "Gr": 10.0,
+    "KT_Value": 0.0,
+    "MST_ID": 30,
+    "PMAX": 12.5,
+    "SN": 1412444213,
+    "TIMEOUT": 5000,
+    "TMAX": 10.0,
+    "VMAX": 30.0,
+    "can_br": 4,
+    "sub_ver": 57,
+    "sw_ver": 942747703
+   },
+   "present": true,
+   "result_label": "PASS",
+   "stability": {
+    "issue_variants": [
+     []
+    ],
+    "parameter_changed_fields": [],
+    "presence_changed": false,
+    "present_count": 3,
+    "repeat_count": 3,
+    "stable": true
+   },
+   "status": {
+    "has_error": false,
+    "is_enabled": false,
+    "is_healthy": true,
+    "last_status_frame": {
+     "can_id": 30,
+     "data": [
+      14,
+      128,
+      113,
+      127,
+      247,
+      255,
+      30,
+      28
+     ],
+     "data_hex": "0E80717FF7FF1E1C",
+     "timestamp": 1788426363.781636
+    },
+    "master_id": 30,
+    "motor_type": "DM-J4310-2EC",
+    "params": {
+     "1": 0.0,
+     "10": 1,
+     "14": 942747703,
+     "15": 1412444213,
+     "20": 10.0,
+     "21": 12.5,
+     "22": 30.0,
+     "23": 10.0,
+     "35": 4,
+     "36": 57,
+     "7": 30,
+     "8": 14,
+     "9": 5000
+    },
+    "position": 0.04329747334122658,
+    "protocol_motor_type": "DM4310",
+    "slave_id": 14,
+    "status": "DISABLED",
+    "status_code": 0,
+    "t_mos": 30.0,
+    "t_rotor": 28.0,
+    "torque": -0.0024420025292783976,
+    "velocity": -0.007326007355004549
+   }
+  },
+  "L-J7": {
+   "comm_ok": true,
+   "consistency_matrix": [
+    {
+     "actual": 15,
+     "expected": 15,
+     "field": "ESC_ID",
+     "matches": true
+    },
+    {
+     "actual": 31,
+     "expected": 31,
+     "field": "MST_ID",
+     "matches": true
+    },
+    {
+     "actual": 1,
+     "expected": 1,
+     "field": "CTRL_MODE",
+     "matches": true
+    },
+    {
+     "actual": 5000,
+     "expected": 5000,
+     "field": "TIMEOUT",
+     "matches": true
+    },
+    {
+     "actual": 1000000,
+     "expected": 1000000,
+     "field": "can_br",
+     "matches": true
+    },
+    {
+     "actual": 10.0,
+     "expected": null,
+     "field": "Gr",
+     "matches": null
+    },
+    {
+     "actual": 0.0,
+     "expected": null,
+     "field": "KT_Value",
+     "matches": null
+    },
+    {
+     "actual": 12.5,
+     "expected": null,
+     "field": "PMAX",
+     "matches": null
+    },
+    {
+     "actual": 30.0,
+     "expected": null,
+     "field": "VMAX",
+     "matches": null
+    },
+    {
+     "actual": 10.0,
+     "expected": null,
+     "field": "TMAX",
+     "matches": null
+    }
+   ],
+   "expected": {
+    "allow_write": true,
+    "arm_side": "left_arm",
+    "expected_bus": "can0",
+    "expected_ctrl_mode": "MIT",
+    "expected_status": [
+     "DISABLED",
+     "ENABLED"
+    ],
+    "joint_name": "L-J7",
+    "motor_type": "DM-J4310-2EC",
+    "required_online": true,
+    "requires_zero": true,
+    "target_can_br": 1000000,
+    "target_ctrl_mode": "MIT",
+    "target_esc_id": 15,
+    "target_mst_id": 31,
+    "target_timeout": 5000,
+    "test_profile": "safe_mit_ping"
+   },
+   "issues": [],
+   "joint_name": "L-J7",
+   "params": {
+    "CTRL_MODE": 1,
+    "ESC_ID": 15,
+    "Gr": 10.0,
+    "KT_Value": 0.0,
+    "MST_ID": 31,
+    "PMAX": 12.5,
+    "SN": 1412444213,
+    "TIMEOUT": 5000,
+    "TMAX": 10.0,
+    "VMAX": 30.0,
+    "can_br": 4,
+    "sub_ver": 57,
+    "sw_ver": 942747703
+   },
+   "present": true,
+   "result_label": "PASS",
+   "stability": {
+    "issue_variants": [
+     []
+    ],
+    "parameter_changed_fields": [],
+    "presence_changed": false,
+    "present_count": 3,
+    "repeat_count": 3,
+    "stable": true
+   },
+   "status": {
+    "has_error": false,
+    "is_enabled": false,
+    "is_healthy": true,
+    "last_status_frame": {
+     "can_id": 31,
+     "data": [
+      15,
+      126,
+      95,
+      127,
+      248,
+      0,
+      30,
+      28
+     ],
+     "data_hex": "0F7E5F7FF8001E1C",
+     "timestamp": 1788426364.6366787
+    },
+    "master_id": 31,
+    "motor_type": "DM-J4310-2EC",
+    "params": {
+     "1": 0.0,
+     "10": 1,
+     "14": 942747703,
+     "15": 1412444213,
+     "20": 10.0,
+     "21": 12.5,
+     "22": 30.0,
+     "23": 10.0,
+     "35": 4,
+     "36": 57,
+     "7": 31,
+     "8": 15,
+     "9": 5000
+    },
+    "position": -0.15888457000255585,
+    "protocol_motor_type": "DM4310",
+    "slave_id": 15,
+    "status": "DISABLED",
+    "status_code": 0,
+    "t_mos": 30.0,
+    "t_rotor": 28.0,
+    "torque": 0.0024420025292783976,
+    "velocity": -0.007326007355004549
+   }
+  },
+  "L-J8": {
+   "comm_ok": true,
+   "consistency_matrix": [
+    {
+     "actual": 16,
+     "expected": 16,
+     "field": "ESC_ID",
+     "matches": true
+    },
+    {
+     "actual": 32,
+     "expected": 32,
+     "field": "MST_ID",
+     "matches": true
+    },
+    {
+     "actual": 1,
+     "expected": 1,
+     "field": "CTRL_MODE",
+     "matches": true
+    },
+    {
+     "actual": 5000,
+     "expected": 5000,
+     "field": "TIMEOUT",
+     "matches": true
+    },
+    {
+     "actual": 1000000,
+     "expected": 1000000,
+     "field": "can_br",
+     "matches": true
+    },
+    {
+     "actual": 10.0,
+     "expected": null,
+     "field": "Gr",
+     "matches": null
+    },
+    {
+     "actual": 0.0,
+     "expected": null,
+     "field": "KT_Value",
+     "matches": null
+    },
+    {
+     "actual": 12.5,
+     "expected": null,
+     "field": "PMAX",
+     "matches": null
+    },
+    {
+     "actual": 30.0,
+     "expected": null,
+     "field": "VMAX",
+     "matches": null
+    },
+    {
+     "actual": 10.0,
+     "expected": null,
+     "field": "TMAX",
+     "matches": null
+    }
+   ],
+   "expected": {
+    "allow_write": true,
+    "arm_side": "left_arm",
+    "expected_bus": "can0",
+    "expected_ctrl_mode": "MIT",
+    "expected_status": [
+     "DISABLED",
+     "ENABLED"
+    ],
+    "joint_name": "L-J8",
+    "motor_type": "DM-J4310-2EC",
+    "required_online": true,
+    "requires_zero": true,
+    "target_can_br": 1000000,
+    "target_ctrl_mode": "MIT",
+    "target_esc_id": 16,
+    "target_mst_id": 32,
+    "target_timeout": 5000,
+    "test_profile": "safe_mit_ping"
+   },
+   "issues": [],
+   "joint_name": "L-J8",
+   "params": {
+    "CTRL_MODE": 1,
+    "ESC_ID": 16,
+    "Gr": 10.0,
+    "KT_Value": 0.0,
+    "MST_ID": 32,
+    "PMAX": 12.5,
+    "SN": 1412444213,
+    "TIMEOUT": 5000,
+    "TMAX": 10.0,
+    "VMAX": 30.0,
+    "can_br": 4,
+    "sub_ver": 57,
+    "sw_ver": 942747703
+   },
+   "present": true,
+   "result_label": "PASS",
+   "stability": {
+    "issue_variants": [
+     []
+    ],
+    "parameter_changed_fields": [],
+    "presence_changed": false,
+    "present_count": 3,
+    "repeat_count": 3,
+    "stable": true
+   },
+   "status": {
+    "has_error": false,
+    "is_enabled": false,
+    "is_healthy": true,
+    "last_status_frame": {
+     "can_id": 32,
+     "data": [
+      16,
+      127,
+      255,
+      127,
+      247,
+      252,
+      28,
+      27
+     ],
+     "data_hex": "107FFF7FF7FC1C1B",
+     "timestamp": 1788426365.4925835
+    },
+    "master_id": 32,
+    "motor_type": "DM-J4310-2EC",
+    "params": {
+     "1": 0.0,
+     "10": 1,
+     "14": 942747703,
+     "15": 1412444213,
+     "20": 10.0,
+     "21": 12.5,
+     "22": 30.0,
+     "23": 10.0,
+     "35": 4,
+     "36": 57,
+     "7": 32,
+     "8": 16,
+     "9": 5000
+    },
+    "position": -0.00019073777366429567,
+    "protocol_motor_type": "DM4310",
+    "slave_id": 16,
+    "status": "DISABLED",
+    "status_code": 0,
+    "t_mos": 28.0,
+    "t_rotor": 27.0,
+    "torque": -0.017094017937779427,
+    "velocity": -0.007326007355004549
+   }
+  }
+ },
+ "summary": {
+  "bitrate_mismatches": [],
+  "blocking_reasons": [],
+  "bus_mismatches": [],
+  "command_check_mode": "safe_readonly",
+  "command_test_failed": 0,
+  "command_test_failed_joints": [],
+  "command_test_passed": 0,
+  "command_test_total": 0,
+  "ctrl_mode_mismatches": [],
+  "duplicate_esc_ids": [],
+  "matrix_mismatch_joints": [],
+  "mismatches": [],
+  "missing": [],
+  "passed": true,
+  "release_decision": "PASS",
+  "release_ready": true,
+  "shipment_checklist": {
+   "automated": [
+    {
+     "detail": "检查缺失节点、重复 ID、意外节点以及 Receiver ID 不一致。",
+     "id": "id_mapping",
+     "label": "CAN ID / Receiver ID 映射正确",
+     "status": "pass"
+    },
+    {
+     "detail": "对应 OpenArm Step 4 的 Set Motor Baudrate / Verify Motor Communication。",
+     "id": "baudrate",
+     "label": "波特率一致且为目标配置",
+     "status": "pass"
+    },
+    {
+     "detail": "验证每个在线关节都能响应基本 CAN 命令链路。未做零位校准时建议保持只读安全模式。",
+     "id": "command_chain",
+     "label": "逐关节 enable/disable 命令链路正常",
+     "status": "manual_required"
+    },
+    {
+     "detail": "复扫中无偶发掉线、无参数漂移。",
+     "id": "communication_stability",
+     "label": "连续复扫通信稳定",
+     "status": "pass"
+    },
+    {
+     "detail": "现场应确认所有关节状态正常、可读参，且状态码可按标准枚举解析。",
+     "id": "fault_free",
+     "label": "无电机 fault / 过温 / 状态读取异常",
+     "status": "pass"
+    }
+   ],
+   "manual": [
+    {
+     "detail": "OpenArm 官方建议在写 Flash 后重新上电并再次执行 motor check 确认永久生效。",
+     "id": "power_cycle_persistence",
+     "label": "断电重上电后 ID / 波特率持久化复核",
+     "status": "manual_required"
+    },
+    {
+     "detail": "官方 Step 4 包含 zero position calibration；若按交付文件约定留给客户，应在报告中明确为客户侧必做项。",
+     "id": "zero_calibration_scope",
+     "label": "零位校准与最终姿态校准",
+     "status": "customer_scope"
+    },
+    {
+     "detail": "在最终部署环境完成上位机、主控与 follower 功能验证。",
+     "id": "demo_and_follower_validation",
+     "label": "官方示例 / Follower 功能联调",
+     "status": "customer_scope"
+    }
+   ]
+  },
+  "stability": {
+   "flaky_joint_count": 0,
+   "flaky_joints": [],
+   "parameter_flaky_joints": [],
+   "presence_flaky_joints": [],
+   "repeat_count": 3,
+   "stable_joint_count": 8
+  },
+  "status_read_anomalies": [],
+  "total_comm_ok": 8,
+  "total_duplicate_ids": 0,
+  "total_expected": 8,
+  "total_faults": 0,
+  "total_mismatches": 0,
+  "total_missing": 0,
+  "total_present": 8,
+  "total_status_read_anomalies": 0,
+  "total_unexpected": 0,
+  "unexpected_ids": [],
+  "unhealthy": []
+ }
+}

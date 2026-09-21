@@ -1,0 +1,137 @@
+{
+  "report_id": "OA-FOL-L-FACTORY-20260101-001",
+  "report_type": "formal_factory_acceptance_report",
+  "title": "OpenARM Follower Left Arm Factory Acceptance Report",
+  "subject_id": "OAF26062401",
+  "subject_type": "follower_left_arm",
+  "generated_at": "<GENERATED-UTC>",
+  "summary": {
+    "release_decision": "WARNING",
+    "revision": "Rev. B integrity-audited",
+    "arm_serial": "OAF26062401",
+    "profile_id": "openarm_left_arm_v1",
+    "test_engineer": "golden",
+    "project_lead": "golden",
+    "standard_report_template": "formal_factory_acceptance_v2_integrity_audited_chromium_skia",
+    "report_layout_policy": "Page count and section count may expand with test scope; required evidence, measured data, readable headers, and deliverable factory formatting must be preserved.",
+    "motor_serial_numbers": "not_assigned; motors identified by joint label",
+    "pdf_output_requirement": "Chromium/Skia PDF; ReportLab fallback disabled for formal factory reports",
+    "zero_validation": {
+      "passed": false,
+      "stops": "-",
+      "post_arm": "-",
+      "post_gripper": "-",
+      "max_abs_position_rad": null,
+      "threshold_rad": 0.02,
+      "within_threshold": false
+    },
+    "low_gain_validation": {},
+    "demo_validation": {
+      "blocking_items": [],
+      "close_final": -0.047875,
+      "disabled_count": 7,
+      "enabled_count": 7,
+      "gripper_travel_rad": 0.937667,
+      "gripper_travel_threshold_rad": 0.8,
+      "id16_special_frame_count": 2,
+      "keepalive_frames": 2232,
+      "open_observed_at_close_start": -0.985542,
+      "open_start": -0.000191,
+      "open_target": -1.0472,
+      "passed": true,
+      "warning_items": []
+    },
+    "demo_monitor_sample_count": 0,
+    "single_motor_static_detail_rows": 40,
+    "evidence_sha256": {
+      "evidence/20260624_071736_40727f811d57.json": "7d6445573d97f0ae1ef14415929807d4658755b36ea0f305884a5d1445054295",
+      "evidence/20260624_075330_cecb49862cc0.json": "691b7b4927503e60fb11fc1b82a09932f546b479115439c077bc1e2dfbc42f90",
+      "evidence/arm_acceptance_job.json": "c8bff44bbf7d8863b5d533549278781299a15e5d1552c36e7f08446c75e4a2b8",
+      "evidence/official_dynamic_zero_left_arm.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5",
+      "evidence/revised_official_demo_left_arm.log": "207479950940d327d7638f58df5688b850b0a30802f1bd777fef97ce851ba6d5"
+    },
+    "data_source_policy": "strict_arm_serial_and_side; no global latest-job fallback; missing measured fields are reported as missing instead of being filled with fixed values",
+    "missing_required_data": [
+      {
+        "code": "can_health_not_clean",
+        "scope": "can0",
+        "detail": "CAN health snapshot did not meet the active zero-error/zero-drop release criterion: state=ERROR-ACTIVE; bitrate=1000000; rx_errors=0; tx_errors=0; rx_dropped=0; tx_dropped=10.",
+        "recommended_action": "Reset or baseline the CAN counters, repeat the controlled communication test, and capture a clean same-serial CAN health snapshot."
+      },
+      {
+        "code": "missing_passed_dynamic_zero",
+        "scope": "left_arm",
+        "detail": "No passed official dynamic zero calibration record was found for arm_serial=OAF26062401, side=left_arm.",
+        "recommended_action": "Run official dynamic zero calibration for this exact arm side before final release, or remove the zero section from the active standard if no longer required."
+      },
+      {
+        "code": "missing_passed_low_gain_enable",
+        "scope": "left_arm",
+        "detail": "No passed independent low-gain enable record was found for arm_serial=OAF26062401, side=left_arm.",
+        "recommended_action": "Run the independent current-position low-gain enable/disable gate for this exact arm side before final release, or remove it from the active report standard."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "L-J1",
+        "detail": "No final Demo monitor/status sample was captured for L-J1.",
+        "recommended_action": "Rerun the official Demo for left_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "L-J2",
+        "detail": "No final Demo monitor/status sample was captured for L-J2.",
+        "recommended_action": "Rerun the official Demo for left_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "L-J3",
+        "detail": "No final Demo monitor/status sample was captured for L-J3.",
+        "recommended_action": "Rerun the official Demo for left_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "L-J4",
+        "detail": "No final Demo monitor/status sample was captured for L-J4.",
+        "recommended_action": "Rerun the official Demo for left_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "L-J5",
+        "detail": "No final Demo monitor/status sample was captured for L-J5.",
+        "recommended_action": "Rerun the official Demo for left_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "L-J6",
+        "detail": "No final Demo monitor/status sample was captured for L-J6.",
+        "recommended_action": "Rerun the official Demo for left_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "L-J7",
+        "detail": "No final Demo monitor/status sample was captured for L-J7.",
+        "recommended_action": "Rerun the official Demo for left_arm with final status monitoring enabled."
+      },
+      {
+        "code": "missing_post_demo_status",
+        "scope": "L-J8",
+        "detail": "No final Demo monitor/status sample was captured for L-J8.",
+        "recommended_action": "Rerun the official Demo for left_arm with final status monitoring enabled."
+      }
+    ],
+    "recommended_actions": [
+      "Reset or baseline the CAN counters, repeat the controlled communication test, and capture a clean same-serial CAN health snapshot.",
+      "Run official dynamic zero calibration for this exact arm side before final release, or remove the zero section from the active standard if no longer required.",
+      "Run the independent current-position low-gain enable/disable gate for this exact arm side before final release, or remove it from the active report standard.",
+      "Rerun the official Demo for left_arm with final status monitoring enabled.",
+      "Rerun the official Demo for left_arm with final status monitoring enabled.",
+      "Rerun the official Demo for left_arm with final status monitoring enabled.",
+      "Rerun the official Demo for left_arm with final status monitoring enabled.",
+      "Rerun the official Demo for left_arm with final status monitoring enabled.",
+      "Rerun the official Demo for left_arm with final status monitoring enabled.",
+      "Rerun the official Demo for left_arm with final status monitoring enabled.",
+      "Rerun the official Demo for left_arm with final status monitoring enabled."
+    ],
+    "notes": null
+  }
+}

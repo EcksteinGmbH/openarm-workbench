@@ -101,10 +101,18 @@ class Control_Type(IntEnum):
     Torque_Pos = 4
 
 
+# (PMAX, VMAX, TMAX) per DM_Motor_Type, indexed by the enum above. These are the
+# scaling factors for every packed and unpacked MIT value, so a wrong entry silently
+# mis-scales that motor's readings.
+#
+# Kept identical to openarm_can 1.4.0
+# include/openarm/damiao_motor/dm_motor_constants.hpp MOTOR_LIMIT_PARAMS. DM4340 read
+# 8 here against the official 10; the 16 motors commissioned on 2026-09-17 report
+# VMAX 10.0 from the motor itself, so the official table is right and this was wrong.
 LIMIT_PARAM = [
     [12.5, 30, 10],
     [12.5, 50, 10],
-    [12.5, 8, 28],
+    [12.5, 10, 28],
     [12.5, 10, 28],
     [12.5, 45, 20],
     [12.5, 45, 40],
@@ -605,10 +613,20 @@ class DamiaoMotorDriver(_BaseDamiaoDriver):
 
 
 class DamiaoSocketCANDriver(_BaseDamiaoDriver):
-    def __init__(self, channel: str = "can0", bitrate: int = 1000000):
+    """SocketCAN transport for Damiao motors, in classic CAN or CAN-FD.
+
+    FD follows what openarm_can does on the wire (1.4.0,
+    src/openarm/damiao_motor/dm_motor_device.cpp `create_canfd_frame`): an FD frame
+    carrying the same 8-byte Damiao payload, with the bit rate switch set so the data
+    phase runs at the faster rate. A socket opened for FD still receives classic
+    frames, so a mixed bus stays readable.
+    """
+
+    def __init__(self, channel: str = "can0", bitrate: int = 1000000, fd: bool = False):
         super().__init__()
         self.channel = channel
         self.bitrate = bitrate
+        self.fd = bool(fd)
         self.bus = None
         self.param_read_timeout = 1.0
         self.fast_param_read_timeout = 0.15
@@ -619,7 +637,15 @@ class DamiaoSocketCANDriver(_BaseDamiaoDriver):
         if can is None:
             return False
         try:
-            self.bus = can.Bus(interface="socketcan", channel=self.channel, bitrate=self.bitrate)
+            # The interface itself carries the timing; `ip link` has already applied
+            # it (see WorkstationService._can_configure_command). `fd=True` only asks
+            # the socket for CAN_RAW_FD_FRAMES, as the official CANSocket does.
+            self.bus = can.Bus(
+                interface="socketcan",
+                channel=self.channel,
+                bitrate=self.bitrate,
+                fd=self.fd,
+            )
             return True
         except Exception:
             self.bus = None
@@ -636,7 +662,15 @@ class DamiaoSocketCANDriver(_BaseDamiaoDriver):
     def _send_frame(self, arbitration_id: int, data: Iterable[int]):
         if self.bus is None:
             raise RuntimeError("socketcan not connected")
-        message = can.Message(arbitration_id=arbitration_id, data=list(data), is_extended_id=False)
+        message = can.Message(
+            arbitration_id=arbitration_id,
+            data=list(data),
+            is_extended_id=False,
+            is_fd=self.fd,
+            # CANFD_BRS: the data phase runs at dbitrate. Without it an FD frame is
+            # sent at the arbitration rate and the point of switching is lost.
+            bitrate_switch=self.fd,
+        )
         self.bus.send(message)
 
     def _drain(self, timeout: float = 0.3):

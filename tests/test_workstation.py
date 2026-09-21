@@ -171,6 +171,23 @@ class FakeSocketCANDriver(_FakeBaseDriver):
     pass
 
 
+def shared_socketcan_factory():
+    """Build a DamiaoSocketCANDriver stand-in that always hands back one instance.
+
+    One machine has one CAN bus: reopening the socket - which the wizards now do
+    when a scan comes back empty on a session they reused - must see the same
+    motors, not a freshly populated registry.
+    """
+    holder = {}
+
+    def factory(*args, **kwargs):
+        if "driver" not in holder:
+            holder["driver"] = FakeSocketCANDriver(*args, **kwargs)
+        return holder["driver"]
+
+    return factory
+
+
 def _openarm_arm_registry(
     position: float = 0.02,
     start_esc_id: int = 1,
@@ -185,7 +202,10 @@ def _openarm_arm_registry(
                 int(DM_variable.ESC_ID): esc_id,
                 int(DM_variable.MST_ID): 0x10 + esc_id,
                 int(DM_variable.CTRL_MODE): 1,
-                int(DM_variable.TIMEOUT): 5000 if right_arm_timeout_policy or joint_index >= 5 else 1000,
+                # Every profile now targets the same operational TIMEOUT, so a fake arm
+                # that matches its profile must use it too. `right_arm_timeout_policy`
+                # is kept for callers that still pass it; it no longer changes anything.
+                int(DM_variable.TIMEOUT): workstation.WHOLE_ARM_TARGET_TIMEOUT,
                 int(DM_variable.can_br): 1000000,
                 int(DM_variable.sw_ver): 100,
                 int(DM_variable.sub_ver): 1,
@@ -208,7 +228,7 @@ def _openarm_arm_registry(
 @pytest.fixture(autouse=True)
 def fake_drivers(monkeypatch, tmp_path):
     monkeypatch.setattr(workstation, "DamiaoMotorDriver", FakeSerialDriver)
-    monkeypatch.setattr(workstation, "DamiaoSocketCANDriver", FakeSocketCANDriver)
+    monkeypatch.setattr(workstation, "DamiaoSocketCANDriver", shared_socketcan_factory())
     artifacts_dir = tmp_path / "artifacts" / "jobs"
     factory_dir = tmp_path / "artifacts" / "factory"
     monkeypatch.setattr(workstation, "ARTIFACTS_DIR", artifacts_dir)
@@ -1004,7 +1024,7 @@ def test_arm_acceptance_passes_with_consistent_bus():
                 int(DM_variable.ESC_ID): esc_id,
                 int(DM_variable.MST_ID): 0x10 + esc_id,
                 int(DM_variable.CTRL_MODE): 1,
-                int(DM_variable.TIMEOUT): 5000 if esc_id >= 5 else 1000,
+                int(DM_variable.TIMEOUT): workstation.WHOLE_ARM_TARGET_TIMEOUT,
                 int(DM_variable.can_br): 1000000,
                 int(DM_variable.sw_ver): 100,
                 int(DM_variable.sub_ver): 1,
@@ -2733,3 +2753,202 @@ def test_link_wizard_prepare_failure_and_bus_check(monkeypatch):
     assert checked["ok"] is True and checked["read_only"] is True
     assert checked["motors"][0]["matched_joints"] == ["R-J8"]
     assert checked["faulted_esc_ids"] == []
+
+
+def _interface_control_stub(service, monkeypatch, channel="can0"):
+    """Let interface up/down/configure run without touching the real machine."""
+    interface = {
+        "name": channel,
+        "driver": "gs_usb",
+        "adapter_kind": "gs_usb",
+        "is_gs_usb": True,
+        "bitrate": 1000000,
+        "dbitrate": None,
+        "fd_enabled": False,
+        "can_state": "ERROR-ACTIVE",
+        "berr_tx": 0,
+        "berr_rx": 0,
+        "state": "UP",
+        "mtu": "16",
+    }
+    monkeypatch.setattr(service, "_list_socketcan_interfaces", lambda: [dict(interface)])
+    monkeypatch.setattr(service, "_run_system_command", lambda cmd, **kwargs: None)
+    return interface
+
+
+def test_interface_restart_closes_the_cached_socketcan_session(monkeypatch):
+    # A socket opened before `ip link down` keeps answering "nothing on the bus"
+    # afterwards, which reads exactly like a dead motor.
+    service, driver = _wizard_service(monkeypatch)
+    _interface_control_stub(service, monkeypatch)
+    stale = next(iter(service.sessions.values()))
+    assert stale.connection_state != "disconnected"
+
+    service.can_interface_down("can0")
+    assert stale.connection_state == "disconnected"
+    assert driver.connected is False
+
+    fresh = service._wizard_session("can0", 1000000)
+    assert fresh.session_id != stale.session_id
+    assert fresh.connection["ifindex"] == service._interface_ifindex("can0")
+
+
+def test_configure_can_interface_closes_the_cached_socketcan_session(monkeypatch):
+    service, _driver = _wizard_service(monkeypatch)
+    _interface_control_stub(service, monkeypatch)
+    stale = next(iter(service.sessions.values()))
+
+    service.configure_can_interface("can0", mode="can20", bitrate=1000000, tool="ip_link")
+    assert stale.connection_state == "disconnected"
+
+
+def test_wizard_precheck_restart_closes_the_cached_socketcan_session(monkeypatch):
+    # The precheck restarts the link with raw ip commands, bypassing the methods
+    # above, so it has to close the sockets itself. No precheck stub here.
+    service = workstation.WorkstationService()
+    interface = _interface_control_stub(service, monkeypatch)
+    service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
+    stale = next(iter(service.sessions.values()))
+
+    interface["state"] = "DOWN"  # forces the precheck to restart the link
+    assert service._wizard_can_precheck("can0", 1000000) is None
+    assert stale.connection_state == "disconnected"
+
+
+def test_replugged_adapter_is_not_reused(monkeypatch):
+    service, _driver = _wizard_service(monkeypatch)
+    stale = next(iter(service.sessions.values()))
+    stale.connection["ifindex"] = 5
+    monkeypatch.setattr(service, "_interface_ifindex", lambda name: 9)
+
+    fresh = service._wizard_session("can0", 1000000)
+    assert fresh.session_id != stale.session_id
+    assert stale.connection_state == "disconnected"
+
+
+def test_wizard_reconnects_once_before_blaming_the_motor(monkeypatch):
+    service, _driver = _wizard_service(monkeypatch)
+    original = service._inventory_scan
+    seen = []
+
+    def deaf_first(session, scan_ids):
+        seen.append(session.session_id)
+        if len(seen) == 1:
+            return [], []
+        return original(session, scan_ids)
+
+    monkeypatch.setattr(service, "_inventory_scan", deaf_first)
+
+    identified = service.single_wizard_identify()
+    assert identified["ok"] is True
+    # Scanned twice, on two different sessions: the deaf socket was rebuilt.
+    assert len(seen) == 2 and seen[0] != seen[1]
+
+
+def test_wizard_does_not_rescan_when_it_just_opened_the_session(monkeypatch):
+    # Nothing to rule out on a socket we opened ourselves, so no second full scan.
+    service = workstation.WorkstationService()
+    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    seen = []
+
+    def empty(session, scan_ids):
+        seen.append(session.session_id)
+        return [], []
+
+    monkeypatch.setattr(service, "_inventory_scan", empty)
+
+    problem = service.single_wizard_identify()
+    assert problem["problem"]["code"] == "no_motor_found"
+    assert len(seen) == 1
+
+
+def test_default_scan_finds_a_left_arm_motor():
+    # Left arm ESC 0x09-0x10 used to sit outside the advanced-path scan range, so a
+    # correctly configured L-J8 reported detected=0 unless the operator typed its ID.
+    service = workstation.WorkstationService()
+    session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
+    driver = service.sessions[session["device_session_id"]].driver
+    entry = driver.registry.pop(1)
+    entry["params"][int(DM_variable.ESC_ID)] = 0x10
+    entry["params"][int(DM_variable.MST_ID)] = 0x20
+    driver.registry[0x10] = entry
+
+    scan = service.scan_device(session["device_session_id"], "single_comm_check")
+    assert scan["summary"]["detected"] == 1
+    assert scan["candidates"][0]["detected_esc_id"] == 0x10
+
+
+def test_default_scan_range_covers_every_openarm_id():
+    assert workstation.DEFAULT_SCAN_IDS == list(range(0x01, 0x21))
+    for esc_id in (*range(0x01, 0x09), *range(0x09, 0x11)):
+        assert esc_id in workstation.DEFAULT_SCAN_IDS
+
+
+def test_every_profile_agrees_with_the_commissioning_timeout_policy():
+    # The generic profile is the API and CLI default. It used to carry a superseded
+    # TIMEOUT=1000 on J1-J4 while the derived arm profiles and the policy said 5000,
+    # so a scan run with the default profile would have reported four false mismatches.
+    service = workstation.WorkstationService()
+    policy = service.config()["commissioning_policy"]["whole_arm_timeout_policy"]
+    expected = {value for arm in policy.values() for value in arm.values()}
+    assert expected == {workstation.WHOLE_ARM_TARGET_TIMEOUT}
+
+    for profile_id in ("openarm_v1", "openarm_right_arm_v1", "openarm_left_arm_v1"):
+        profile = service.profile_manager.get_profile(profile_id)
+        timeouts = {int(joint["target_timeout"]) for joint in profile["joints"]}
+        assert timeouts == {workstation.WHOLE_ARM_TARGET_TIMEOUT}, f"{profile_id}: {sorted(timeouts)}"
+
+
+def test_demo_parse_blocks_on_a_gripper_progress_abort():
+    # The demo stops a gripper phase when the gripper is not following, most likely
+    # because the open direction is wrong for this arm. The report has to say so
+    # rather than only showing a short travel.
+    stdout = (
+        "arm_side: right_arm\n"
+        "OPEN gripper: target=-1.047200 start=0.000000\n"
+        "GRIPPER_ABORT: OPEN covered -0.0% of the requested -1.047200 rad by the midpoint "
+        "(minimum 15%); stopping to avoid holding against a stop.\n"
+        "OPEN gripper result: start=0.000000 end=0.000000 delta=0.000000 min=0.000000 "
+        "max=0.000000 travel=0.000000 aborted=True\n"
+        "Demo completed successfully; motors disabled.\n"
+    )
+    summary = workstation._parse_official_demo_stdout(stdout)
+    assert summary["passed"] is False
+    assert "gripper_progress_aborted" in summary["blocking_items"]
+    assert summary["gripper_abort_messages"] and "midpoint" in summary["gripper_abort_messages"][0]
+
+
+def test_a_normal_demo_has_no_gripper_abort():
+    # Taken from a real Follower run: the phase-internal travel really is 0.000000
+    # because `get_motors()` handed the script a frozen copy; the endpoint values
+    # carry the truth. This must keep parsing as it always did.
+    stdout = (
+        "arm_side: right_arm\n"
+        "OPEN gripper: target=-1.047200 start=-0.000191\n"
+        "OPEN gripper result: start=-0.000191 end=-0.000191 delta=0.000000 min=-0.000191 "
+        "max=-0.000191 travel=0.000000\n"
+        "CLOSE gripper: target=0.000000 start=-1.008812\n"
+        "CLOSE gripper result: start=-1.008812 end=-1.008812 delta=0.000000 min=-1.008812 "
+        "max=-1.008812 travel=0.000000\n"
+        "Gripper Motor 8 recv=24 position=-0.041772 velocity=-0.007326 torque=-0.002442 tmos=30 trotor=29\n"
+        "Demo completed successfully; motors disabled.\n"
+    )
+    summary = workstation._parse_official_demo_stdout(stdout)
+    assert summary["gripper_abort_messages"] == []
+    assert "gripper_progress_aborted" not in summary["blocking_items"]
+    assert summary["gripper_travel_rad"] == pytest.approx(abs(-0.041772 - -1.008812), abs=1e-6)
+
+
+def test_single_motor_record_reads_its_can_mode_from_the_product(monkeypatch):
+    # Both products commission over classic CAN today, so the recorded label is
+    # unchanged; it is now read from the registry rather than asserted in the code.
+    monkeypatch.setattr(workstation, "DamiaoSocketCANDriver", shared_socketcan_factory())
+    service = workstation.WorkstationService()
+    assert service._can_mode_label("openarm_1_0", "commissioning") == "CAN 2.0"
+    assert service._can_mode_label("openarm_2_0", "commissioning") == "CAN 2.0"
+    # The assembled 2.0 arm is meant to run FD; the label follows the registry.
+    assert service._can_mode_label("openarm_2_0", "operation") == "CAN FD"
+    assert service._can_mode_label("openarm_1_0", "operation") == "CAN 2.0"
+    # Records written before the registry existed state no product.
+    assert service._can_mode_label(None, "commissioning") == "CAN 2.0"
+    assert service._can_mode_label("openarm_9_9", "commissioning") == "CAN 2.0"

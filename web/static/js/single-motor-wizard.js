@@ -1,6 +1,8 @@
 import { api } from './api.js';
 import { addLog } from './log.js';
 import { showModal } from './modal.js';
+import { showProblemModal } from './problem-modal.js?v=20260921-words';
+import { PROBLEM_KICKER, FIX_HEADING, RETRY, restartLabel } from './wizard-words.js?v=20260921-words';
 
 const STEPS = [
     { id: 'select', label: '选择关节' },
@@ -342,10 +344,10 @@ function renderInspect() {
     }
     if (wizard.inspectProblem) {
         const problem = wizard.inspectProblem;
-        meta.textContent = '读取失败';
+        meta.textContent = PROBLEM_KICKER;
         body.innerHTML = `
             <div class="smw-problem">
-                <div class="smw-problem-kicker">读取失败</div>
+                <div class="smw-problem-kicker">${PROBLEM_KICKER}</div>
                 <h3>${esc(problem.title)}</h3>
                 <p>${esc(problem.message)}</p>
                 <ol>${(problem.solutions || []).map(item => `<li>${esc(item)}</li>`).join('')}</ol>
@@ -520,16 +522,16 @@ function renderHelp() {
             : '';
         help.innerHTML = `
             <div class="smw-problem">
-                <div class="smw-problem-kicker">需要处理</div>
+                <div class="smw-problem-kicker">${PROBLEM_KICKER}</div>
                 <h3>${esc(problem.title)}</h3>
                 <p>${esc(problem.message)}</p>
                 ${problem.found_esc_ids ? `<p>检测到的电机 ID：${problem.found_esc_ids.map(hex).join('、')}</p>` : ''}
                 ${mismatches}
-                <strong>怎么解决</strong>
+                <strong>${FIX_HEADING}</strong>
                 <ol>${(problem.solutions || []).map(item => `<li>${esc(item)}</li>`).join('')}</ol>
                 <div class="smw-actions">
-                    ${retry ? `<button class="btn btn-primary" data-action="${retry}" ${wizard.busy ? 'disabled' : ''}>处理好了，再试一次</button>` : ''}
-                    <button class="btn btn-secondary" data-action="restart" ${wizard.busy ? 'disabled' : ''}>重新开始这颗电机</button>
+                    ${retry ? `<button class="btn btn-primary" data-action="${retry}" ${wizard.busy ? 'disabled' : ''}>${RETRY}</button>` : ''}
+                    <button class="btn btn-secondary" data-action="restart" ${wizard.busy ? 'disabled' : ''}>${restartLabel('这颗电机')}</button>
                 </div>
                 ${problem.detail ? `<details><summary>技术信息（发给工程师）</summary><code>${esc(problem.code)}: ${esc(problem.detail)}</code></details>` : ''}
             </div>`;
@@ -550,7 +552,7 @@ function renderRecords() {
     }
     container.innerHTML = `
         <table class="smw-table compact">
-            <thead><tr><th>时间</th><th>关节</th><th>型号</th><th>产品</th><th>ESC / MST</th><th>模式</th><th>波特率</th><th>TIMEOUT</th><th>结果</th></tr></thead>
+            <thead><tr><th>时间</th><th>关节</th><th>型号</th><th>产品</th><th>ESC / MST</th><th>模式</th><th>波特率</th><th>TIMEOUT</th><th>结果</th><th></th></tr></thead>
             <tbody>
                 ${wizard.records.slice(0, 12).map(record => {
                     const verified = verifiedValues(record);
@@ -565,6 +567,7 @@ function renderRecords() {
                         <td>${esc(verified.canBr)}</td>
                         <td>${esc(record.timeout_recorded ?? '-')}</td>
                         <td><span class="smw-badge ${record.result === 'PASS' ? 'pass' : 'fail'}">${esc(record.result)}</span></td>
+                        <td><button class="btn btn-ghost slim" data-withdraw="${esc(record.record_id)}" ${wizard.busy ? 'disabled' : ''}>撤回</button></td>
                     </tr>`;
                 }).join('')}
             </tbody>
@@ -598,7 +601,7 @@ function clientProblem(error) {
             code: 'job_lost',
             title: '工作站重启过，当前进度丢失',
             message: '工作站程序重新启动后，正在进行的电机任务不再有效。',
-            solutions: ['点「重新开始这颗电机」重新识别。已经保存到电机的参数不会丢失。'],
+            solutions: [`点「${restartLabel('这颗电机')}」重新识别。已经保存到电机的参数不会丢失。`],
             detail: message
         };
     }
@@ -611,7 +614,7 @@ function clientProblem(error) {
             detail: message
         };
     }
-    return { code: 'unknown_error', title: '发生未知错误', message: '请求失败。', solutions: ['点「重新开始这颗电机」再试一次；仍失败请截图发给工程师。'], detail: message };
+    return { code: 'unknown_error', title: '发生未知错误', message: '请求失败。', solutions: [`点「${restartLabel('这颗电机')}」再试一次；仍失败请截图发给工程师。`], detail: message };
 }
 
 async function run(busyText, request, onSuccess) {
@@ -623,16 +626,27 @@ async function run(busyText, request, onSuccess) {
         if (payload.ok === false) {
             wizard.problem = payload.problem;
             addLog(`单电机向导：${payload.problem.title}`, 'error', 'wizard');
+            raiseIfBlocking(payload.problem);
         } else {
             onSuccess(payload);
         }
     } catch (error) {
         wizard.problem = clientProblem(error);
         addLog(`单电机向导：${error.message}`, 'error', 'wizard');
+        raiseIfBlocking(wizard.problem);
     } finally {
         wizard.busy = '';
         render();
     }
+}
+
+// A blocking problem means the CAN port itself is unusable; nothing in the wizard
+// can get past it, so raise a dialog instead of relying on the side panel.
+function raiseIfBlocking(problem) {
+    if (!problem?.blocking) return;
+    const action = RETRY_ACTION[problem.code];
+    const retry = action ? () => ACTIONS[action]?.() : null;
+    showProblemModal(problem, retry);
 }
 
 function post(url, body) {
@@ -692,6 +706,21 @@ function restart() {
     render();
 }
 
+function withdrawRecord(recordId) {
+    const record = wizard.records.find(item => item.record_id === recordId);
+    // A retested or bad motor leaves a record that is no longer the truth about that
+    // joint. Withdrawing moves it aside; it is still a hardware measurement, and a
+    // record an arm is using is refused with the way to free it.
+    showModal(
+        '撤回这条电机记录？',
+        `${record?.joint_name || recordId} 的记录会移出列表，文件保留在 withdrawn_single_motor_records/ 备查。如果它已挂在某台机械臂上，会提示你先去取消挂载。`,
+        () => run('正在撤回…', () => api(`/api/single-motor/records/${encodeURIComponent(recordId)}`, { method: 'DELETE' }), async () => {
+            addLog(`单电机记录已撤回：${record?.joint_name || recordId}`, 'info', 'wizard');
+            await refreshRecords();
+        })
+    );
+}
+
 async function refreshRecords() {
     try {
         const payload = await api('/api/single-motor/records?limit=50');
@@ -721,6 +750,23 @@ function setAdvanced(open) {
     document.body.classList.toggle('motor-advanced', open);
 }
 
+const ACTIONS = {
+    identify,
+    write: confirmWrite,
+    save,
+    finish,
+    restart,
+    next: () => {
+        const joints = selectedArm()?.joints || [];
+        const index = joints.findIndex(joint => joint.joint === wizard.selection.joint);
+        if (index >= 0 && index < joints.length - 1) {
+            wizard.selection.joint = joints[index + 1].joint;
+        }
+        restart();
+        refreshInterfaces();
+    }
+};
+
 function handleClick(event) {
     const selectButton = event.target.closest('[data-select]');
     if (selectButton) {
@@ -732,23 +778,14 @@ function handleClick(event) {
         render();
         return;
     }
+    const withdrawButton = event.target.closest('[data-withdraw]');
+    if (withdrawButton && !withdrawButton.disabled) {
+        withdrawRecord(withdrawButton.dataset.withdraw);
+        return;
+    }
     const actionButton = event.target.closest('[data-action]');
     if (!actionButton || actionButton.disabled) return;
-    const action = actionButton.dataset.action;
-    if (action === 'identify') identify();
-    if (action === 'write') confirmWrite();
-    if (action === 'save') save();
-    if (action === 'finish') finish();
-    if (action === 'restart') restart();
-    if (action === 'next') {
-        const joints = selectedArm()?.joints || [];
-        const index = joints.findIndex(joint => joint.joint === wizard.selection.joint);
-        if (index >= 0 && index < joints.length - 1) {
-            wizard.selection.joint = joints[index + 1].joint;
-        }
-        restart();
-        refreshInterfaces();
-    }
+    ACTIONS[actionButton.dataset.action]?.();
 }
 
 function handleChange(event) {

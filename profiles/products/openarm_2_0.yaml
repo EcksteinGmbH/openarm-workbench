@@ -1,0 +1,138 @@
+# OpenArm 2.0 product registry.
+#
+# WARNING: nothing in this file has been confirmed on 2.0 hardware. Every entry that
+# drives a motor carries `hardware_verified: false` and a `locked_reason`, and the
+# workstation refuses to execute a locked step. Values were taken from the official
+# 2.0 documentation via docs/ARM_WORKSTATION_V5_DUAL_VERSION_PLAN.md; they are a
+# starting point for verification, not an accepted configuration.
+product_version: openarm_2_0
+label: OpenArm 2.0
+profile_revision: 2026-09-20.1
+hardware_verified: false
+
+arms:
+  right_arm:
+    profile_id: openarm_right_arm_v1
+    joint_prefix: R
+    expected_bus: can0
+    esc_ids: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+    mst_ids: [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18]
+  left_arm:
+    profile_id: openarm_left_arm_v1
+    joint_prefix: L
+    expected_bus: can0
+    # Plan A, same as 1.0: left arm keeps distinct IDs rather than official can1 0x01-0x08.
+    esc_ids: [0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]
+    mst_ids: [0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20]
+
+# Official "same motor lineup" as 1.0. Confirmed against the 16 motors already
+# commissioned for 2.0 in artifacts/factory/single_motor_records/.
+motors:
+  J1: DM-J8009P-2EC
+  J2: DM-J8009P-2EC
+  J3: DM-J4340P-2EC
+  J4: DM-J4340-2EC
+  J5: DM-J4310-2EC
+  J6: DM-J4310-2EC
+  J7: DM-J4310-2EC
+  J8: DM-J4310-2EC
+
+can:
+  # Plan A: IDs are configured over classic CAN at 1 Mbps before assembly. This half
+  # IS verified - all 16 motors were commissioned this way on 2026-09-17.
+  commissioning:
+    mode: can20
+    bitrate: 1000000
+    hardware_verified: true
+  # The assembled arm is meant to run CAN FD 1M/5M. Switching means writing can_br to
+  # Flash on all 8 joints; a mistake takes the whole arm off the bus, and Flash endures
+  # only about 10k writes. Locked until the P0 bench test answers whether a 5M motor
+  # replies to classic frames and whether any joint needs an FD frame to accept the
+  # baudrate write (see openarm#471 on J2).
+  operation:
+    mode: canfd
+    bitrate: 1000000
+    dbitrate: 5000000
+    motor_can_br_code: 9
+    hardware_verified: false
+    locked_reason: >-
+      整臂切 5M FD 需要给 8 个关节写 Flash，写错整条臂失联；R-J1 台架实测
+      （5M 电机是否回应经典帧、切换后能否切回 1M）完成前不得执行。
+
+parameters:
+  ctrl_mode: MIT
+  # Provisionally the same as 1.0. Official docs do not specify a 2.0 TIMEOUT.
+  timeout: 5000
+  timeout_hardware_verified: false
+
+gripper:
+  joint: J8
+  # Every value below is from official openarm_can 1.4.0, not inferred:
+  #   examples/gripper_posforce.cpp:33,43-48
+  #   python/examples/test_gripper_posforce.py:24-25,36-47
+  #   examples/demo.cpp:41
+  motor: DM4310
+  esc_id: 0x08
+  mst_id: 0x18
+  # POS_FORCE, not MIT. MIT carries no torque ceiling, so a gripper commanded onto a
+  # hard object keeps adding force until it overheats - reported as openarm_can#81 and
+  # accepted by the maintainers, which is why the posforce examples exist at all.
+  control_mode: POS_FORCE
+  # No single open_target_rad here on purpose: 2.0 mirrors, so a lone value would be
+  # right for one arm and drive the other into its stop. Only the per-side table below.
+  close_target_rad: 0.0
+  speed_limit_rad_s: 25.0      # gripper_posforce.cpp:45
+  torque_limit_pu: 0.15        # per-unit 0.0-1.0; the python example writes 1.5/10
+  # The official example runs on can1, which is officially the left arm, and commands
+  # a POSITIVE pi/2. The right arm's sign is the mirror of that and has no official
+  # example, so it stays a measurement to make rather than a stated fact.
+  open_target_rad_by_arm_side:
+    left_arm: 1.5708           # matches the official example on can1
+    right_arm: -1.5708         # mirror, not independently sourced
+  # Official publishes no acceptance threshold for gripper travel. Left unset rather
+  # than invented: a number here becomes a PASS/FAIL nobody decided.
+  min_travel_rad: null
+  hardware_verified: false
+  locked_reason: >-
+    官方参数已确认（POS_FORCE / π/2 / 25 rad/s / 0.15 pu），但工作站尚未接入 POS_FORCE
+    （本地 openarm_can 1.2.2 的 Python 绑定没有这个模式，需升级到 1.4.0），
+    且右臂符号与行程阈值未实测。
+
+zero:
+  # The official 2.0 method, from docs/official/setup-tutorial.md section 2: clamp the
+  # arm in the calibration jig so no joint can move, then write the current position as
+  # zero. No motion command is sent - the pose is guaranteed mechanically, not driven.
+  # This is a different method from 1.0's limit search, which does move the arm.
+  method: cell_jig_set_zero
+  command: openarm-can-cli
+  subcommand: set_zero
+  # Official uses `--arm` (IDs 1-8) with the left arm on can1. Plan A puts our left arm
+  # at 0x09-0x10 on the same can0, and `--id` overrides `--arm`
+  # (openarm_cli.cpp:245), so each side names its own IDs.
+  target_ids_by_arm_side:
+    right_arm: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+    left_arm: [0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]
+  motion: false
+  requires_jig: true
+  hardware_verified: false
+  locked_reason: >-
+    方式已按官方确定（夹具固定 + 原地清零，不运动），但尚未在 2.0 真机执行过，
+    且需确认产线有 Cell 校准夹具（HNTP6-6 螺母 + M6 螺丝）。
+
+cameras:
+  - id: gripper
+    model: DCXGW20
+    required: true
+    mode: 1080p60
+    hardware_verified: false
+    locked_reason: 相机工位判据（帧率、丢帧、清晰度）待给出，见 V5 §9-3。
+  - id: top
+    model: D435i
+    required: per_order
+    hardware_verified: false
+    locked_reason: 选配项；未购买时记为 N/A，不算失败。
+
+firmware_baseline:
+  DM4310: V5017_04
+  DM4340: V5117_04
+  DM8009: V6417_04

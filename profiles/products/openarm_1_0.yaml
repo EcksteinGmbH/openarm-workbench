@@ -1,0 +1,111 @@
+# OpenArm 1.0 product registry.
+#
+# Every value here is already in production use and was verified on hardware: three
+# 1.0 Follower arms (OAF26062401 / OAF26080401 / OAF26090301) were built and tested
+# with exactly these settings. This file records what the workstation already does;
+# it does not change it.
+product_version: openarm_1_0
+label: OpenArm 1.0
+profile_revision: 2026-09-20.1
+hardware_verified: true
+
+arms:
+  right_arm:
+    profile_id: openarm_right_arm_v1
+    joint_prefix: R
+    expected_bus: can0
+    esc_ids: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+    mst_ids: [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18]
+  left_arm:
+    profile_id: openarm_left_arm_v1
+    joint_prefix: L
+    expected_bus: can0
+    # Plan A: left arm keeps distinct IDs rather than the official can1 0x01-0x08.
+    esc_ids: [0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]
+    mst_ids: [0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20]
+
+motors:
+  J1: DM-J8009P-2EC
+  J2: DM-J8009P-2EC
+  J3: DM-J4340P-2EC
+  J4: DM-J4340-2EC
+  J5: DM-J4310-2EC
+  J6: DM-J4310-2EC
+  J7: DM-J4310-2EC
+  J8: DM-J4310-2EC
+
+can:
+  # Single-motor ID commissioning, before assembly.
+  commissioning:
+    mode: can20
+    bitrate: 1000000
+  # Assembled arm. 1.0 stays on classic CAN; shipped and in-production units are not
+  # migrated to FD.
+  operation:
+    mode: can20
+    bitrate: 1000000
+    hardware_verified: true
+
+parameters:
+  ctrl_mode: MIT
+  timeout: 5000
+
+gripper:
+  joint: J8
+  # One value for Follower and Leader alike, matching the official limit table
+  # [-60 deg, 0 deg] in openarm-can-zero-position-calibration. Verified on 12 Follower
+  # arm-sides (2026-05-18 .. 2026-09-03), which reached 90-98% of this target.
+  motor: DM4310
+  esc_id: 0x08
+  mst_id: 0x18
+  # What this workstation actually does today, recorded so the report can state it.
+  # MIT has no torque ceiling: a gripper driven onto a hard stop keeps adding force
+  # (openarm_can#81). Official moved to POS_FORCE; we have not yet, because the
+  # installed openarm_can 1.2.2 bindings do not expose it and swapping the library
+  # under the 1.0 path has to be proven on hardware first. This is a recorded
+  # decision, not an oversight.
+  control_mode: MIT
+  control_kp: 5.0
+  control_kd: 0.6
+  torque_limit_pu: null        # MIT cannot express one
+  pending_change:
+    to_control_mode: POS_FORCE
+    reason: openarm_can#81 - MIT 无力矩上限，夹到硬物会持续加力直至过热；官方已转向 POS_FORCE
+    blocked_by: 需先升级到 openarm_can 1.4.0 并在真机上证明换库本身不改变结果
+  open_target_rad: -1.0472   # -60 deg
+  close_target_rad: 0.0
+  min_travel_rad: 0.8
+  hardware_verified: true
+  historical_anomaly:
+    scope: OAL (1.0 Leader)
+    observed_open_target_rad: 1.0472
+    observed:
+      3 Leader arm-sides on 2026-06-02/03 were commanded +1.0472 and physically
+      reached +0.956 .. +0.970 rad, signed off PASS with operator visual confirmation.
+    cause: >-
+      Unexplained. The demo tool's built-in default for --gripper-open-target is
+      +1.0472, which contradicts the limit table in the same openarm_can 1.2.2 package.
+      Those Leader runs appear to have used the default while the Follower runs had
+      already switched to the corrected value. The earliest Follower (2026-05-12) also
+      has an operator-recorded gripper mechanical stop at +1.0739, so the positive side
+      is not a Leader-specific trait. The gripper limit search is always skipped
+      (skip_gripper_limit_search=True), so nothing automated ever established the sign.
+    status: recorded_only_not_applied
+    resolution: >-
+      A 1.0 Leader is tested with the official -1.0472 like any other arm. The midpoint
+      progress check (workstation 0.14.0) stops the phase if it does not follow,
+      instead of holding it against a stop. Break this entry with that measurement.
+
+zero:
+  method: limit_search
+  hardware_verified: true
+
+cameras: []
+
+# From the official firmware update page, carried over via
+# docs/ARM_WORKSTATION_V5_DUAL_VERSION_PLAN.md 2.4. Read and compare only; the
+# workstation never flashes firmware.
+firmware_baseline:
+  DM4310: V5017_04
+  DM4340: V5117_04
+  DM8009: V6417_04

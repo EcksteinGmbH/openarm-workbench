@@ -169,6 +169,7 @@ def bind_arm_identity():
             left_arm_installed=bool(data.get("left_arm_installed", True)),
             right_arm_installed=bool(data.get("right_arm_installed", True)),
             notes=data.get("notes"),
+            product_version=data.get("product_version"),
         )
     )
 
@@ -753,6 +754,89 @@ def _wizard_call(func, *args, **kwargs):
 @app.get("/api/single-motor/wizard/options")
 def single_wizard_options():
     return _json_ok(service.single_wizard_options())
+
+
+@app.get("/api/arm/wizard/options")
+def arm_wizard_options():
+    return _wizard_call(service.arm_wizard_options, product_version=request.args.get("product_version"))
+
+
+@app.delete("/api/reports/<arm_cn>/<report_id>")
+def delete_factory_report(arm_cn: str, report_id: str):
+    return _wizard_call(service.delete_factory_report, arm_cn=arm_cn, report_id=report_id)
+
+
+@app.get("/api/maintenance/unlinked-jobs")
+def list_unlinked_jobs():
+    return _wizard_call(service.list_unlinked_jobs)
+
+
+@app.post("/api/maintenance/unlinked-jobs/archive")
+def archive_unlinked_jobs():
+    data = _body()
+    return _wizard_call(service.archive_unlinked_jobs, confirmed=bool(data.get("confirmed")))
+
+
+@app.delete("/api/single-motor/records/<record_id>")
+def withdraw_single_motor_record(record_id: str):
+    return _wizard_call(service.withdraw_single_motor_record, record_id=record_id)
+
+
+@app.get("/api/reports/archive")
+def report_archive():
+    return _wizard_call(service.report_archive)
+
+
+@app.get("/api/arm/wizard/arms")
+def arm_wizard_arms():
+    return _wizard_call(service.arm_wizard_arms)
+
+
+@app.post("/api/arm/wizard/create")
+def arm_wizard_create():
+    data = _body()
+    return _wizard_call(
+        service.arm_wizard_create,
+        arm_cn=str(data.get("arm_cn") or ""),
+        product_version=str(data.get("product_version") or ""),
+        arm_type=str(data.get("arm_type") or "OpenARM Follower"),
+        notes=data.get("notes"),
+    )
+
+
+@app.delete("/api/arm/wizard/<arm_cn>")
+def arm_wizard_delete(arm_cn: str):
+    return _wizard_call(
+        service.arm_wizard_delete,
+        arm_cn=arm_cn,
+        mode=str(request.args.get("mode") or "archive"),
+        force=str(request.args.get("force") or "").lower() in ("1", "true", "yes"),
+    )
+
+
+@app.delete("/api/arm/wizard/<arm_cn>/motor-records/<record_id>")
+def arm_wizard_detach_motor_record(arm_cn: str, record_id: str):
+    return _wizard_call(service.arm_wizard_detach_motor_record, arm_cn=arm_cn, record_id=record_id)
+
+
+@app.get("/api/arm/wizard/<arm_cn>/status")
+def arm_wizard_status(arm_cn: str):
+    return _wizard_call(service.arm_wizard_status, arm_cn=arm_cn)
+
+
+@app.get("/api/arm/wizard/<arm_cn>/motor-records")
+def arm_wizard_motor_records(arm_cn: str):
+    return _wizard_call(service.arm_wizard_available_motor_records, arm_cn=arm_cn)
+
+
+@app.post("/api/arm/wizard/<arm_cn>/motor-records")
+def arm_wizard_attach_motor_record(arm_cn: str):
+    data = _body()
+    return _wizard_call(
+        service.arm_wizard_attach_motor_record,
+        arm_cn=arm_cn,
+        record_id=str(data.get("record_id") or ""),
+    )
 
 
 @app.post("/api/link/wizard/detect")

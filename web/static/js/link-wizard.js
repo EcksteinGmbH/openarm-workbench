@@ -1,5 +1,7 @@
 import { api } from './api.js';
 import { addLog } from './log.js';
+import { showProblemModal } from './problem-modal.js?v=20260921-words';
+import { PROBLEM_KICKER, FIX_HEADING, RETRY, restartLabel } from './wizard-words.js?v=20260921-words';
 
 // Beginner wizard for tab 01 (建联). Same shape as the single-motor wizard:
 // one primary button per step, every failure explains cause and fix.
@@ -219,14 +221,15 @@ function renderProblem() {
     const retry = RETRY_ACTION[problem.code];
     return `
         <div class="smw-card smw-problem">
-            <div class="smw-problem-kicker">出错了</div>
+            <div class="smw-problem-kicker">${PROBLEM_KICKER}</div>
             <h3>${esc(problem.title)}</h3>
             <p>${esc(problem.message)}</p>
+            <strong>${FIX_HEADING}</strong>
             <ol>${(problem.solutions || []).map(item => `<li>${esc(item)}</li>`).join('')}</ol>
             ${problem.detail ? `<code>${esc(problem.detail)}</code>` : ''}
             <div class="smw-actions">
-                <button class="btn btn-secondary" data-link-action="restart" ${link.busy ? 'disabled' : ''}>从头开始</button>
-                ${retry ? busyButton('处理好了，再试一次', retry) : ''}
+                <button class="btn btn-secondary" data-link-action="restart" ${link.busy ? 'disabled' : ''}>${restartLabel('这条链路')}</button>
+                ${retry ? busyButton(RETRY, retry) : ''}
             </div>
         </div>`;
 }
@@ -283,7 +286,7 @@ function clientProblem(error) {
             detail: message
         };
     }
-    return { code: 'unknown_error', title: '发生未知错误', message: '请求失败。', solutions: ['点「从头开始」再试一次；仍失败请截图发给工程师。'], detail: message };
+    return { code: 'unknown_error', title: '发生未知错误', message: '请求失败。', solutions: [`点「${restartLabel('这条链路')}」再试一次；仍失败请截图发给工程师。`], detail: message };
 }
 
 async function run(busyText, request, onSuccess) {
@@ -295,16 +298,28 @@ async function run(busyText, request, onSuccess) {
         if (payload.ok === false) {
             link.problem = payload.problem;
             addLog(`建联向导：${payload.problem.title}`, 'error', 'link');
+            raiseIfBlocking(payload.problem);
         } else {
             onSuccess(payload);
         }
     } catch (error) {
         link.problem = clientProblem(error);
         addLog(`建联向导：${error.message}`, 'error', 'link');
+        raiseIfBlocking(link.problem);
     } finally {
         link.busy = '';
         render();
     }
+}
+
+// A blocking problem means the CAN port itself is unusable; the operator has to
+// leave the page and fix hardware or permissions, so say so in a dialog rather than
+// only in the side panel they may not look at.
+function raiseIfBlocking(problem) {
+    if (!problem?.blocking) return;
+    const action = RETRY_ACTION[problem.code];
+    const retry = action ? () => ACTIONS[action]?.() : null;
+    showProblemModal(problem, retry);
 }
 
 function post(url, body) {
@@ -368,6 +383,18 @@ function restart() {
     render();
 }
 
+const ACTIONS = {
+    detect,
+    prepare,
+    connect,
+    bus: busCheck,
+    disconnect,
+    restart,
+    'back-detect': () => { link.step = 'detect'; render(); },
+    'back-prepare': () => { link.step = 'prepare'; render(); },
+    'skip-bus': () => { link.step = 'done'; render(); }
+};
+
 function handleClick(event) {
     const selectButton = event.target.closest('[data-link-select]');
     if (selectButton) {
@@ -378,18 +405,7 @@ function handleClick(event) {
     }
     const actionButton = event.target.closest('[data-link-action]');
     if (!actionButton || actionButton.disabled) return;
-    const actions = {
-        detect,
-        prepare,
-        connect,
-        bus: busCheck,
-        disconnect,
-        restart,
-        'back-detect': () => { link.step = 'detect'; render(); },
-        'back-prepare': () => { link.step = 'prepare'; render(); },
-        'skip-bus': () => { link.step = 'done'; render(); }
-    };
-    actions[actionButton.dataset.linkAction]?.();
+    ACTIONS[actionButton.dataset.linkAction]?.();
 }
 
 export async function initLinkWizard() {

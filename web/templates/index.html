@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenARM 机械臂测试工作台</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=20260918-advanced-sections">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=20260921-words">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body data-primary-flow="connectTab">
@@ -12,7 +12,7 @@
         <header class="topbar">
             <div>
                 <h1>OpenARM 出厂测试工作台</h1>
-                <p>按出厂测试顺序组织：准备建链、单电机测试、整臂静态验收、官方动态测试、报告归档。</p>
+                <p>按出厂顺序做：先建链，再逐颗配电机，装配好后测整臂，最后出报告。每一页都会告诉你这一步做什么。</p>
             </div>
             <div class="topbar-meta">
                 <div class="meta-pill" id="connectionPill">未连接</div>
@@ -23,9 +23,8 @@
         <nav class="primary-tabs" id="primaryTabs">
             <button class="tab-button active" data-tab="connectTab"><span>01</span> 准备建链</button>
             <button class="tab-button" data-tab="motorWorkbenchTab"><span>02</span> 单电机测试</button>
-            <button class="tab-button" data-tab="staticAcceptanceTab" data-tab-target="armWorkbenchTab" data-test-subtab="scanWorkbenchPanel"><span>03</span> 整臂静态验收</button>
-            <button class="tab-button" data-tab="officialDynamicTab" data-tab-target="armWorkbenchTab" data-test-subtab="factoryWorkbenchPanel" data-factory-section="identity"><span>04</span> 官方动态测试</button>
-            <button class="tab-button" data-tab="reportTab"><span>05</span> 报告归档</button>
+            <button class="tab-button" data-tab="armWizardTab"><span>03</span> 整臂测试</button>
+            <button class="tab-button" data-tab="reportTab"><span>04</span> 报告归档</button>
         </nav>
 
         <main class="workspace">
@@ -657,7 +656,50 @@
                     </div>
                 </section>
 
-                <section class="tab-panel" id="armWorkbenchTab">
+                <section class="tab-panel" id="armWizardTab">
+                    <div class="panel smw-panel" id="armWizard">
+                        <header class="smw-header">
+                            <div class="smw-title">
+                                <h2>整臂出厂测试 <span class="group-kicker">装配后 · 按官方顺序逐步完成</span></h2>
+                                <p class="muted">从左边选一台机械臂，然后从上往下做。每一步都会先告诉你它做什么、机械臂会不会动。</p>
+                            </div>
+                            <div class="smw-header-side">
+                                <div class="smw-can-status" id="awArmBadge">请先选择机械臂</div>
+                                <button class="btn btn-secondary slim" id="awAdvancedBtn" type="button">高级工具（工程师）</button>
+                            </div>
+                        </header>
+                        <section class="aw-section">
+                            <div class="aw-section-head"><span class="aw-section-no">1</span><h3>新建或选择机械臂</h3></div>
+                            <div class="aw-picker" id="awPicker"></div>
+                        </section>
+                        <section class="aw-section" id="awStepsSection">
+                            <div class="aw-section-head">
+                                <span class="aw-section-no">2</span>
+                                <h3>按顺序完成测试</h3>
+                                <span class="aw-progress" id="awProgress"></span>
+                            </div>
+                            <nav class="aw-phases" id="awPhases"></nav>
+                            <div class="aw-phase-body" id="awPhaseBody"></div>
+                        </section>
+                    </div>
+                    <div class="smw-advanced hidden" id="armAdvancedTools">
+                    <div class="smw-advanced-bar">
+                        <strong>高级工具（工程师使用）</strong>
+                        <span class="muted">整臂静态验收、问题诊断、官方动态测试与出厂放行的完整工程界面；操作员请使用整臂向导。</span>
+                        <button class="btn btn-primary slim" id="awBackBtn" type="button">返回整臂向导</button>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-body">
+                            <div class="panel-heading">
+                                <div>
+                                    <h2>磁盘维护</h2>
+                                    <p class="muted">清理没有任何记录引用的任务目录。被引用的任务是证据，永远不会被动。</p>
+                                </div>
+                                <button class="btn btn-secondary slim" id="mtScanBtn" type="button">检查未关联任务</button>
+                            </div>
+                            <div id="mtResult" class="empty-state">点「检查未关联任务」看看有多少可以清理</div>
+                        </div>
+                    </div>
                     <div class="panel split-panel wide-side">
                         <div class="panel-body">
                             <div class="panel-heading">
@@ -774,6 +816,7 @@
                             <div class="testing-subtabs" id="testingTabs" data-flow-scope="static">
                                 <button class="testing-subtab-button active" data-test-subtab="scanWorkbenchPanel">静态验收</button>
                                 <button class="testing-subtab-button" data-test-subtab="issueWorkbenchPanel">问题诊断</button>
+                                <button class="testing-subtab-button" data-test-subtab="factoryWorkbenchPanel">官方动态测试</button>
                             </div>
                             <div class="testing-subtab-panel active" id="scanWorkbenchPanel" data-flow-scope="static">
                                 <div id="scanSummary" class="summary-grid empty-state">尚未生成扫描摘要</div>
@@ -1153,7 +1196,7 @@
                                                 <li>报告格式可以固定，测量值、状态帧、参数值和 PASS/WARNING 结论不能固定。</li>
                                                 <li>正式报告只读取同一整机 CN、同一左右臂 Profile、已链接的测试证据。</li>
                                                 <li>缺少 active standard 要求的数据时，报告会列出补测项；新版标准不再要求的数据应从报告标准移除。</li>
-                                                <li>当前右臂 J1-J8 TIMEOUT=5000；左臂 J1-J4=1000、J5-J8=5000。报告数值仍必须来自同 CN、同侧实测证据。</li>
+                                                <li>左右臂 J1-J8 的 TIMEOUT 目标统一为 5000。报告数值仍必须来自同 CN、同侧实测证据。</li>
                                                 <li>CAN / ESC / MST ID 在报告中使用 0x05 这类十六进制格式。</li>
                                             </ul>
                                         </div>
@@ -1214,52 +1257,46 @@
                             </div>
                         </div>
                     </div>
+                    </div>
                 </section>
 
+
                 <section class="tab-panel" id="reportTab">
-                    <div class="panel split-panel wide-side">
-                        <div class="panel-body">
-                            <div class="panel-heading">
-                                <div>
-                                    <h2>报告归档</h2>
-                                    <p class="muted">最终归档入口：生成正式出厂 PDF，并保留当前任务原始报告与工件。</p>
-                                </div>
-                                <button class="btn btn-primary slim" id="refreshReportBtn">刷新报告</button>
+                    <div class="panel smw-panel" id="reportArchive">
+                        <header class="smw-header">
+                            <div class="smw-title">
+                                <h2>报告归档 <span class="group-kicker">查阅和生成出厂报告</span></h2>
+                                <p class="muted">选一台机械臂，看它已经出过哪些报告，或为它生成新的。报告只用这台臂自己的测试记录。</p>
                             </div>
-                            <div class="command-band single-column-band">
-                                <div class="command-group">
-                                    <div class="group-kicker">正式出厂报告</div>
-                                    <div class="comparison-card">
-                                        <strong>报告数据规则</strong>
-                                        <ul class="info-list compact">
-                                            <li>严格按整机 CN、左/右臂 Profile 和链接证据取数，不借用其他机械臂数据。</li>
-                                            <li>缺测数据会在报告结果中提示补全；已废止测试项应从报告标准移除后再生成。</li>
-                                            <li>固定模板不等于固定数值，所有测量值必须来自对应测试记录。</li>
-                                            <li>当前右臂 J1-J8 TIMEOUT=5000；左臂保留分级 TIMEOUT。报告仅记录同 CN、同侧回读值。</li>
-                                        </ul>
-                                    </div>
-                                    <div class="command-inline">
-                                        <div>
-                                            <strong>生成正式出厂 PDF</strong>
-                                            <p class="muted">使用当前整机 CN，按最终模板输出整臂测试、单电机数据、官方零位、Demo、原始帧和证据哈希。</p>
-                                        </div>
-                                        <button class="btn btn-warning slim" id="generateFactoryAcceptanceReportArchiveBtn">正式出厂 PDF</button>
-                                    </div>
-                                    <div id="archiveFactoryReportResult" class="artifact-list empty-state">尚未生成正式出厂报告</div>
-                                </div>
+                            <div class="smw-header-side">
+                                <div class="smw-can-status" id="raCount">加载中…</div>
+                                <button class="btn btn-secondary slim" id="refreshReportBtn" type="button">刷新</button>
                             </div>
-                            <div class="section-title-row">
-                                <div>
-                                    <span class="group-kicker">JOB REPORT</span>
-                                    <h3>当前任务原始报告</h3>
-                                </div>
-                            </div>
+                        </header>
+                        <section class="aw-section">
+                            <div class="aw-section-head"><span class="aw-section-no">1</span><h3>选择机械臂</h3></div>
+                            <div id="raArms"></div>
+                        </section>
+                        <section class="aw-section hidden" id="raDetailSection">
+                            <div class="aw-section-head"><span class="aw-section-no">2</span><h3>这台臂的报告</h3></div>
+                            <div id="raDetail"></div>
+                        </section>
+                        <details class="ra-rules">
+                            <summary>报告取数规则（工程师）</summary>
+                            <ul class="info-list compact">
+                                <li>严格按整机 CN、左/右臂 Profile 和链接证据取数，不借用其他机械臂数据。</li>
+                                <li>缺测数据会在报告结果中提示补全；已废止测试项应从报告标准移除后再生成。</li>
+                                <li>固定模板不等于固定数值，所有测量值必须来自对应测试记录。</li>
+                                <li>左右臂 J1-J8 的 TIMEOUT 目标统一为 5000。报告仅记录同 CN、同侧回读值。</li>
+                                <li>报告会在「测试方法与依据」栏写明它用的工作站版本、官方工具版本和夹爪控制模式。</li>
+                            </ul>
+                        </details>
+                        <section class="aw-section">
+                            <div class="aw-section-head"><span class="aw-section-no">3</span><h3>当前任务的原始报告（工程师）</h3></div>
+                            <p class="muted aw-hint">上面是整机的正式出厂报告；这里是单次测试任务留下的原始记录，排查问题时才需要。</p>
                             <div id="reportSummary" class="summary-grid empty-state">尚无报告</div>
-                        </div>
-                        <div class="panel-side">
-                            <h3>工件</h3>
-                            <div id="artifactList" class="artifact-list empty-state">任务完成后显示</div>
-                        </div>
+                            <div id="artifactList" class="artifact-list empty-state">任务完成后显示产出文件</div>
+                        </section>
                     </div>
                 </section>
             </section>
@@ -1320,6 +1357,39 @@
         </div>
     </div>
 
+    <div class="modal hidden" id="awDeleteModal">
+        <div class="modal-card">
+            <div class="smw-problem-kicker">删除机械臂档案</div>
+            <h3 id="awDeleteTitle"></h3>
+            <p id="awDeleteBody" class="muted"></p>
+            <div class="aw-delete-options">
+                <button class="btn btn-secondary" id="awDeleteArchiveBtn" type="button">
+                    仅删除，保留记录
+                    <small>从列表里移走，档案存到 deleted_arms/，以后还能查到</small>
+                </button>
+                <button class="btn btn-warning" id="awDeletePurgeBtn" type="button">
+                    彻底删除
+                    <small>档案文件一并删掉，不留痕迹，无法恢复</small>
+                </button>
+            </div>
+            <div class="button-row">
+                <button class="btn btn-secondary" id="awDeleteCancelBtn" type="button">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal hidden" id="problemModal">
+        <div class="modal-card problem-modal-card">
+            <div class="smw-problem-kicker">需要先处理</div>
+            <h3 id="problemModalTitle"></h3>
+            <div id="problemModalBody" class="problem-modal-body"></div>
+            <div class="button-row">
+                <button class="btn btn-secondary" id="problemModalCloseBtn" type="button">关闭</button>
+                <button class="btn btn-primary" id="problemModalRetryBtn" type="button">我已处理，重试</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal hidden" id="smwInspectModal">
         <div class="modal-card smw-inspect-card">
             <header class="smw-inspect-head">
@@ -1336,6 +1406,6 @@
         </div>
     </div>
 
-    <script type="module" src="{{ url_for('static', filename='js/main.js') }}?v=20260918-rail-fix"></script>
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}?v=20260921-words"></script>
 </body>
 </html>

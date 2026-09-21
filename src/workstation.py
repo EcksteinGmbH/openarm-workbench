@@ -17,7 +17,7 @@ import subprocess
 import threading
 import time
 import uuid
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import yaml
 
@@ -36,6 +36,7 @@ from src.formal_factory_report import render_formal_factory_report
 ROOT_DIR = Path(__file__).resolve().parent.parent
 BUILTIN_PROFILE_DIR = ROOT_DIR / "profiles" / "openarm"
 OVERRIDE_PROFILE_DIR = ROOT_DIR / "config" / "profiles"
+PRODUCT_REGISTRY_DIR = ROOT_DIR / "profiles" / "products"
 ARTIFACTS_DIR = ROOT_DIR / "artifacts" / "jobs"
 FACTORY_DIR = ROOT_DIR / "artifacts" / "factory"
 FACTORY_MOTORS_DIR = FACTORY_DIR / "motors"
@@ -44,6 +45,9 @@ FACTORY_BUNDLES_DIR = FACTORY_DIR / "bundles"
 FACTORY_ARM_RECORDS_DIR = FACTORY_DIR / "arm_records"
 FACTORY_REPORTS_DIR = FACTORY_DIR / "reports"
 FACTORY_EVIDENCE_DIR = FACTORY_DIR / "evidence"
+# Formal acceptance reports live beside the factory dir, not inside it. Declared as
+# a constant so the test redirect and its guard can both see it.
+FORMAL_REPORTS_DIR = ROOT_DIR / "artifacts" / "reports"
 VENDOR_MAINTENANCE_DIR = FACTORY_DIR / "vendor_maintenance"
 VENDOR_MAINTENANCE_RECORDS_DIR = VENDOR_MAINTENANCE_DIR / "records"
 VENDOR_MAINTENANCE_LOGS_DIR = VENDOR_MAINTENANCE_DIR / "logs"
@@ -64,9 +68,41 @@ OPENARM_ALLOWED_COMMAND_PREFIXES = ("openarm-",)
 OFFICIAL_DEMO_DEFAULT_ENABLE_HOLD_MS = 1500
 OFFICIAL_DEMO_DEFAULT_PHASE_HOLD_S = 3.0
 OFFICIAL_DEMO_MIN_GRIPPER_TRAVEL_RAD = 0.8
+
+# Operational TIMEOUT for every assembled-arm joint, written during whole-arm
+# acceptance. Kept here so the generic profile, the derived arm profiles and
+# commissioning_policy cannot drift apart. J1-J4 used to sit at a superseded 1000
+# in the generic profile only, which would have failed a scan run with the default
+# profile; no production job ever used it (all used the derived arm profiles).
+# CAN timing the official CLI applies, from openarm_can 1.4.0
+# setup/cli/cli.hpp CanConfigureOptions. Kept identical so an interface prepared here
+# and one prepared with the official tool behave the same on the same bus.
+OFFICIAL_CAN_SAMPLE_POINT = "0.75"
+OFFICIAL_CAN_DSAMPLE_POINT = "0.75"
+OFFICIAL_CAN_DSJW = "2"
+OFFICIAL_CAN_RESTART_MS = 0
+
+# Damiao register codes for `can_br`, from openarm_can 1.4.0
+# setup/cli/commands/change_motor_baudrate_commands.cpp BAUDRATE_MAP.
+OFFICIAL_BAUDRATE_CODES = {
+    125000: 0, 200000: 1, 250000: 2, 500000: 3, 1000000: 4, 2000000: 5,
+    2500000: 6, 3200000: 7, 4000000: 8, 5000000: 9, 8000000: 10, 10000000: 11,
+}
+
+# The official package the dynamic steps actually run through. 1.4.0 is vendored
+# alongside but not yet in use; changing this is a decision that has to be proven on
+# hardware, and the report has to state which one produced it.
+OFFICIAL_TOOL_VERSION = "openarm_can 1.2.2"
+
+WHOLE_ARM_TARGET_TIMEOUT = 5000
+
+# Arm records written before the product registry existed carry no product_version.
+# Every such record on disk is a 1.0 Follower, so they are read as 1.0 rather than
+# rejected or flagged.
+DEFAULT_PRODUCT_VERSION = "openarm_1_0"
 OFFICIAL_COMMAND_STDOUT_LIMIT = 60000
 OFFICIAL_COMMAND_STDERR_LIMIT = 12000
-OPENARM_SUPPORTED_BAUDRATES = [125000, 200000, 250000, 500000, 1000000, 2000000, 2500000, 3200000, 4000000, 5000000]
+OPENARM_SUPPORTED_BAUDRATES = [125000, 200000, 250000, 500000, 1000000, 2000000, 2500000, 3200000, 4000000, 5000000, 8000000, 10000000]
 ZERO_COMMAND_CONFIRMATIONS = {
     "workspace_clear": "工作空间已清空",
     "estop_ready": "急停/断电手段可用",
@@ -113,7 +149,10 @@ PUBLIC_JOB_TYPE_ALIASES = {
 SINGLE_SCAN_JOB_TYPES = {"single_id_config", "single_param_config", "single_comm_check"}
 
 
-DEFAULT_SCAN_IDS = [*range(0x01, 0x09), *range(0x11, 0x19)]
+# 0x01-0x20 spans every ID OpenARM assigns: right arm ESC 0x01-0x08 / MST 0x11-0x18
+# and left arm ESC 0x09-0x10 / MST 0x19-0x20. Anything narrower makes a correctly
+# configured motor look absent, which is the one answer a scan must never give.
+DEFAULT_SCAN_IDS = [*range(0x01, 0x21)]
 DEFAULT_ARM_SCAN_IDS = [*range(0x01, 0x21)]
 FAST_SCAN_RIDS = [
     DM_variable.ESC_ID,
@@ -172,6 +211,20 @@ SINGLE_WIZARD_ARM_PROFILES = {
 }
 SINGLE_WIZARD_PRODUCT_LINES = {"openarm_2_0": "OpenArm 2.0", "openarm_1_0": "OpenArm 1.0"}
 # Operator-facing troubleshooting catalog for the beginner single-motor wizard.
+# Problems that stop the operator dead - no CAN port, the port will not start, or it
+# cannot be opened. The wizards raise these in a blocking dialog instead of only the
+# in-page panel, because nothing further can be tried until someone fixes the port.
+BLOCKING_PROBLEM_CODES = {
+    # Needs a hardware verification or a decision that cannot happen on this page.
+    "arm_step_locked",
+    "can_interface_missing",
+    "can_interface_down",
+    "can_bus_error",
+    "adapter_missing",
+    "interface_prepare_failed",
+    "connect_failed",
+}
+
 SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
     "can_interface_missing": {
         "title": "没有找到 USB-CAN 适配器",
@@ -217,6 +270,157 @@ SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
             "确认没有其他程序（DMTool、candump 脚本）正在占用这个 CAN 口。",
             "请工程师在终端执行：sudo ip link set can0 down && sudo ip link set can0 type can bitrate 1000000 && sudo ip link set can0 up",
             "执行完后回到这里再点一次「配置并启动」。",
+        ],
+    },
+    "arm_cn_invalid": {
+        "title": "整机编号不符合规则",
+        "message": "整机编号要按出厂规则命名，否则报告归档会对不上。",
+        "solutions": [
+            "格式是 OA + F/L + 6 位日期 + 2 位序号，例如 OAF26092001。",
+            "F 表示 Follower，L 表示 Leader。",
+            "直接用页面给出的建议编号最稳妥，它已经避开了已用过的号。",
+        ],
+    },
+    "arm_cn_taken": {
+        "title": "这个整机编号已经用过了",
+        "message": "工作站里已经有一台这个编号的机械臂。",
+        "solutions": [
+            "如果你想继续测那一台，从下面的列表里选它，不要新建。",
+            "如果这是另一台新臂，把序号加一（例如 ...01 改成 ...02）。",
+        ],
+    },
+    "arm_has_evidence": {
+        "title": "这台机械臂不能直接删除",
+        "message": "它上面已经有测试记录了，直接删掉就等于销毁证据。",
+        "solutions": [
+            "只挂错了电机记录：到「关节电机」页点那个关节的「取消挂载」，取消后就能删了。",
+            "确实是建错了、必须清掉：用「强制删除」，档案会完整保留到 deleted_arms/，不会真丢。",
+            "如果只是不想继续测这台，放着不管即可，它不影响别的机械臂。",
+        ],
+    },
+    "motor_record_not_found": {
+        "title": "找不到这条电机记录",
+        "message": "单电机记录里没有这个编号。",
+        "solutions": ["点「刷新」重新读取列表。", "确认编号没有复制错。"],
+    },
+    "motor_record_in_use": {
+        "title": "这条记录正在被机械臂使用",
+        "message": "它已经挂在某台机械臂的关节上，是那台臂报告里该关节的电机凭证。",
+        "solutions": [
+            "到「03 整臂测试 → 关节电机」，在对应关节上点「取消挂载」。",
+            "取消挂载后再回来撤回这条记录。",
+            "如果那台臂已经出过报告，请先确认报告是否需要一并撤回。",
+        ],
+    },
+    "report_not_found": {
+        "title": "找不到这份报告",
+        "message": "这台机械臂的档案里没有这个报告编号。",
+        "solutions": [
+            "点「刷新」重新读取，可能是列表过期了。",
+            "确认选的是同一台机械臂。",
+        ],
+    },
+    "arm_force_delete_keeps_record": {
+        "title": "有记录的档案只能保留归档",
+        "message": "强制删除是给「建错了不该存在」的档案用的，不是用来抹掉测试结果的。",
+        "solutions": [
+            "改用「仅删除，保留记录」，档案会完整移到 deleted_arms/ 备查。",
+            "想彻底不留痕迹，请先取消挂载、清空记录，让它回到空档案状态。",
+        ],
+    },
+    "arm_not_found": {
+        "title": "找不到这台机械臂的档案",
+        "message": "输入的整机编号在工作站里没有对应记录。",
+        "solutions": [
+            "确认整机编号输入正确（右臂 Follower 形如 OAF26092001）。",
+            "如果这是一台新臂，请先在「整机建档」这一步建立档案。",
+            "在「已建档机械臂」列表里查看已有编号，直接选择而不是手输。",
+        ],
+    },
+    "arm_step_locked": {
+        "title": "这一步还不能执行",
+        "message": "这台臂的产品版本里，这一步所依赖的参数还没有经过真机验证。",
+        "solutions": [
+            "先完成该项的真机验证，再回到这一步。",
+            "页面上会写明具体缺什么；把它交给工程师处理。",
+            "在验证完成前，工作站不会让这一步运行，也不会为这台臂出正式报告。",
+        ],
+    },
+    "arm_step_out_of_order": {
+        "title": "前一步还没完成",
+        "message": "出厂流程有固定顺序，跳过前面的步骤会让后面的结果不可信。",
+        "solutions": [
+            "回到高亮显示的那一步，先把它做完。",
+            "如果前一步做过但没通过，请先处理它的问题再重试。",
+        ],
+    },
+    "arm_motor_record_mismatch": {
+        "title": "电机记录和这台臂对不上",
+        "message": "要挂载的单电机记录，和这台臂的产品版本或关节不一致。",
+        "solutions": [
+            "确认选的是这台臂的记录：产品版本（1.0 / 2.0）和关节号都要对上。",
+            "一个关节只能挂一条记录；要换请先移除原来那条。",
+            "找不到对应记录时，说明这颗电机还没做单电机配置，请先去「单电机测试」完成。",
+        ],
+    },
+    # The rules below are the official `openarm-can-cli diagnose --explain` heuristics,
+    # from openarm_can 1.4.0 setup/cli/commands/diagnose_commands.cpp. They tell apart
+    # faults that otherwise look identical from the outside, which is exactly what an
+    # operator cannot do unaided.
+    "zero_multiple_arms_on_bus": {
+        "title": "零位校准时总线上不能有第二条臂",
+        "message": "检测到总线上同时挂着不止一条机械臂。零位校准必须一条一条做。",
+        "solutions": [
+            "断开另一条臂的 CAN 连接（或断电），只保留正在校准的这一条。",
+            "校准完这条再接另一条，分两次做。",
+            "官方也确认零位校准要对每条臂单独执行（enactic/openarm_can issue #101）。",
+        ],
+    },
+    "gripper_control_mode_not_applied": {
+        "title": "夹爪没有响应位置指令",
+        "message": "夹爪控制模式是只写 RAM、不回读的。这一次写丢了，电机仍停在 Flash 里的旧模式，后面发的指令会被静默丢弃——看起来像没接好，其实是模式没切过去。",
+        "solutions": [
+            "在「02 单电机测试 → 查看电机参数」里读 CTRL_MODE（RID 10），确认它是期望的模式。",
+            "重新初始化夹爪再试一次；这个写入没有确认帧，重发是安全的。",
+            "官方在 gripper_posforce.cpp 的注释里专门提示过这一点。",
+        ],
+    },
+    "bus_reply_on_unlistened_id": {
+        "title": "有电机在没人监听的 ID 上应答",
+        "message": "总线上收到了回帧，但 ID 不是工作站在等的那些。电机是活的，只是身份配错了——这是配置问题，不是接线问题。",
+        "solutions": [
+            "MST_ID（RID 7）出厂默认是 0，没配过的电机会在 0x00 上回帧。",
+            "到「02 单电机测试」查看电机参数，核对 ESC_ID（RID 8）和 MST_ID（RID 7）。",
+            "工程师可用官方命令复核：openarm-can-cli -i can0 show_param --arm",
+        ],
+    },
+    "bus_daisy_chain_break": {
+        "title": "某一段之后的关节全部不应答",
+        "message": "前面的关节都回了，从某一个开始全部静默。关节是菊花链串联的，一处断开会让它后面全部失联。",
+        "solutions": [
+            "页面会指出最后一个有应答的关节和第一个没应答的关节。",
+            "重点检查这两个关节之间的那根线和两端接头，不要全臂乱查。",
+            "缺失的电机不会产生任何总线错误——CAN 只要有一个节点听到就会应答，所以只能靠这个缺口看出来。",
+        ],
+    },
+    "bus_silent_scattered": {
+        "title": "不连续的几个关节不应答",
+        "message": "静默的关节不挨在一起，所以不像是菊花链断在一处。",
+        "solutions": [
+            "逐个检查这几个关节自己的接头和电机供电。",
+            "更像是单个接插件或单颗电机的问题，而不是一处断链。",
+        ],
+    },
+    "bus_nothing_acknowledges": {
+        "title": "发得出去但一帧都回不来",
+        "message": "控制器报 ACK 错误或进入 bus-off。以下几种原因从这里看完全一样，工作站不会假装能分辨。",
+        "solutions": [
+            "终端电阻缺失，或只装了一端。",
+            "波特率或数据段波特率和电机对不上。",
+            "总线没供电，或根本没接上。",
+            "区分办法一：断电后量 CAN_H 到 CAN_L，60Ω 正确，120Ω 说明只有一端，40Ω 说明装了三个。",
+            "区分办法二：把 dbitrate 调低重试——低速能通说明线路勉强；只在某一个速率能通说明原来波特率就是错的。",
+            "区分办法三：ip -details link show can0 看实际生效的参数。",
         ],
     },
     "bus_no_motor": {
@@ -751,27 +955,68 @@ def _ensure_command_option(command: List[str], *option_and_value: str) -> List[s
     return [*command, *option_and_value]
 
 
-def _official_demo_gripper_open_target(arm_cn: Optional[str]) -> float:
-    value = str(arm_cn or "").strip().upper()
-    if value.startswith("OAF"):
-        return -1.0472
-    if value.startswith("OAL"):
-        return 1.0472
-    raise ValueError("valid arm_cn is required for official demo gripper direction: use OAF... for Follower or OAL... for Leader")
+def _command_arm_side(command: List[str]) -> Optional[str]:
+    """The arm side the demo command itself declares, e.g. `--arm_side left_arm`."""
+    for option in ("--arm_side", "--arm-side"):
+        if option in command:
+            index = command.index(option)
+            if index + 1 < len(command):
+                return str(command[index + 1])
+    return None
 
 
-def _normalize_official_demo_command(command: List[str], arm_cn: Optional[str] = None) -> List[str]:
+def _bus_mode_text(bus: Dict[str, Any]) -> str:
+    """e.g. "CAN 2.0 / 1 Mbps" or "CAN FD / 1 Mbps arb + 5 Mbps data"."""
+    bitrate = int(bus.get("bitrate") or 0)
+    if str(bus.get("mode")) == "canfd":
+        return f"CAN FD / {bitrate / 1e6:g} Mbps arb + {int(bus.get('dbitrate') or 0) / 1e6:g} Mbps data"
+    return f"CAN 2.0 / {bitrate / 1e6:g} Mbps"
+
+
+def _official_demo_gripper_targets(gripper: Dict[str, Any], arm_side: Optional[str]) -> tuple:
+    """(open, close) targets for one arm, taken from the product registry.
+
+    1.0 declares one open target that applies to both arm sides and to Follower and
+    Leader alike, matching the official limit table [-60 deg, 0 deg]. 2.0 keys it on
+    the arm side instead (right 0 -> -90 deg, left 0 -> +90 deg) - a different scheme,
+    not a different number - so the registry keeps the two as separate fields and this
+    reads whichever one the product actually declares.
+    """
+    close_target = float(gripper.get("close_target_rad") or 0.0)
+
+    # A per-side table always wins. Falling back to a single value on a product that
+    # mirrors would open one arm into its mechanical stop, so an unknown side is an
+    # error rather than a default.
+    by_arm_side = gripper.get("open_target_rad_by_arm_side") or {}
+    if by_arm_side:
+        if arm_side in by_arm_side:
+            return float(by_arm_side[arm_side]), close_target
+        raise ValueError(
+            "this product keys the gripper open target on the arm side; "
+            f"the demo command must state --arm_side (one of {sorted(by_arm_side)})"
+        )
+
+    open_target = gripper.get("open_target_rad")
+    if open_target is not None:
+        return float(open_target), close_target
+    raise ValueError("this product states no gripper open target")
+
+
+def _normalize_official_demo_command(
+    command: List[str],
+    arm_cn: Optional[str] = None,
+    gripper: Optional[Dict[str, Any]] = None,
+) -> List[str]:
     if not _is_official_demo_command(command):
         return command
+    if gripper is None:
+        raise ValueError("gripper configuration is required to build the official demo command")
     normalized = list(command)
+    open_target, close_target = _official_demo_gripper_targets(gripper, _command_arm_side(normalized))
     normalized = _ensure_command_option(normalized, "--enable-hold-ms", str(OFFICIAL_DEMO_DEFAULT_ENABLE_HOLD_MS))
     normalized = _ensure_command_option(normalized, "--phase-hold-s", str(OFFICIAL_DEMO_DEFAULT_PHASE_HOLD_S))
-    normalized = _ensure_command_option(
-        normalized,
-        "--gripper-open-target",
-        f"{_official_demo_gripper_open_target(arm_cn):.4f}",
-    )
-    normalized = _ensure_command_option(normalized, "--gripper-close-target", "0.0")
+    normalized = _ensure_command_option(normalized, "--gripper-open-target", f"{open_target:.4f}")
+    normalized = _ensure_command_option(normalized, "--gripper-close-target", f"{close_target:.1f}")
     return normalized
 
 
@@ -787,9 +1032,14 @@ def _parse_official_demo_stdout(stdout: str) -> Dict[str, Any]:
     close_final = float(final_grip[-1].group(1)) if final_grip else None
     open_observed = float(close_start.group(2)) if close_start else None
     travel = abs(close_final - open_observed) if close_final is not None and open_observed is not None else None
+    aborts = re.findall(r"GRIPPER_ABORT: ([^\n]+)", text)
     blocking = []
     warnings = []
     expects_id16_special = "arm_side: left_arm" in text or "0x10" in text
+    if aborts:
+        # The demo stopped a gripper phase because the gripper was not following. Most
+        # likely the open direction is wrong for this arm, or something blocks it.
+        blocking.append("gripper_progress_aborted")
     if "COMM_LOST" in text:
         blocking.append("comm_lost_reported")
     if "Demo completed successfully; motors disabled." not in text:
@@ -815,6 +1065,7 @@ def _parse_official_demo_stdout(stdout: str) -> Dict[str, Any]:
         "close_final": close_final,
         "gripper_travel_rad": travel,
         "gripper_travel_threshold_rad": OFFICIAL_DEMO_MIN_GRIPPER_TRAVEL_RAD,
+        "gripper_abort_messages": aborts,
         "blocking_items": blocking,
         "warning_items": warnings,
         "passed": not blocking,
@@ -1134,6 +1385,10 @@ class TransportCapabilities:
     communication_check: bool
 
 
+class WizardConnectError(RuntimeError):
+    """The workstation could not open a device session on the requested CAN port."""
+
+
 @dataclass
 class DeviceSession:
     session_id: str
@@ -1182,7 +1437,8 @@ class ProfileManager:
                     "target_esc_id": index,
                     "target_mst_id": 0x10 + index,
                     "target_ctrl_mode": "MIT",
-                    "target_timeout": 5000 if index >= 5 else 1000,
+                    # commissioning_policy.whole_arm_timeout_policy: J1-J8 = 5000 on both arms.
+                    "target_timeout": WHOLE_ARM_TARGET_TIMEOUT,
                     "target_can_br": 1000000,
                     "requires_zero": True,
                     "test_profile": "safe_mit_ping",
@@ -1295,6 +1551,173 @@ class ProfileManager:
         raise KeyError(f"joint {joint_name} not found in profile {profile_id}")
 
 
+class ProductRegistry:
+    """The product versions the workstation can build, loaded from profiles/products.
+
+    One place answers "what is a 1.0 arm" and "what is a 2.0 arm": IDs, motor types,
+    CAN modes, gripper direction and travel, zero method, cameras, firmware baseline.
+    Anything not yet confirmed on hardware carries `hardware_verified: false` and a
+    `locked_reason`; callers must consult `is_locked()` before acting on it.
+
+    This release only loads, validates and exposes the registry. The scan, acceptance
+    and report paths still read their own tables, so 1.0 judgement is unchanged.
+    """
+
+    JOINT_NAMES = [f"J{index}" for index in range(1, 9)]
+
+    def __init__(self):
+        self._products = self._load()
+
+    def _load(self) -> Dict[str, Dict[str, Any]]:
+        products: Dict[str, Dict[str, Any]] = {}
+        if not PRODUCT_REGISTRY_DIR.exists():
+            return products
+        for path in sorted(PRODUCT_REGISTRY_DIR.glob("*.yaml")):
+            data = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                raise ValueError(f"product registry {path.name} is not a mapping")
+            product_version = data.get("product_version")
+            if not product_version:
+                raise ValueError(f"product registry {path.name} has no product_version")
+            if product_version in products:
+                raise ValueError(f"duplicate product_version {product_version} in {path.name}")
+            self._validate(path.name, data)
+            products[str(product_version)] = data
+        return products
+
+    def _validate(self, filename: str, data: Dict[str, Any]):
+        """Fail loudly at startup rather than mid-run on the factory floor."""
+        for key in ("label", "profile_revision", "arms", "motors", "can", "parameters"):
+            if key not in data:
+                raise ValueError(f"product registry {filename} is missing '{key}'")
+
+        motors = data["motors"]
+        if sorted(motors) != sorted(self.JOINT_NAMES):
+            raise ValueError(f"product registry {filename} must list exactly J1-J8, got {sorted(motors)}")
+
+        for arm_side, arm in data["arms"].items():
+            for key in ("profile_id", "joint_prefix", "expected_bus", "esc_ids", "mst_ids"):
+                if key not in arm:
+                    raise ValueError(f"product registry {filename} arm {arm_side} is missing '{key}'")
+            for key in ("esc_ids", "mst_ids"):
+                ids = arm[key]
+                if len(ids) != 8:
+                    raise ValueError(f"product registry {filename} arm {arm_side} {key} must have 8 entries")
+                if len(set(ids)) != 8:
+                    raise ValueError(f"product registry {filename} arm {arm_side} {key} has duplicates")
+                if not all(0x01 <= int(value) <= 0x20 for value in ids):
+                    raise ValueError(f"product registry {filename} arm {arm_side} {key} outside 0x01-0x20")
+
+        sides = list(data["arms"])
+        if len(sides) == 2:
+            left, right = (data["arms"][side] for side in sides)
+            overlap = set(left["esc_ids"]) & set(right["esc_ids"])
+            if overlap:
+                raise ValueError(f"product registry {filename} arms share ESC IDs {sorted(overlap)}")
+
+        for stage in ("commissioning", "operation"):
+            if stage not in data["can"]:
+                raise ValueError(f"product registry {filename} can.{stage} is missing")
+            mode = data["can"][stage].get("mode")
+            if mode not in {"can20", "canfd"}:
+                raise ValueError(f"product registry {filename} can.{stage}.mode must be can20 or canfd")
+            if mode == "canfd" and not data["can"][stage].get("dbitrate"):
+                raise ValueError(f"product registry {filename} can.{stage} is canfd but has no dbitrate")
+
+        for section in self._lockable_sections(data):
+            if section.get("hardware_verified") is False and not section.get("locked_reason"):
+                raise ValueError(f"product registry {filename} has an unverified section with no locked_reason")
+
+    def _lockable_sections(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        sections = [data["can"]["commissioning"], data["can"]["operation"]]
+        for key in ("gripper", "zero"):
+            if isinstance(data.get(key), dict):
+                sections.append(data[key])
+        sections.extend(item for item in (data.get("cameras") or []) if isinstance(item, dict))
+        return sections
+
+    def cross_check(self, profile_manager: "ProfileManager") -> List[str]:
+        """Report where a product registry disagrees with the profile it points at.
+
+        The registry is new and the profiles are what production actually ran on. If
+        the two ever disagree about an ID, a motor type or the TIMEOUT target, the
+        registry is wrong - it must describe the system, not redefine it.
+        """
+        problems: List[str] = []
+        for product_version, product in sorted(self._products.items()):
+            for arm_side, arm in product["arms"].items():
+                where = f"{product_version}/{arm_side}"
+                try:
+                    profile = profile_manager.get_profile(arm["profile_id"])
+                except KeyError:
+                    problems.append(f"{where}: profile {arm['profile_id']} not found")
+                    continue
+                joints = profile["joints"]
+                if len(joints) != 8:
+                    problems.append(f"{where}: profile has {len(joints)} joints, expected 8")
+                    continue
+                for index, joint in enumerate(joints):
+                    joint_name = self.JOINT_NAMES[index]
+                    expected_esc = int(arm["esc_ids"][index])
+                    expected_mst = int(arm["mst_ids"][index])
+                    if int(joint["target_esc_id"]) != expected_esc:
+                        problems.append(
+                            f"{where}/{joint_name}: registry ESC 0x{expected_esc:02X} != profile 0x{int(joint['target_esc_id']):02X}"
+                        )
+                    if int(joint["target_mst_id"]) != expected_mst:
+                        problems.append(
+                            f"{where}/{joint_name}: registry MST 0x{expected_mst:02X} != profile 0x{int(joint['target_mst_id']):02X}"
+                        )
+                    if str(joint["motor_type"]) != str(product["motors"][joint_name]):
+                        problems.append(
+                            f"{where}/{joint_name}: registry motor {product['motors'][joint_name]} != profile {joint['motor_type']}"
+                        )
+                    if int(joint["target_timeout"]) != int(product["parameters"]["timeout"]):
+                        problems.append(
+                            f"{where}/{joint_name}: registry TIMEOUT {product['parameters']['timeout']} != profile {joint['target_timeout']}"
+                        )
+                    if str(joint["expected_bus"]) != str(arm["expected_bus"]):
+                        problems.append(
+                            f"{where}/{joint_name}: registry bus {arm['expected_bus']} != profile {joint['expected_bus']}"
+                        )
+        return problems
+
+    def list_products(self) -> List[Dict[str, Any]]:
+        return [self.get(product_version) for product_version in sorted(self._products)]
+
+    def get(self, product_version: str) -> Dict[str, Any]:
+        if product_version not in self._products:
+            raise KeyError(f"product_version {product_version} not found")
+        return self._products[product_version]
+
+    def known_versions(self) -> List[str]:
+        return sorted(self._products)
+
+    def is_locked(self, product_version: str, section: str) -> bool:
+        """True when this part of the product has not been confirmed on hardware."""
+        product = self.get(product_version)
+        node = product["can"].get(section) if section in ("commissioning", "operation") else product.get(section)
+        if not isinstance(node, dict):
+            return False
+        return node.get("hardware_verified") is False
+
+    def lock_reasons(self, product_version: str) -> Dict[str, str]:
+        product = self.get(product_version)
+        reasons: Dict[str, str] = {}
+        for name, node in (
+            ("can.commissioning", product["can"]["commissioning"]),
+            ("can.operation", product["can"]["operation"]),
+            ("gripper", product.get("gripper")),
+            ("zero", product.get("zero")),
+        ):
+            if isinstance(node, dict) and node.get("hardware_verified") is False:
+                reasons[name] = str(node.get("locked_reason") or "")
+        for camera in product.get("cameras") or []:
+            if isinstance(camera, dict) and camera.get("hardware_verified") is False:
+                reasons[f"camera.{camera.get('id')}"] = str(camera.get("locked_reason") or "")
+        return reasons
+
+
 def _canonical_job_type(job_type: str) -> str:
     return LEGACY_JOB_TYPE_ALIASES.get(job_type, job_type)
 
@@ -1307,6 +1730,12 @@ class WorkstationService:
     def __init__(self, socketio=None):
         self.socketio = socketio
         self.profile_manager = ProfileManager()
+        self.product_registry = ProductRegistry()
+        # The registry must describe the profiles, never contradict them. Catching a
+        # disagreement here beats discovering it against a real arm.
+        registry_problems = self.product_registry.cross_check(self.profile_manager)
+        if registry_problems:
+            raise ValueError("product registry disagrees with profiles: " + "; ".join(registry_problems))
         self.sessions: Dict[str, DeviceSession] = {}
         self.jobs: Dict[str, JobRecord] = {}
         self._lock = threading.RLock()
@@ -1319,6 +1748,18 @@ class WorkstationService:
         return {
             "workstation_version": WORKSTATION_VERSION,
             "profiles": self.profile_manager.list_profiles(),
+            "product_versions": [
+                {
+                    "product_version": product["product_version"],
+                    "label": product["label"],
+                    "profile_revision": product["profile_revision"],
+                    "hardware_verified": bool(product.get("hardware_verified")),
+                    "operation_can_mode": product["can"]["operation"]["mode"],
+                    "locked_sections": self.product_registry.lock_reasons(product["product_version"]),
+                }
+                for product in self.product_registry.list_products()
+            ],
+            "default_product_version": DEFAULT_PRODUCT_VERSION,
             "transports": [
                 {
                     "id": "serial_bridge",
@@ -1364,10 +1805,10 @@ class WorkstationService:
                 "arm_zero_save_stage": "assembled_arm_official_dynamic_zero_calibration",
                 "arm_timeout_standardization_stage": "whole_arm_factory_acceptance_before_dynamic_zero_and_demo",
                 "arm_timeout_standardization_mode": "profile_per_joint",
-                "whole_arm_timeout_policy": {
-                    "right_arm": {"J1-J8": 5000},
-                    "left_arm": {"J1-J8": 5000},
-                },
+                # Derived from the product registry rather than restated here: the
+                # registry already has to agree with the profiles (cross_check), so
+                # reading it is the only way this table cannot drift from them.
+                "whole_arm_timeout_policy": self._whole_arm_timeout_policy(),
                 "motor_traceability_identity": "arm_cn_plus_joint_label",
                 "zero_controller_sn_hw_behavior": "accepted_unassigned_optional_metadata",
             },
@@ -1389,6 +1830,48 @@ class WorkstationService:
                 "automatic_encoder_calibration": False,
             },
         }
+
+    CAN_MODE_LABELS = {"can20": "CAN 2.0", "canfd": "CAN FD"}
+
+    def _can_mode_label(self, product_version: Optional[str], stage: str) -> str:
+        """Human-readable bus mode for one product stage, e.g. "CAN 2.0".
+
+        Falls back to the default product for records that predate the registry, which
+        is what every such record on disk actually used.
+        """
+        try:
+            product = self.product_registry.get(str(product_version or DEFAULT_PRODUCT_VERSION))
+        except KeyError:
+            product = self.product_registry.get(DEFAULT_PRODUCT_VERSION)
+        return self.CAN_MODE_LABELS.get(str(product["can"][stage]["mode"]), str(product["can"][stage]["mode"]))
+
+    def _arm_product_version(self, arm_cn: Optional[str]) -> str:
+        """The product an arm is recorded as, defaulting for pre-registry records."""
+        try:
+            _path, arm = self._load_arm_record(str(arm_cn))
+        except (KeyError, ValueError, TypeError):
+            return DEFAULT_PRODUCT_VERSION
+        version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+        return version if version in self.product_registry.known_versions() else DEFAULT_PRODUCT_VERSION
+
+    def _whole_arm_timeout_policy(self) -> Dict[str, Dict[str, int]]:
+        """The operational TIMEOUT each arm side targets, per product version.
+
+        Both product versions currently target the same value on every joint, so the
+        shape stays `{arm_side: {"J1-J8": value}}` as before. A version that ever
+        targets something different will show up here without any other code changing.
+        """
+        policy: Dict[str, Dict[str, int]] = {}
+        for product in self.product_registry.list_products():
+            timeout = int(product["parameters"]["timeout"])
+            for arm_side in product["arms"]:
+                policy.setdefault(arm_side, {})[f"J1-J8@{product['product_version']}"] = timeout
+        # Collapse to the historical shape while every product agrees on one value.
+        collapsed: Dict[str, Dict[str, int]] = {}
+        for arm_side, entries in policy.items():
+            values = set(entries.values())
+            collapsed[arm_side] = {"J1-J8": values.pop()} if len(values) == 1 else entries
+        return collapsed
 
     def vendor_tool_status(self) -> Dict[str, Any]:
         path = DMTOOL_APPIMAGE_PATH
@@ -1529,6 +2012,10 @@ class WorkstationService:
                 dbitrate = None
                 fd_enabled = False
 
+            # Both tools take the link down; a socket opened on the old link would
+            # survive as a deaf handle, so close ours first.
+            self._invalidate_socketcan_sessions(name)
+
             if tool == "openarm_helper":
                 helper = shutil.which("openarm-can-configure-socketcan")
                 if helper is None:
@@ -1541,10 +2028,7 @@ class WorkstationService:
                 self._run_system_command(cmd)
             elif tool == "ip_link":
                 self._run_system_command(["ip", "link", "set", name, "down"])
-                cmd = ["ip", "link", "set", name, "type", "can", "bitrate", str(bitrate)]
-                if mode == "canfd":
-                    cmd.extend(["dbitrate", str(dbitrate), "fd", "on"])
-                self._run_system_command(cmd)
+                self._run_system_command(self._can_configure_command(name, mode, bitrate, dbitrate))
             else:
                 raise ValueError("unsupported tool")
 
@@ -1557,6 +2041,37 @@ class WorkstationService:
                 "recommended_channel": payload["recommended_channel"],
             }
 
+    def _can_configure_command(
+        self, name: str, mode: str, bitrate: int, dbitrate: Optional[int]
+    ) -> List[str]:
+        """The `ip link` arguments the official CLI applies, for the same interface.
+
+        Ported from `openarm-can-cli can_configure`
+        (external/openarm_can_1.4.0/setup/cli/commands/can_configure_commands.cpp), so a
+        port this workstation prepared and one the customer prepares with the official
+        tool carry the same timing. The sample point and DSJW are not cosmetic: at
+        5 Mbps data rate, a controller sampling at a different point can fail to agree
+        with the motors at all.
+
+        `restart-ms 0` is also the official default, and deliberate: leaving the
+        controller stopped after a bus-off surfaces the fault instead of hiding it
+        behind a silent recovery.
+        """
+        command = [
+            "ip", "link", "set", name, "type", "can",
+            "bitrate", str(int(bitrate)),
+            "sample-point", OFFICIAL_CAN_SAMPLE_POINT,
+            "restart-ms", str(OFFICIAL_CAN_RESTART_MS),
+        ]
+        if mode == "canfd":
+            command.extend([
+                "dbitrate", str(int(dbitrate or 0)),
+                "fd", "on",
+                "dsample-point", OFFICIAL_CAN_DSAMPLE_POINT,
+                "dsjw", OFFICIAL_CAN_DSJW,
+            ])
+        return command
+
     def can_interface_up(self, name: str) -> Dict[str, Any]:
         with self._lock:
             self._require_interface(name)
@@ -1568,6 +2083,7 @@ class WorkstationService:
     def can_interface_down(self, name: str) -> Dict[str, Any]:
         with self._lock:
             self._require_interface(name)
+            self._invalidate_socketcan_sessions(name)
             self._run_system_command(["ip", "link", "set", name, "down"])
             payload = self.system_can_interfaces()
             self._emit("interface_status", payload)
@@ -1869,6 +2385,7 @@ class WorkstationService:
         left_arm_installed: bool = True,
         right_arm_installed: bool = True,
         notes: Optional[str] = None,
+        product_version: Optional[str] = None,
     ) -> Dict[str, Any]:
         with self._lock:
             arm_cn = arm_cn.strip()
@@ -1880,10 +2397,32 @@ class WorkstationService:
             FACTORY_ARMS_DIR.mkdir(parents=True, exist_ok=True)
             path = FACTORY_ARMS_DIR / f"{_safe_name(arm_cn)}.json"
             existing = _load_json(path, {})
+
+            # The product version is the arm's identity, not a per-step choice: once an
+            # arm is on record as 1.0 or 2.0, every later step reads it from here. It is
+            # therefore write-once - changing it would retroactively reinterpret every
+            # piece of evidence already collected against the other version's rules.
+            existing_version = existing.get("product_version")
+            if product_version is None:
+                product_version = existing_version or DEFAULT_PRODUCT_VERSION
+            else:
+                product_version = str(product_version)
+                if product_version not in self.product_registry.known_versions():
+                    raise ValueError(
+                        f"unknown product_version {product_version}; known: {self.product_registry.known_versions()}"
+                    )
+                if existing_version and existing_version != product_version:
+                    raise ValueError(
+                        f"arm {arm_cn} is already recorded as {existing_version}; "
+                        "product version cannot be changed once evidence exists"
+                    )
+
             record = {
                 "arm_cn": arm_cn,
                 "arm_type": arm_type,
                 "bom_profile": bom_profile,
+                "product_version": product_version,
+                "product_version_source": "declared" if existing_version or product_version != DEFAULT_PRODUCT_VERSION else "default_legacy",
                 "left_arm_installed": bool(left_arm_installed),
                 "right_arm_installed": bool(right_arm_installed),
                 "notes": notes or existing.get("notes"),
@@ -1912,6 +2451,9 @@ class WorkstationService:
             "job_type": _public_job_type(job.job_type),
             "artifact_dir": job.artifact_dir,
             "status": job.status,
+            # Stated only when the job knew its product. Links made before the product
+            # registry existed carry None, and are read as "unstated", not as a conflict.
+            "product_version": job.product_line,
             "linked_at": _now_iso(),
         }
 
@@ -2164,7 +2706,17 @@ class WorkstationService:
         command_args = shlex.split(command or "")
         if not command_args:
             raise ValueError("demo command is required")
-        command_args = _normalize_official_demo_command(command_args, arm_cn=arm_cn)
+        product_version = self._arm_product_version(arm_cn)
+        gripper = dict(self.product_registry.get(product_version).get("gripper") or {})
+        if execute and gripper.get("hardware_verified") is False:
+            # The open target drives the motor. Running it before the direction and
+            # travel have been confirmed on this product can push the gripper into its
+            # own hard stop, so the lock has to hold here, not just at the release gate.
+            raise ValueError(
+                f"{product_version} 的夹爪参数尚未真机验证，拒绝执行 Demo："
+                f"{gripper.get('locked_reason') or '未说明原因'}"
+            )
+        command_args = _normalize_official_demo_command(command_args, arm_cn=arm_cn, gripper=gripper)
         executable = command_args[0]
         if not any(executable.startswith(prefix) for prefix in OPENARM_ALLOWED_COMMAND_PREFIXES):
             raise ValueError("only OpenARM commands are allowed in controlled demo execution")
@@ -2803,9 +3355,25 @@ class WorkstationService:
             if not arm.get("factory_reports"):
                 warning_items.append("尚未挂载出厂报告")
 
+            arm_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            blocking_items.extend(self._product_version_conflicts(arm, linked_job_evidence))
+            try:
+                product_locks = self.product_registry.lock_reasons(arm_version)
+            except KeyError:
+                blocking_items.append(f"整机记录的产品版本 {arm_version} 不在产品注册表中")
+                product_locks = {}
+            if product_locks:
+                # A product whose motion behaviour has never been confirmed on hardware
+                # must not produce a formal factory report, whatever the evidence says.
+                blocking_items.append(
+                    f"产品版本 {arm_version} 仍有未经真机验证的锁定项：{'、'.join(sorted(product_locks))}"
+                )
+
             release_ready = not blocking_items
             return {
                 "arm_cn": arm_cn,
+                "product_version": arm_version,
+                "product_version_locks": product_locks,
                 "release_ready": release_ready,
                 "release_decision": "PASS" if release_ready else "HOLD",
                 "blocking_items": blocking_items,
@@ -3025,11 +3593,20 @@ class WorkstationService:
             selected_profile_id = str(profile_id or arm.get("bom_profile") or "openarm_right_arm_v1")
             profile = self.profile_manager.get_profile(selected_profile_id)
             report_arm = self._formal_factory_report_arm_view(arm, selected_profile_id, profile)
+            # The report states the bus the arm was tested on. Reading it from the
+            # product means a 2.0 arm can never ship a report claiming CAN 2.0.
+            product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            try:
+                bus = dict(self.product_registry.get(product_version)["can"]["operation"])
+            except KeyError:
+                bus = dict(self.product_registry.get(DEFAULT_PRODUCT_VERSION)["can"]["operation"])
             report = render_formal_factory_report(
                 root_dir=ROOT_DIR,
-                reports_dir=ROOT_DIR / "artifacts" / "reports",
+                reports_dir=FORMAL_REPORTS_DIR,
                 arm=report_arm,
                 profile=profile,
+                bus=bus,
+                method=self._report_method(product_version, bus, profile.get("arm_side")),
                 operator=operator,
                 project_lead=project_lead,
                 notes=notes,
@@ -3038,6 +3615,64 @@ class WorkstationService:
             )
             self._attach_report_to_arm(path, arm, report["report_ref"])
             return report
+
+    def _report_method(
+        self, product_version: str, bus: Dict[str, Any], arm_side: Optional[str]
+    ) -> Dict[str, Any]:
+        """How this arm was tested, for the report to state on its own face.
+
+        A report that does not say which method produced it cannot be reconciled with
+        one produced later: the reader cannot tell whether a difference is the arm or
+        the procedure. Everything here is read from the product registry and the
+        running workstation, so it describes what was applied rather than what was
+        intended.
+        """
+        try:
+            product = self.product_registry.get(product_version)
+        except KeyError:
+            product = self.product_registry.get(DEFAULT_PRODUCT_VERSION)
+
+        gripper = product.get("gripper") or {}
+        mode = str(gripper.get("control_mode") or "-")
+        if mode == "MIT":
+            mode_text = f"MIT (kp={gripper.get('control_kp')}, kd={gripper.get('control_kd')}, 无力矩上限)"
+        elif mode == "POS_FORCE":
+            mode_text = (
+                f"POS_FORCE (速度上限 {gripper.get('speed_limit_rad_s')} rad/s, "
+                f"力矩上限 {gripper.get('torque_limit_pu')} pu)"
+            )
+        else:
+            mode_text = mode
+
+        try:
+            open_target, close_target = _official_demo_gripper_targets(gripper, arm_side)
+            targets = f"开 {open_target:+.4f} rad / 关 {close_target:.4f} rad"
+        except ValueError:
+            targets = "-"
+
+        threshold = gripper.get("min_travel_rad")
+        criteria = (
+            f"实测行程 >= {threshold} rad"
+            if threshold is not None
+            else "行程阈值未定，仅记录实测值，不判 PASS/FAIL"
+        )
+
+        zero = product.get("zero") or {}
+        zero_text = str(zero.get("method") or "-")
+        if zero.get("motion") is not None:
+            zero_text += "（运动）" if zero["motion"] else "（不运动）"
+
+        return {
+            "product_version": f"{product_version} ({product.get('label')})",
+            "profile_revision": product.get("profile_revision"),
+            "workstation_version": WORKSTATION_VERSION,
+            "official_tool": OFFICIAL_TOOL_VERSION,
+            "bus_mode": _bus_mode_text(bus),
+            "gripper_control_mode": mode_text,
+            "gripper_targets": targets,
+            "gripper_criteria": criteria,
+            "zero_method": zero_text,
+        }
 
     def _formal_factory_report_arm_view(self, arm: Dict[str, Any], profile_id: str, profile: Dict[str, Any]) -> Dict[str, Any]:
         """Build a side-specific arm record view for formal report rendering.
@@ -3419,11 +4054,33 @@ class WorkstationService:
             "job_id": linked_job.get("job_id"),
             "job_type": linked_job.get("job_type"),
             "status": linked_job.get("status") or job_payload.get("job", {}).get("status"),
+            "product_version": self._linked_job_product_version(linked_job, job_payload),
             "artifact_dir": linked_job.get("artifact_dir"),
             "has_artifacts": has_artifacts,
             "has_blocking_issues": bool(issue_summary.get("has_blocking")),
             "issue_summary": issue_summary,
         }
+
+    def _linked_job_product_version(self, linked_job: Dict[str, Any], job_payload: Dict[str, Any]) -> Optional[str]:
+        """The product this job was run for, or None when it predates the registry."""
+        stated = linked_job.get("product_version") or job_payload.get("job", {}).get("product_line")
+        return str(stated) if stated else None
+
+    def _product_version_conflicts(self, arm: Dict[str, Any], linked_job_evidence: List[Dict[str, Any]]) -> List[str]:
+        """Evidence recorded under a different product version must never be mixed in.
+
+        A 1.0 job proves nothing about a 2.0 arm: different bus mode, different gripper
+        travel, different acceptance thresholds. Only a *stated* version that disagrees
+        is a conflict - evidence from before the registry existed states nothing, and
+        holding those arms would be rewriting history, not catching a mistake.
+        """
+        arm_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+        conflicts = []
+        for item in linked_job_evidence:
+            stated = item.get("product_version")
+            if stated and stated != arm_version:
+                conflicts.append(f"任务 {item.get('job_id')} 记录为 {stated}，与整机 {arm_version} 不一致")
+        return conflicts
 
     def _linked_jobs_have_raw_status_frames(self, linked_jobs: List[Dict[str, Any]]) -> bool:
         for linked_job in linked_jobs:
@@ -4151,6 +4808,7 @@ class WorkstationService:
         profile_id: str = "openarm_right_arm_v1",
         save_flash: bool = True,
         confirmed: bool = False,
+        arm_cn: Optional[str] = None,
     ) -> Dict[str, Any]:
         if not confirmed:
             return {
@@ -4257,7 +4915,7 @@ class WorkstationService:
                         pass
                 results.append(item)
             ok = all(item["ok"] for item in results) and len(results) == len(profile["joints"])
-            return {
+            payload = {
                 "profile_id": profile_id,
                 "arm_side": profile.get("arm_side"),
                 "timeout_standardization": True,
@@ -4278,12 +4936,15 @@ class WorkstationService:
                 "results": results,
                 "ok": ok,
             }
+            self._record_arm_step_run(arm_cn, "arm_timeout_standardization", payload)
+            return payload
 
     def arm_safe_enable_check(
         self,
         session_id: str,
         profile_id: str = "openarm_right_arm_v1",
         hold_ms: int = 300,
+        arm_cn: Optional[str] = None,
     ) -> Dict[str, Any]:
         with self._lock:
             session = self._session(session_id)
@@ -4350,8 +5011,9 @@ class WorkstationService:
                             "passed": not issues,
                         }
                     )
-                return {
+                payload = {
                     "profile_id": profile_id,
+                    "arm_side": profile.get("arm_side"),
                     "hold_ms": int(hold_ms),
                     "motion_command_sent": False,
                     "control_keepalive_sent": True,
@@ -4372,6 +5034,8 @@ class WorkstationService:
                     "results": results,
                     "ok": completed.returncode == 0 and summary.get("passed"),
                 }
+                self._record_arm_step_run(arm_cn, "arm_safe_enable_check", payload)
+                return payload
             results = []
             motors: list[tuple[dict[str, Any], Motor, dict[str, Any]]] = []
             for joint in profile["joints"]:
@@ -4527,8 +5191,9 @@ class WorkstationService:
             abort_reason = (
                 f"{failed_joint['joint_name']} failed with {','.join(failed_joint['issues'])}" if failed_joint else None
             )
-            return {
+            payload = {
                 "profile_id": profile_id,
+                "arm_side": profile.get("arm_side"),
                 "hold_ms": int(round(hold_s * 1000.0)),
                 "motion_command_sent": False,
                 "control_keepalive_sent": True,
@@ -4548,6 +5213,41 @@ class WorkstationService:
                 "results": results,
                 "ok": all(item["passed"] for item in results),
             }
+            self._record_arm_step_run(arm_cn, "arm_safe_enable_check", payload)
+            return payload
+
+    def _record_arm_step_run(self, arm_cn: Optional[str], kind: str, payload: Dict[str, Any]):
+        """Note on the arm record that a wizard step ran, and how it went.
+
+        Without this, TIMEOUT standardization and the low-gain enable check leave no
+        machine-readable trace anywhere on the arm - the three arms already shipped
+        have none - so nothing can tell whether they were done. Writing to the arm is
+        skipped entirely when no arm_cn is given, which is how every existing caller
+        behaves.
+        """
+        if not arm_cn:
+            return
+        try:
+            path, arm = self._load_arm_record(str(arm_cn))
+        except (KeyError, ValueError, TypeError):
+            return
+        history = list(arm.get("command_run_history") or [])
+        history.append(
+            {
+                "run_id": uuid.uuid4().hex[:12],
+                "kind": kind,
+                "arm_cn": str(arm_cn),
+                "profile_id": payload.get("profile_id"),
+                "arm_side": payload.get("arm_side"),
+                "status": "passed" if payload.get("ok") else "failed",
+                "motion_command_sent": bool(payload.get("motion_command_sent")),
+                "summary": payload.get("summary"),
+                "finished_at": _now_iso(),
+            }
+        )
+        arm["command_run_history"] = history
+        arm["updated_at"] = _now_iso()
+        _atomic_json(path, arm)
 
     def _record_joint_runtime_result(self, job_id: Optional[str], result_key: str, result: Dict[str, Any]) -> Dict[str, Any]:
         with self._lock:
@@ -5360,7 +6060,10 @@ class WorkstationService:
                 "CTRL_MODE": _control_name(after["CTRL_MODE"]) if after.get("CTRL_MODE") is not None else None,
                 "can_br": _normalize_can_br(after.get("can_br")),
                 "can_br_code": after.get("can_br"),
-                "can_mode": "CAN 2.0",
+                # Single-motor ID commissioning happens on the product's commissioning
+                # bus, which is classic CAN for both versions today. Read it rather
+                # than assert it, so a product that commissions on FD records the truth.
+                "can_mode": self._can_mode_label(job.product_line, "commissioning"),
             },
             "timeout_recorded": after.get("TIMEOUT", before.get("TIMEOUT")),
             "firmware": {"sw_ver": before.get("sw_ver"), "sub_ver": before.get("sub_ver")},
@@ -5467,6 +6170,771 @@ class WorkstationService:
 
     # ---- Beginner link wizard (tab 01) ----
 
+    # ---- Beginner whole-arm wizard (tabs 03/04) ----
+    #
+    # The official acceptance order, one step per screen, matching the flow the link
+    # and single-motor wizards already use. This layer only sequences and guards; every
+    # step delegates to the same method the engineer tools have always called, so a 1.0
+    # arm is judged by exactly the code that judged the three arms already shipped.
+    #
+    # `products` limits a step to the product versions it applies to. A step whose
+    # product section is unverified is shown but locked, with the reason spelled out -
+    # that is how 2.0 keeps its place in the flow while its hardware is out of reach.
+    ARM_WIZARD_GROUPS: List[Dict[str, str]] = [
+        {
+            "id": "static",
+            "label": "静态测试",
+            "purpose": "机械臂通电但不运动。建档、连通、核对参数，全部做完再进入动态。",
+        },
+        {
+            "id": "dynamic",
+            "label": "动态测试",
+            "purpose": "在装配好的整臂上做。带红色标记的步骤会让机械臂运动，做之前要清场。",
+        },
+        {
+            "id": "release",
+            "label": "出厂放行",
+            "purpose": "核对证据是否齐全，出具正式报告。只读，不动电机。",
+        },
+    ]
+
+    ARM_WIZARD_STEPS: List[Dict[str, Any]] = [
+        {
+            "id": "identity",
+            "group": "static",
+            "label": "整机建档",
+            "purpose": "给这台臂建立档案，确定它是 1.0 还是 2.0。版本一经确定不可更改。",
+            "motion": False,
+        },
+        {
+            "id": "link",
+            "group": "static",
+            "label": "连接自检",
+            "purpose": "确认 CAN 口可用、总线上能看到电机。只读，不动电机。",
+            "motion": False,
+        },
+        {
+            "id": "static",
+            "group": "static",
+            "label": "静态验收",
+            "purpose": "逐关节核对 ID、模式、波特率、故障和温度，并复扫确认通信稳定。只读。",
+            "motion": False,
+        },
+        {
+            "id": "timeout",
+            "group": "static",
+            "label": "参数标准化",
+            "purpose": "按 Profile 给每个关节写入 TIMEOUT 并保存。会写入电机，但不发运动指令。",
+            "motion": False,
+            "writes": True,
+        },
+        {
+            "id": "fd_switch",
+            "group": "static",
+            "label": "切换 CAN-FD",
+            "purpose": "把整臂从 1 Mbps 经典 CAN 切到 CAN-FD 1M/5M，逐关节写入并保存。",
+            "motion": False,
+            "writes": True,
+            "products": ["openarm_2_0"],
+            "lock_section": "can.operation",
+        },
+        {
+            "id": "enable",
+            "group": "dynamic",
+            "label": "低增益使能检查",
+            "purpose": "逐关节低增益使能再失能，确认链路正常且无故障。电机会有极轻微动作。",
+            "motion": True,
+        },
+        {
+            "id": "zero",
+            "group": "dynamic",
+            "label": "零位校准",
+            "purpose": "保存整臂零点。做法按产品版本不同，页面会说明这一次会不会动。",
+            "motion": True,
+            # 1.0 searches the limits, which moves the arm. 2.0 clamps it in the Cell
+            # jig and writes the current position as zero, which does not. Telling the
+            # operator "the arm will move" when it will not is how a warning stops
+            # being read, so the flag follows the product.
+            "motion_from": "zero",
+            "lock_section": "zero",
+        },
+        {
+            "id": "gripper",
+            "group": "dynamic",
+            "label": "夹爪测试",
+            "purpose": "按本产品的方向和行程开合夹爪，记录实测行程。夹爪会运动。",
+            "motion": True,
+            "lock_section": "gripper",
+        },
+        {
+            "id": "camera",
+            "group": "dynamic",
+            "label": "相机测试",
+            "purpose": "枚举相机、检查分辨率与帧率并留存快照。不动电机。",
+            "motion": False,
+            "products": ["openarm_2_0"],
+            "lock_section": "camera.gripper",
+        },
+        {
+            "id": "demo",
+            "group": "dynamic",
+            "label": "官方 Demo",
+            "purpose": "跑官方 Demo 验证整臂动作，结束后强制失能。机械臂会运动。",
+            "motion": True,
+            "lock_section": "gripper",
+        },
+        {
+            "id": "gate",
+            "group": "release",
+            "label": "放行检查",
+            "purpose": "核对证据是否齐全、版本是否一致，给出 PASS 或 HOLD。只读。",
+            "motion": False,
+        },
+        {
+            "id": "report",
+            "group": "release",
+            "label": "报告签核",
+            "purpose": "生成正式出厂报告并归档证据。只读。",
+            "motion": False,
+        },
+    ]
+
+    def _arm_wizard_step_view(self, step: Dict[str, Any], product_version: str) -> Dict[str, Any]:
+        """One step, resolved for a product: applicable, locked or not, and whether it moves."""
+        applies = product_version in step.get("products", [product_version])
+        lock_reason = None
+        if applies and step.get("lock_section"):
+            lock_reason = self.product_registry.lock_reasons(product_version).get(step["lock_section"])
+
+        motion = bool(step.get("motion"))
+        section = step.get("motion_from")
+        if section:
+            node = self.product_registry.get(product_version).get(section)
+            if isinstance(node, dict) and node.get("motion") is not None:
+                motion = bool(node["motion"])
+
+        return {
+            "id": step["id"],
+            "label": step["label"],
+            "group": step["group"],
+            "purpose": step["purpose"],
+            "motion": motion,
+            "writes": bool(step.get("writes")),
+            "applies": applies,
+            "locked": bool(lock_reason),
+            "locked_reason": lock_reason,
+        }
+
+    def arm_wizard_options(self, product_version: Optional[str] = None) -> Dict[str, Any]:
+        """Everything the arm wizard page needs to draw itself before any hardware."""
+        with self._lock:
+            selected = str(product_version or DEFAULT_PRODUCT_VERSION)
+            if selected not in self.product_registry.known_versions():
+                raise ValueError(f"unknown product_version {selected}")
+            product = self.product_registry.get(selected)
+            return {
+                "product_versions": [
+                    {
+                        "product_version": item["product_version"],
+                        "label": item["label"],
+                        "hardware_verified": bool(item.get("hardware_verified")),
+                    }
+                    for item in self.product_registry.list_products()
+                ],
+                "selected_product_version": selected,
+                "arm_sides": [
+                    {"id": side, "label": "右臂" if side == "right_arm" else "左臂", "expected_bus": arm["expected_bus"]}
+                    for side, arm in product["arms"].items()
+                ],
+                "groups": [dict(group) for group in self.ARM_WIZARD_GROUPS],
+                "steps": [self._arm_wizard_step_view(step, selected) for step in self.ARM_WIZARD_STEPS],
+                "operation_bus": dict(product["can"]["operation"]),
+                "locked_sections": self.product_registry.lock_reasons(selected),
+                "defaults": {"channel": "can0", "arm_side": "right_arm"},
+            }
+
+    def arm_wizard_arms(self) -> Dict[str, Any]:
+        """Arms already on file, newest first, for the wizard's picker."""
+        with self._lock:
+            FACTORY_ARMS_DIR.mkdir(parents=True, exist_ok=True)
+            arms = []
+            for path in FACTORY_ARMS_DIR.glob("*.json"):
+                arm = _load_json(path, {})
+                if not arm.get("arm_cn"):
+                    continue
+                product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+                try:
+                    label = self.product_registry.get(product_version)["label"]
+                except KeyError:
+                    label = product_version
+                try:
+                    decision = self.factory_release_gate(arm["arm_cn"])["release_decision"]
+                except Exception:
+                    decision = "HOLD"
+                reports = len(arm.get("factory_reports") or [])
+                arms.append(
+                    {
+                        "arm_cn": arm["arm_cn"],
+                        "arm_type": arm.get("arm_type"),
+                        "product_version": product_version,
+                        "product_label": label,
+                        "updated_at": arm.get("updated_at"),
+                        "attached_motor_records": len(arm.get("single_motor_records") or []),
+                        "release_decision": decision,
+                        "report_count": reports,
+                        # Finished means released with a report filed. Those arms have
+                        # shipped; the wizard is for the arm being built now, so they
+                        # are kept on record but out of the way.
+                        "completed": decision == "PASS" and reports > 0,
+                    }
+                )
+            arms.sort(key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+            return {
+                "ok": True,
+                "arms": [item for item in arms if not item["completed"]],
+                "completed_arms": [item for item in arms if item["completed"]],
+                "next_arm_cn": self._suggest_arm_cn(),
+            }
+
+    def _suggest_arm_cn(self) -> str:
+        """The next free Follower serial for today, so building a new arm is one click."""
+        date_code = _factory_date_code(None)
+        taken = {path.stem for path in FACTORY_ARMS_DIR.glob("*.json")}
+        for sequence in range(1, 100):
+            candidate = f"OAF{date_code}{sequence:02d}"
+            if candidate not in taken:
+                return candidate
+        return f"OAF{date_code}01"
+
+    def report_archive(self) -> Dict[str, Any]:
+        """Every factory report on file, grouped by the arm it belongs to.
+
+        The archive tab used to offer a generate button and no way to see what had
+        already been produced, or even which arm the button would act on. Looking a
+        report up is the thing an operator actually comes here to do.
+        """
+        with self._lock:
+            FACTORY_ARMS_DIR.mkdir(parents=True, exist_ok=True)
+            arms = []
+            for path in sorted(FACTORY_ARMS_DIR.glob("*.json")):
+                arm = _load_json(path, {})
+                if not arm.get("arm_cn"):
+                    continue
+                product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+                try:
+                    label = self.product_registry.get(product_version)["label"]
+                except KeyError:
+                    label = product_version
+                reports = []
+                for report in arm.get("factory_reports") or []:
+                    html_path = report.get("html_path") or ""
+                    pdf_path = report.get("pdf_path") or ""
+                    reports.append(
+                        {
+                            "report_id": report.get("report_id"),
+                            "title": report.get("title"),
+                            "report_type": report.get("report_type"),
+                            "generated_at": report.get("generated_at") or report.get("created_at"),
+                            # Say whether each file is actually on disk: a listed report
+                            # whose PDF never rendered is worse than no entry at all.
+                            "html_available": bool(html_path and Path(html_path).exists()),
+                            "pdf_available": bool(pdf_path and Path(pdf_path).exists()),
+                            "directory": str(Path(html_path).parent) if html_path else None,
+                        }
+                    )
+                arms.append(
+                    {
+                        "arm_cn": arm["arm_cn"],
+                        "arm_type": arm.get("arm_type"),
+                        "product_version": product_version,
+                        "product_label": label,
+                        "updated_at": arm.get("updated_at"),
+                        "reports": sorted(reports, key=lambda item: str(item.get("generated_at") or ""), reverse=True),
+                    }
+                )
+            arms.sort(key=lambda item: (len(item["reports"]) == 0, str(item.get("updated_at") or "")), reverse=True)
+            return {
+                "ok": True,
+                "arms": arms,
+                "total_reports": sum(len(item["reports"]) for item in arms),
+            }
+
+    def _referenced_job_ids(self) -> set:
+        """Every job id any record points at, from all sources.
+
+        A job directory is evidence the moment something cites it, and the citations
+        live in two places: an arm's linked jobs, and the job a single-motor record was
+        produced by. Missing either would archive a directory a report still resolves.
+        """
+        referenced = set()
+        FACTORY_ARMS_DIR.mkdir(parents=True, exist_ok=True)
+        for path in FACTORY_ARMS_DIR.glob("*.json"):
+            arm = _load_json(path, {})
+            for field in ("linked_jobs", "zero_calibration_records", "demo_validation_records",
+                          "evidence_records", "command_run_history", "workflow_history"):
+                for item in arm.get(field) or []:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("job_id"):
+                        referenced.add(str(item["job_id"]))
+                    if item.get("artifact_dir"):
+                        referenced.add(Path(str(item["artifact_dir"])).name.rsplit("_", 1)[-1])
+        for record in self._load_single_motor_records():
+            if record.get("job_id"):
+                referenced.add(str(record["job_id"]))
+            if record.get("job_artifact_dir"):
+                referenced.add(Path(str(record["job_artifact_dir"])).name.rsplit("_", 1)[-1])
+        return referenced
+
+    def list_unlinked_jobs(self) -> Dict[str, Any]:
+        """Job directories nothing points at. Read-only: shows what cleanup would take."""
+        with self._lock:
+            ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+            referenced = self._referenced_job_ids()
+            unlinked, linked = [], 0
+            for directory in sorted(ARTIFACTS_DIR.iterdir()):
+                if not directory.is_dir():
+                    continue
+                job_id = directory.name.rsplit("_", 1)[-1]
+                if job_id in referenced:
+                    linked += 1
+                    continue
+                payload = _load_json(directory / "job.json", {})
+                job = payload.get("job") or {}
+                unlinked.append(
+                    {
+                        "job_id": job_id,
+                        "directory": directory.name,
+                        "job_type": job.get("job_type"),
+                        "status": job.get("status"),
+                        "started_at": job.get("started_at"),
+                        "size_kb": round(sum(f.stat().st_size for f in directory.rglob("*") if f.is_file()) / 1024),
+                    }
+                )
+            unlinked.sort(key=lambda item: str(item.get("started_at") or ""))
+            return {
+                "ok": True,
+                "unlinked": unlinked,
+                "linked_count": linked,
+                "total_size_kb": sum(item["size_kb"] for item in unlinked),
+            }
+
+    def archive_unlinked_jobs(self, confirmed: bool = False) -> Dict[str, Any]:
+        """Move every unlinked job directory aside. Linked ones are never touched."""
+        with self._lock:
+            preview = self.list_unlinked_jobs()
+            if not confirmed:
+                return {**preview, "ok": False, "requires_confirmation": True}
+
+            target_root = ARTIFACTS_DIR.parent / f"_archive_{_now_iso()[:10].replace('-', '')}" / "jobs"
+            target_root.mkdir(parents=True, exist_ok=True)
+            # Recomputed here rather than trusted from the preview: a job may have been
+            # linked between the two calls, and moving it then would break a report.
+            referenced = self._referenced_job_ids()
+            moved = []
+            for item in preview["unlinked"]:
+                if item["job_id"] in referenced:
+                    continue
+                source = ARTIFACTS_DIR / item["directory"]
+                if source.is_dir():
+                    source.replace(target_root / source.name)
+                    moved.append(item["directory"])
+            return {
+                "ok": True,
+                "moved": moved,
+                "moved_count": len(moved),
+                "moved_to": str(target_root),
+                "kept_count": preview["linked_count"],
+            }
+
+    def withdraw_single_motor_record(self, record_id: str) -> Dict[str, Any]:
+        """Take a single-motor record out of use - a retest, or a bad run.
+
+        Refused while any arm still cites it: that record is the evidence behind a
+        joint in that arm's report. Detach it there first. The file moves to
+        `withdrawn_single_motor_records/` and is never erased.
+        """
+        with self._lock:
+            records_dir = self._single_motor_records_dir()
+            match = None
+            for path in records_dir.glob("*.json"):
+                record = _load_json(path, {})
+                if record.get("record_id") == record_id:
+                    match = (path, record)
+                    break
+            if match is None:
+                return self._wizard_problem("motor_record_not_found", f"record_id={record_id}")
+
+            FACTORY_ARMS_DIR.mkdir(parents=True, exist_ok=True)
+            for arm_path in FACTORY_ARMS_DIR.glob("*.json"):
+                arm = _load_json(arm_path, {})
+                for item in arm.get("single_motor_records") or []:
+                    if item.get("record_id") == record_id:
+                        return self._wizard_problem(
+                            "motor_record_in_use",
+                            f"{record_id} 已挂载在 {arm.get('arm_cn')} 的 {item.get('joint_name')}",
+                        )
+
+            path, record = match
+            target_dir = FACTORY_DIR / "withdrawn_single_motor_records"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            record["withdrawn_at"] = _now_iso()
+            _atomic_json(target_dir / path.name, record)
+            path.unlink(missing_ok=True)
+            return {"ok": True, "record_id": record_id, "joint_name": record.get("joint_name"), "moved_to": str(target_dir)}
+
+    def delete_factory_report(self, arm_cn: str, report_id: str) -> Dict[str, Any]:
+        """Withdraw a factory report that should not have been issued.
+
+        A report generated against incomplete or wrong evidence is worse than no
+        report: it is a signed statement about an arm. There was no way to take one
+        back, and they are the largest thing on disk by far.
+
+        The files move to `withdrawn_reports/` rather than being erased. A report that
+        may have left the building has to stay reconstructable.
+        """
+        with self._lock:
+            try:
+                path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+
+            reports = list(arm.get("factory_reports") or [])
+            target = next((item for item in reports if item.get("report_id") == report_id), None)
+            if target is None:
+                return self._wizard_problem("report_not_found", f"{arm_cn} 上没有报告 {report_id}")
+
+            withdrawn_dir = FACTORY_DIR / "withdrawn_reports" / _safe_name(arm_cn)
+            withdrawn_dir.mkdir(parents=True, exist_ok=True)
+            moved = []
+            source_dir = None
+            for key in ("json_path", "html_path", "pdf_path"):
+                value = target.get(key)
+                if not value:
+                    continue
+                source = Path(value)
+                source_dir = source_dir or source.parent
+                if source.exists():
+                    destination = withdrawn_dir / source.name
+                    source.replace(destination)
+                    moved.append(str(destination))
+
+            record = dict(target)
+            record["withdrawn_at"] = _now_iso()
+            record["withdrawn_files"] = moved
+            record["original_directory"] = str(source_dir) if source_dir else None
+            _atomic_json(withdrawn_dir / f"{_safe_name(report_id)}.json", record)
+
+            arm["factory_reports"] = [item for item in reports if item.get("report_id") != report_id]
+            arm["withdrawn_reports"] = [*(arm.get("withdrawn_reports") or []), record]
+            arm["updated_at"] = _now_iso()
+            _atomic_json(path, arm)
+            return {"ok": True, "arm_cn": arm_cn, "report_id": report_id, "moved_to": str(withdrawn_dir), "files": moved}
+
+    def arm_wizard_create(
+        self,
+        arm_cn: str,
+        product_version: str,
+        arm_type: str = "OpenARM Follower",
+        notes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Step 1: open the file for a new arm. This is the wizard's own first step."""
+        with self._lock:
+            arm_cn = str(arm_cn or "").strip().upper()
+            validation = self.validate_factory_arm_cn(arm_cn)
+            if not validation.get("valid"):
+                return self._wizard_problem("arm_cn_invalid", validation.get("message"))
+            if (FACTORY_ARMS_DIR / f"{_safe_name(arm_cn)}.json").exists():
+                return self._wizard_problem("arm_cn_taken", f"arm_cn={arm_cn}")
+            if product_version not in self.product_registry.known_versions():
+                return self._wizard_problem(
+                    "arm_cn_invalid", f"unknown product_version {product_version}"
+                )
+            record = self.bind_arm_identity(
+                arm_cn=arm_cn,
+                arm_type=arm_type,
+                notes=notes,
+                product_version=product_version,
+            )
+            return {"ok": True, "arm_cn": record["arm_cn"], "product_version": record["product_version"]}
+
+    ARM_EVIDENCE_FIELDS = (
+        "linked_jobs",
+        "zero_calibration_records",
+        "demo_validation_records",
+        "evidence_records",
+        "factory_reports",
+        "command_run_history",
+        "single_motor_records",
+        "workflow_history",
+        "bundle_history",
+    )
+
+    def _arm_evidence_count(self, arm: Dict[str, Any]) -> int:
+        """How much has been recorded against this arm. Zero means nothing was tested."""
+        return sum(len(arm.get(field) or []) for field in self.ARM_EVIDENCE_FIELDS) + len(
+            arm.get("joint_bindings") or {}
+        )
+
+    ARM_DELETE_MODES = ("archive", "purge")
+
+    def arm_wizard_delete(
+        self, arm_cn: str, mode: str = "archive", force: bool = False
+    ) -> Dict[str, Any]:
+        """Discard an archive created by mistake - wrong product version, wrong serial.
+
+        Two ways, because they answer different questions. `archive` takes the arm out
+        of the wizard but keeps its file under `deleted_arms/`, which is what you want
+        when a serial might come back or someone may ask what happened to it. `purge`
+        removes the file, for a serial typed wrong thirty seconds ago that should leave
+        no trace at all.
+
+        Either way it is refused the moment anything has been recorded against the arm:
+        at that point the archive is evidence, and evidence is not something an operator
+        deletes from a wizard.
+        """
+        with self._lock:
+            if mode not in self.ARM_DELETE_MODES:
+                raise ValueError(f"mode must be one of {self.ARM_DELETE_MODES}")
+            try:
+                path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+            evidence = self._arm_evidence_count(arm)
+            if evidence and not force:
+                return self._wizard_problem(
+                    "arm_has_evidence", f"{arm_cn} 上已有 {evidence} 条记录"
+                )
+            if evidence and mode == "purge":
+                # Force exists for an archive that should not have been created, not
+                # for erasing test results. Keeping the file costs nothing and is the
+                # difference between withdrawing a record and destroying one.
+                return self._wizard_problem(
+                    "arm_force_delete_keeps_record",
+                    f"{arm_cn} 上有 {evidence} 条记录，强制删除只能保留归档",
+                )
+
+            kept_at = None
+            if mode == "archive":
+                target_dir = FACTORY_DIR / "deleted_arms"
+                target_dir.mkdir(parents=True, exist_ok=True)
+                arm["deleted_at"] = _now_iso()
+                arm["deleted_mode"] = mode
+                arm["deleted_forced"] = bool(force)
+                arm["deleted_evidence_count"] = evidence
+                _atomic_json(target_dir / f"{_safe_name(arm_cn)}.json", arm)
+                kept_at = str(target_dir)
+            path.unlink(missing_ok=True)
+            return {"ok": True, "arm_cn": arm_cn, "mode": mode, "kept_at": kept_at}
+
+    def arm_wizard_status(self, arm_cn: str) -> Dict[str, Any]:
+        """Where this arm stands: which steps are done, which is next, what blocks it."""
+        with self._lock:
+            try:
+                _path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+            product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            gate = self.factory_release_gate(arm_cn)
+            done = self._arm_wizard_completed_steps(arm, gate)
+
+            # An arm that already cleared the release gate is finished, whatever traces
+            # its individual steps left. TIMEOUT standardization and the low-gain enable
+            # check wrote nothing to the arm record before 0.16.0, so the three arms
+            # already shipped have no evidence of them - pointing an operator at those
+            # steps would have them redo a Flash write on a passed arm.
+            released = gate["release_decision"] == "PASS"
+
+            steps = []
+            next_step = None
+            for step in self.ARM_WIZARD_STEPS:
+                view = self._arm_wizard_step_view(step, product_version)
+                view["done"] = step["id"] in done
+                if not view["applies"]:
+                    view["state"] = "skipped"
+                elif view["done"]:
+                    view["state"] = "done"
+                elif view["locked"]:
+                    view["state"] = "locked"
+                elif released:
+                    view["state"] = "no_record"
+                elif next_step is None:
+                    view["state"] = "current"
+                    next_step = step["id"]
+                else:
+                    view["state"] = "pending"
+                steps.append(view)
+
+            evidence = self._arm_evidence_count(arm)
+            return {
+                "ok": True,
+                "arm_cn": arm_cn,
+                "product_version": product_version,
+                "product_label": self.product_registry.get(product_version)["label"],
+                "groups": [dict(group) for group in self.ARM_WIZARD_GROUPS],
+                "evidence_count": evidence,
+                # Only an archive with nothing in it can be discarded; once a test has
+                # recorded anything against this arm, that evidence is the record.
+                "deletable": evidence == 0,
+                "arm_type": arm.get("arm_type"),
+                "steps": steps,
+                "next_step": next_step,
+                "release_decision": gate["release_decision"],
+                "blocking_items": gate["blocking_items"],
+                "warning_items": gate["warning_items"],
+                "motor_records": self._arm_attached_motor_records(arm),
+            }
+
+    def _arm_wizard_completed_steps(self, arm: Dict[str, Any], gate: Dict[str, Any]) -> set:
+        """Which steps this arm already has evidence for.
+
+        Read from the evidence that is already on record, so an arm tested through the
+        engineer tools before this wizard existed shows its real progress rather than
+        starting from zero.
+        """
+        done = {"identity"}
+        linked = gate["evidence"]["linked_jobs"]
+        if any(item.get("status") == "passed" for item in linked):
+            done.add("link")
+            done.add("static")
+        if any(record.get("status") == "passed" for record in arm.get("zero_calibration_records") or []):
+            done.add("zero")
+        demo_records = arm.get("demo_validation_records") or []
+        if any(record.get("status") == "passed" for record in demo_records):
+            done.add("demo")
+            done.add("gripper")
+        for run in arm.get("command_run_history") or []:
+            if run.get("kind") == "arm_timeout_standardization" and run.get("status") == "passed":
+                done.add("timeout")
+            if run.get("kind") == "arm_safe_enable_check" and run.get("status") == "passed":
+                done.add("enable")
+        if gate["release_decision"] == "PASS":
+            done.add("gate")
+        if arm.get("factory_reports"):
+            done.add("report")
+        return done
+
+    def _arm_attached_motor_records(self, arm: Dict[str, Any]) -> List[Dict[str, Any]]:
+        attached = arm.get("single_motor_records") or []
+        return [
+            {
+                "record_id": item.get("record_id"),
+                "joint_name": item.get("joint_name"),
+                "motor_type": item.get("motor_type"),
+                "result": item.get("result"),
+                # When the motor was commissioned, as opposed to when it was linked to
+                # this arm. The page shows the former: that is the evidence date.
+                "created_at": item.get("commissioned_at"),
+                "attached_at": item.get("attached_at"),
+            }
+            for item in attached
+        ]
+
+    def arm_wizard_attach_motor_record(self, arm_cn: str, record_id: str) -> Dict[str, Any]:
+        """Attach one commissioned motor's record to a joint of this arm.
+
+        The 16 motors configured on 2026-09-17 are the only evidence that each was set
+        up and read back on hardware, and that evidence has to reach the arm's report.
+        Damiao's SN register is not unique across motors, so the record id is the key,
+        never the SN.
+        """
+        with self._lock:
+            try:
+                path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+
+            record = next(
+                (item for item in self._load_single_motor_records() if item.get("record_id") == record_id),
+                None,
+            )
+            if record is None:
+                return self._wizard_problem("arm_motor_record_mismatch", f"record_id={record_id} not found")
+
+            arm_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            record_version = str(record.get("product_line") or DEFAULT_PRODUCT_VERSION)
+            if record_version != arm_version:
+                return self._wizard_problem(
+                    "arm_motor_record_mismatch",
+                    f"记录属于 {record_version}，这台臂是 {arm_version}",
+                )
+            if record.get("result") != "PASS":
+                return self._wizard_problem(
+                    "arm_motor_record_mismatch", f"记录结果是 {record.get('result')}，只有 PASS 的记录可以挂载"
+                )
+
+            joint_name = str(record.get("joint_name") or "")
+            attached = [item for item in (arm.get("single_motor_records") or []) if item.get("joint_name") != joint_name]
+            attached.append(
+                {
+                    "record_id": record_id,
+                    "joint_name": joint_name,
+                    "arm_side": record.get("arm_side"),
+                    "motor_type": record.get("motor_type"),
+                    "result": record.get("result"),
+                    "product_version": record_version,
+                    "commissioned_at": record.get("created_at"),
+                    "attached_at": _now_iso(),
+                }
+            )
+            arm["single_motor_records"] = sorted(attached, key=lambda item: str(item.get("joint_name")))
+            arm["updated_at"] = _now_iso()
+            _atomic_json(path, arm)
+            return {"ok": True, "arm_cn": arm_cn, "attached": arm["single_motor_records"]}
+
+    def arm_wizard_detach_motor_record(self, arm_cn: str, record_id: str) -> Dict[str, Any]:
+        """Undo an attachment. Attaching to the wrong joint must not be a one-way door.
+
+        Attaching counts as evidence, and evidence blocks deleting the arm. Without
+        this, one wrong click locked the archive: it could be neither corrected nor
+        discarded. The single-motor record itself is untouched - it belongs to the
+        motor, not to this arm.
+        """
+        with self._lock:
+            try:
+                path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+            attached = list(arm.get("single_motor_records") or [])
+            remaining = [item for item in attached if item.get("record_id") != record_id]
+            if len(remaining) == len(attached):
+                return self._wizard_problem(
+                    "arm_motor_record_mismatch", f"{arm_cn} 上没有挂载记录 {record_id}"
+                )
+            arm["single_motor_records"] = remaining
+            arm["updated_at"] = _now_iso()
+            _atomic_json(path, arm)
+            return {"ok": True, "arm_cn": arm_cn, "attached": remaining}
+
+    def arm_wizard_available_motor_records(self, arm_cn: str) -> Dict[str, Any]:
+        """The commissioned motors that could belong to this arm, newest first."""
+        with self._lock:
+            try:
+                _path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+            arm_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            taken = {item.get("record_id") for item in (arm.get("single_motor_records") or [])}
+            candidates = [
+                {
+                    "record_id": record.get("record_id"),
+                    "joint_name": record.get("joint_name"),
+                    "arm_side": record.get("arm_side"),
+                    "motor_type": record.get("motor_type"),
+                    "created_at": record.get("created_at"),
+                    "attached": record.get("record_id") in taken,
+                }
+                for record in self._load_single_motor_records()
+                if str(record.get("product_line") or DEFAULT_PRODUCT_VERSION) == arm_version
+                and record.get("result") == "PASS"
+            ]
+            return {
+                "ok": True,
+                "arm_cn": arm_cn,
+                "product_version": arm_version,
+                "records": sorted(candidates, key=lambda item: str(item.get("joint_name"))),
+            }
+
     def link_wizard_detect(self) -> Dict[str, Any]:
         """Step 1: list the CAN ports this machine has, with beginner-readable health."""
         with self._lock:
@@ -5526,10 +6994,9 @@ class WorkstationService:
             if problem:
                 return problem
             try:
-                session = self._wizard_session(channel, int(bitrate))
-            except Exception as error:
+                session, candidates, duplicate_ids, _ = self._wizard_scan(channel, int(bitrate), DEFAULT_ARM_SCAN_IDS)
+            except WizardConnectError as error:
                 return self._wizard_problem("connect_failed", str(error))
-            candidates, duplicate_ids = self._inventory_scan(session, DEFAULT_ARM_SCAN_IDS)
             if not candidates:
                 return self._wizard_problem("bus_no_motor", f"channel={channel}")
             motors = []
@@ -5601,11 +7068,10 @@ class WorkstationService:
             if problem:
                 return problem
             try:
-                session = self._wizard_session(channel, int(bitrate))
-            except Exception as error:
+                session, candidates, duplicate_ids, _ = self._wizard_scan(channel, int(bitrate), DEFAULT_ARM_SCAN_IDS)
+            except WizardConnectError as error:
                 return self._wizard_problem("connect_failed", str(error))
 
-            candidates, duplicate_ids = self._inventory_scan(session, DEFAULT_ARM_SCAN_IDS)
             if not candidates:
                 return self._wizard_problem("no_motor_found")
 
@@ -5672,7 +7138,16 @@ class WorkstationService:
 
     def _wizard_problem(self, code: str, detail: Optional[str] = None, **extra: Any) -> Dict[str, Any]:
         meta = SINGLE_MOTOR_PROBLEMS.get(code) or SINGLE_MOTOR_PROBLEMS["unknown_error"]
-        return {"ok": False, "problem": {"code": code, **meta, "detail": detail, **extra}}
+        return {
+            "ok": False,
+            "problem": {
+                "code": code,
+                **meta,
+                "blocking": code in BLOCKING_PROBLEM_CODES,
+                "detail": detail,
+                **extra,
+            },
+        }
 
     def _wizard_error_code(self, error: Exception, default: str) -> str:
         text = str(error).lower()
@@ -5695,6 +7170,7 @@ class WorkstationService:
         can_state = str(iface.get("can_state") or "").upper()
         needs_restart = state != "UP" or int(iface.get("bitrate") or 0) != int(bitrate) or can_state in {"BUS-OFF", "STOPPED"}
         if needs_restart:
+            self._invalidate_socketcan_sessions(channel)
             try:
                 for cmd in (
                     ["ip", "link", "set", channel, "down"],
@@ -5710,17 +7186,92 @@ class WorkstationService:
             return self._wizard_problem("can_bus_error", f"can_state={can_state}")
         return None
 
-    def _wizard_session(self, channel: str, bitrate: int) -> DeviceSession:
+    def _interface_ifindex(self, name: str) -> Optional[int]:
+        raw = self._safe_read_text(Path("/sys/class/net") / name / "ifindex")
+        try:
+            return int(str(raw).strip())
+        except (TypeError, ValueError):
+            return None
+
+    def _invalidate_socketcan_sessions(self, channel: str) -> int:
+        """Close every open socketcan session bound to ``channel``.
+
+        A socket opened before the link went down keeps answering "nothing on the
+        bus" after it comes back, which reads exactly like a dead motor and sends
+        the operator hunting for power or wiring faults. Anything that restarts the
+        link closes the sockets first so the next step reconnects for real.
+        """
+        closed = 0
         for session in self.sessions.values():
             if (
                 session.transport == "socketcan"
                 and session.connection_state != "disconnected"
                 and session.connection.get("channel") == channel
+            ):
+                try:
+                    session.driver.disconnect()
+                except Exception:
+                    pass
+                session.connection_state = "disconnected"
+                closed += 1
+        return closed
+
+    def _reusable_socketcan_session(self, channel: str, bitrate: int) -> Optional[DeviceSession]:
+        live_ifindex = self._interface_ifindex(channel)
+        for session in self.sessions.values():
+            if not (
+                session.transport == "socketcan"
+                and session.connection_state != "disconnected"
+                and session.connection.get("channel") == channel
                 and int(session.connection.get("bitrate", 0)) == int(bitrate)
             ):
-                return session
-        payload = self.connect_device("socketcan", {"channel": channel, "bitrate": int(bitrate)})
-        return self._session(payload["device_session_id"])
+                continue
+            bound_ifindex = session.connection.get("ifindex")
+            if live_ifindex is not None and bound_ifindex is not None and int(bound_ifindex) != int(live_ifindex):
+                # The adapter was unplugged and replugged: the socket is bound to an
+                # interface that no longer exists.
+                self._invalidate_socketcan_sessions(channel)
+                return None
+            return session
+        return None
+
+    def _wizard_session_ex(self, channel: str, bitrate: int, *, force_new: bool = False) -> Tuple[DeviceSession, bool]:
+        """Return the wizard session for ``channel`` plus whether it was reused."""
+        if force_new:
+            self._invalidate_socketcan_sessions(channel)
+        else:
+            session = self._reusable_socketcan_session(channel, int(bitrate))
+            if session is not None:
+                return session, True
+        try:
+            payload = self.connect_device("socketcan", {"channel": channel, "bitrate": int(bitrate)})
+        except Exception as error:
+            raise WizardConnectError(str(error)) from error
+        session = self._session(payload["device_session_id"])
+        session.connection["ifindex"] = self._interface_ifindex(channel)
+        return session, False
+
+    def _wizard_session(self, channel: str, bitrate: int, *, force_new: bool = False) -> DeviceSession:
+        session, _ = self._wizard_session_ex(channel, int(bitrate), force_new=force_new)
+        return session
+
+    def _wizard_scan(
+        self, channel: str, bitrate: int, scan_ids: List[int]
+    ) -> Tuple[DeviceSession, List[Dict[str, Any]], List[int], bool]:
+        """Inventory-scan the bus, rebuilding a reused session once if nobody answers.
+
+        An empty scan on a session we did not just open is ambiguous: the motor may
+        be off, or our socket may have gone deaf behind an interface restart we did
+        not make. Reconnecting once rules out the second case before we blame the
+        hardware. Returns ``(session, candidates, duplicate_ids, reconnected)``.
+        """
+        session, reused = self._wizard_session_ex(channel, int(bitrate))
+        candidates, duplicate_ids = self._inventory_scan(session, scan_ids)
+        if candidates or not reused:
+            return session, candidates, duplicate_ids, False
+        session, _ = self._wizard_session_ex(channel, int(bitrate), force_new=True)
+        candidates, duplicate_ids = self._inventory_scan(session, scan_ids)
+        return session, candidates, duplicate_ids, True
 
     def single_wizard_identify(
         self,
@@ -5744,11 +7295,10 @@ class WorkstationService:
             if problem:
                 return problem
             try:
-                session = self._wizard_session(channel, int(bitrate))
-            except Exception as error:
+                session, candidates, duplicate_ids, _ = self._wizard_scan(channel, int(bitrate), DEFAULT_ARM_SCAN_IDS)
+            except WizardConnectError as error:
                 return self._wizard_problem("connect_failed", str(error))
 
-            candidates, duplicate_ids = self._inventory_scan(session, DEFAULT_ARM_SCAN_IDS)
             if not candidates:
                 return self._wizard_problem("no_motor_found")
             if len(candidates) > 1 or duplicate_ids:

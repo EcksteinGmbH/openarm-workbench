@@ -1744,3 +1744,554 @@ body[data-primary-flow="connectTab"]:not(.link-advanced) .right-rail {
     margin-top: 2px;
     font-size: 13px;
 }
+
+/* Blocking-problem dialog: the wizards raise this on top of the in-page panel when
+   the CAN port itself is unusable, so the operator cannot click past the message. */
+.problem-modal-card {
+    width: min(560px, calc(100vw - 40px));
+}
+
+.problem-modal-body {
+    margin: 12px 0 18px;
+    color: var(--muted);
+    max-height: min(52vh, 420px);
+    overflow-y: auto;
+}
+
+.problem-modal-body p {
+    margin-bottom: 12px;
+}
+
+.problem-modal-body strong {
+    display: block;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+
+.problem-modal-body ol {
+    margin: 0 0 12px 20px;
+}
+
+.problem-modal-body ol li {
+    margin-bottom: 6px;
+    line-height: 1.55;
+}
+
+.problem-modal-body code {
+    display: block;
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    word-break: break-all;
+}
+
+.problem-modal-body summary {
+    cursor: pointer;
+}
+
+.problem-modal-card .smw-problem-kicker,
+.problem-modal-card h3 {
+    color: var(--danger);
+}
+
+
+/* ---- Whole-arm wizard (tab 03) -------------------------------------------------
+   Twelve steps, all of them on the page. The operator sees the whole flow at once:
+   what is done, what is next, what is blocked and why, and can reopen any step to
+   run it again. Dialogs are kept for failures that cannot be cleared from here. */
+.aw-section { margin-top: 26px; }
+.aw-section:first-of-type { margin-top: 18px; }
+
+.aw-section-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.aw-section-head h3 { margin: 0; font-size: 17px; }
+
+.aw-section-no {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.aw-progress { margin-left: auto; color: var(--muted); font-size: 13px; }
+.aw-hint { font-size: 12px; margin-bottom: 10px; }
+
+.aw-empty {
+    border: 1px dashed var(--line);
+    border-radius: 10px;
+    padding: 16px;
+}
+.aw-empty strong { display: block; margin-bottom: 4px; }
+
+/* --- arm picker: rows, not a dropdown; each says what state that arm is in --- */
+.aw-arm-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px;
+}
+
+.aw-arm {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    text-align: left;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: var(--panel);
+    color: var(--text);
+    cursor: pointer;
+}
+
+.aw-arm:hover { border-color: var(--accent); }
+.aw-arm.selected {
+    border-color: var(--accent);
+    background: var(--panel-strong);
+    box-shadow: inset 3px 0 0 var(--accent);
+}
+.aw-arm-cn { font-weight: 800; font-size: 15px; }
+.aw-arm-meta { color: var(--muted); font-size: 12px; }
+
+/* --- motor records --- */
+.aw-motor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.aw-motor {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 13px;
+}
+.aw-motor.done { border-color: var(--ok, #38a169); }
+.aw-motor small { color: var(--muted); font-size: 11px; }
+.aw-motor-state { font-size: 12px; color: var(--ok, #38a169); font-weight: 700; }
+.aw-motor-state.missing { color: var(--muted); font-weight: 400; }
+
+/* The wizard owns the full width until the engineer tools are opened. */
+body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .workspace {
+    grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .left-rail,
+body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .right-rail {
+    display: none;
+}
+
+/* --- new arm first: building one is the primary action, shipped arms fold away --- */
+.aw-start-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.aw-create {
+    border: 1px solid var(--accent);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+}
+
+.aw-create > p { margin: 0 0 12px; }
+
+.aw-create-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.aw-create .field { display: flex; flex-direction: column; gap: 4px; }
+.aw-create .field > span { font-size: 12px; color: var(--muted); font-weight: 700; }
+
+.aw-create select,
+.aw-create input {
+    padding: 8px 10px;
+    background: var(--panel);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.aw-group-title {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin: 14px 0 8px;
+}
+
+.aw-toggle {
+    margin-top: 16px;
+    padding: 6px 0;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+}
+
+.aw-toggle:hover { color: var(--text); }
+
+.aw-arm.muted-arm { opacity: 0.7; }
+.aw-arm.muted-arm.selected { opacity: 1; }
+
+.aw-delete-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--line);
+    font-size: 12px;
+}
+
+/* --- one phase per view: twelve steps on one screen was too much at once --- */
+.aw-phases {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 14px;
+}
+
+.aw-phase {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 9px 14px;
+    background: none;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    margin-bottom: -1px;
+}
+
+.aw-phase:hover { color: var(--text); }
+
+.aw-phase.active {
+    color: var(--text);
+    border-color: var(--line);
+    background: var(--panel-strong);
+}
+
+.aw-phase-name { font-weight: 700; }
+.aw-phase-count { font-size: 12px; font-variant-numeric: tabular-nums; }
+.aw-phase.complete .aw-phase-count { color: var(--ok, #38a169); font-weight: 700; }
+.aw-phase.active.complete .aw-phase-name { color: var(--ok, #38a169); }
+
+.aw-phase-purpose {
+    margin: 0 0 14px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+
+/* --- delete: keeping the record and erasing it are different decisions --- */
+.aw-delete-options {
+    display: grid;
+    gap: 10px;
+    margin: 16px 0;
+}
+
+.aw-delete-options .btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    text-align: left;
+    padding: 12px 14px;
+    height: auto;
+}
+
+.aw-delete-options .btn small {
+    font-weight: 400;
+    opacity: 0.85;
+    font-size: 12px;
+}
+
+/* --- where these motors came from: the label alone explained nothing --- */
+.aw-motors-intro {
+    border-left: 3px solid var(--accent);
+    padding: 2px 0 2px 14px;
+    margin-bottom: 16px;
+}
+
+.aw-motors-intro h4 { margin: 0 0 8px; font-size: 15px; }
+
+.aw-motors-intro p {
+    margin: 0 0 8px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.aw-motors-intro p:last-child { margin-bottom: 0; }
+.aw-motors-intro strong { color: var(--text); }
+
+.aw-motor-count { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.aw-motor-count strong { color: var(--text); font-size: 15px; }
+
+/* --- the steps, as a timeline -----------------------------------------------------
+   A phase holds at most five steps, so nothing hides behind a click: every step shows
+   its name, what it does and whether the arm moves. Only the step you are about to run
+   opens its safety checks and confirm button - fifteen checkboxes at once would read
+   as noise and get ticked without being read. */
+.aw-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.aw-node {
+    position: relative;
+    padding: 0 0 18px 42px;
+}
+
+/* The rail, drawn between the dots rather than through them. */
+.aw-node::before {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: 28px;
+    bottom: 0;
+    width: 2px;
+    background: var(--line);
+}
+
+.aw-node:last-child { padding-bottom: 0; }
+.aw-node:last-child::before { display: none; }
+.aw-node.done::before { background: var(--ok, #38a169); opacity: 0.45; }
+
+.aw-node-dot {
+    position: absolute;
+    left: 0;
+    top: 2px;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--line);
+    background: var(--panel);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.aw-node.done .aw-node-dot {
+    border-color: var(--ok, #38a169);
+    background: var(--ok, #38a169);
+    color: #fff;
+}
+
+.aw-node.current .aw-node-dot,
+.aw-node.armed .aw-node-dot {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+}
+
+.aw-node.locked .aw-node-dot {
+    border-color: var(--warning, #d69e2e);
+    color: var(--warning, #d69e2e);
+    font-size: 12px;
+}
+
+.aw-node.skipped .aw-node-dot { border-style: dashed; opacity: 0.6; }
+.aw-node.no-record .aw-node-dot { border-color: var(--muted); }
+
+.aw-node-card {
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 2px 0 0;
+    transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+/* Only the armed step gets a surface; the rest stay flat so the eye lands on one. */
+.aw-node.armed .aw-node-card {
+    border-color: var(--accent);
+    background: var(--panel-strong);
+    padding: 12px 14px;
+}
+
+.aw-node.skipped .aw-node-card { opacity: 0.5; }
+
+.aw-node-title {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.aw-node-title h4 { margin: 0; font-size: 15px; }
+.aw-node.current .aw-node-title h4,
+.aw-node.armed .aw-node-title h4 { color: var(--accent); }
+.aw-node.done .aw-node-title h4 { color: var(--text); }
+
+.aw-node-state { font-size: 12px; color: var(--muted); }
+.aw-node.current .aw-node-state { color: var(--accent); font-weight: 700; }
+.aw-node.locked .aw-node-state { color: var(--warning, #d69e2e); font-weight: 700; }
+.aw-node.done .aw-node-state { color: var(--ok, #38a169); }
+
+.aw-node-purpose {
+    margin: 5px 0 8px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.aw-node-skip { font-size: 12px; margin: 0; }
+
+.aw-node-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+
+.btn-ghost {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--muted);
+}
+
+.btn-ghost:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+
+@media (max-width: 720px) {
+    .aw-node { padding-left: 36px; }
+    .aw-node-dot { width: 24px; height: 24px; }
+    .aw-node::before { left: 11px; }
+}
+
+/* --- what a step does to the hardware, said before it is pressed --- */
+.aw-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+}
+
+.aw-tag.motion { color: var(--danger); border-color: var(--danger); }
+.aw-tag.writes { color: var(--warning, #d69e2e); border-color: var(--warning, #d69e2e); }
+
+.aw-lock {
+    border: 1px solid var(--warning, #d69e2e);
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin: 10px 0 0;
+}
+
+.aw-lock strong {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--warning, #d69e2e);
+    font-size: 13px;
+}
+
+.aw-lock p { margin: 4px 0; font-size: 12px; line-height: 1.6; }
+
+.aw-safety {
+    border: 1px solid var(--danger);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 12px 0 0;
+}
+
+.aw-safety strong {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--danger);
+    font-size: 13px;
+}
+
+/* --- report archive (tab 04): find a report first, generate second --- */
+.ra-rules {
+    margin: 22px 0;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+}
+
+.ra-rules summary {
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.ra-rules[open] summary { margin-bottom: 10px; color: var(--text); }
+.ra-rules .info-list { margin: 0; }
+
+.ra-table { width: 100%; }
+.ra-table td { vertical-align: top; }
+
+.ra-file {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    margin-right: 6px;
+}
+
+.ra-file.ok { color: var(--ok, #38a169); border-color: var(--ok, #38a169); }
+.ra-file.missing { color: var(--muted); }
+
+.ra-generate {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    margin-top: 18px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+
+.ra-generate p { margin: 4px 0 0; font-size: 12px; max-width: 60ch; }
+
+/* The archive owns the full width, like the three wizards. */
+body[data-primary-flow="reportTab"] .workspace { grid-template-columns: minmax(0, 1fr); }
+body[data-primary-flow="reportTab"] .left-rail,
+body[data-primary-flow="reportTab"] .right-rail { display: none; }
+
+.aw-restart-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    font-size: 12px;
+}

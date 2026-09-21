@@ -35,8 +35,11 @@ import { bindEvents } from './event-bindings.js';
 import { initSocket } from './socket-client.js';
 import { kvRow, setButtonDisabled, updateActionStatus } from './ui-helpers.js';
 import { state } from './store.js';
-import { initSingleMotorWizard } from './single-motor-wizard.js?v=20260918-smw-inspect';
-import { initLinkWizard } from './link-wizard.js?v=20260918-link-wizard2';
+import { initSingleMotorWizard } from './single-motor-wizard.js?v=20260921-words';
+import { initLinkWizard } from './link-wizard.js?v=20260921-words';
+import { bindProblemModal } from './problem-modal.js?v=20260921-words';
+import { initArmWizard } from './arm-wizard.js?v=20260921-words';
+import { initReportArchive, initDiskMaintenance } from './report-archive.js?v=20260921-words';
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, character => ({
@@ -3597,8 +3600,12 @@ export async function startApp() {
     // Keep body[data-primary-flow] in sync from first paint: the wizard layout
     // (hidden task rail) depends on it, and nothing else sets it until a tab click.
     switchPrimaryTab(currentPrimaryTab());
+    bindProblemModal();
     initSingleMotorWizard();
     initLinkWizard();
+    initArmWizard();
+    initReportArchive(refreshReport);
+    initDiskMaintenance();
     try {
         await loadConfig();
         renderMeta();

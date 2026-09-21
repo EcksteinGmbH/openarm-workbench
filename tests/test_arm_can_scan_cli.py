@@ -20,7 +20,7 @@ class FakeFullArmSocketCANDriver:
                     int(DM_variable.ESC_ID): esc_id,
                     int(DM_variable.MST_ID): 0x10 + esc_id,
                     int(DM_variable.CTRL_MODE): 1,
-                    int(DM_variable.TIMEOUT): 5000 if esc_id >= 5 else 1000,
+                    int(DM_variable.TIMEOUT): workstation.WHOLE_ARM_TARGET_TIMEOUT,
                     int(DM_variable.can_br): 1000000,
                     int(DM_variable.sw_ver): 100,
                     int(DM_variable.sub_ver): 1,
@@ -91,6 +91,7 @@ def fake_socketcan_driver(monkeypatch):
 
 
 def test_cli_generates_json_and_csv_reports(tmp_path):
+    output_root = tmp_path / "cli_output"
     exit_code = cli.main(
         [
             "--channel",
@@ -100,12 +101,12 @@ def test_cli_generates_json_and_csv_reports(tmp_path):
             "--profile",
             "openarm_v1",
             "--output-dir",
-            str(tmp_path),
+            str(output_root),
         ]
     )
 
     assert exit_code == 0
-    output_dirs = [path for path in tmp_path.iterdir() if path.is_dir()]
+    output_dirs = [path for path in output_root.iterdir() if path.is_dir()]
     assert len(output_dirs) == 1
     output_dir = output_dirs[0]
 
