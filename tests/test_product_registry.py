@@ -287,3 +287,47 @@ def test_the_official_reference_is_kept_in_the_repo():
         text = (official / page).read_text(encoding="utf-8")
         assert "https://docs.openarm.dev/" in text, f"{page} has no source URL"
         assert "抓取日期" in text, f"{page} has no fetch date"
+
+
+def test_the_2_0_gripper_angles_are_marked_unsourced():
+    """Official publishes no 2.0 gripper angle, so ours must not look authoritative.
+
+    Re-checked 2026-09-21: the 2.0 gripper and general hardware pages state no angle,
+    direction, motor or camera model, and openarm_can 1.4.0 has no gripper angle
+    constant. The values here came from the V5 plan and could not be traced further.
+    Recording a guess without saying it is one is how a guess becomes a spec.
+    """
+    gripper = workstation.ProductRegistry().get("openarm_2_0")["gripper"]
+    assert gripper["open_target_rad_source"] == "unverified_from_v5_plan"
+    assert gripper["hardware_verified"] is False
+    assert "没有官方出处" in gripper["locked_reason"]
+
+
+def test_the_1_0_gripper_target_is_backed_by_real_runs():
+    # By contrast 1.0's -1.0472 is carried by 12 arm-sides that ran it and passed.
+    gripper = workstation.ProductRegistry().get("openarm_1_0")["gripper"]
+    assert gripper["open_target_rad"] == -1.0472
+    assert gripper["hardware_verified"] is True
+    assert "open_target_rad_source" not in gripper
+
+
+def test_the_official_diagnose_rules_are_in_the_problem_catalogue():
+    """`diagnose --explain` separates faults that look identical from outside.
+
+    From openarm_can 1.4.0 setup/cli/commands/diagnose_commands.cpp. An operator cannot
+    tell a missing terminator from a wrong bitrate unaided - both produce no ACK and
+    bus-off - so the catalogue has to carry the official way of separating them.
+    """
+    for code in (
+        "bus_reply_on_unlistened_id",
+        "bus_daisy_chain_break",
+        "bus_silent_scattered",
+        "bus_nothing_acknowledges",
+    ):
+        entry = workstation.SINGLE_MOTOR_PROBLEMS[code]
+        assert entry["title"] and entry["message"] and entry["solutions"], code
+
+    # The measurement that actually separates termination from bitrate.
+    text = " ".join(workstation.SINGLE_MOTOR_PROBLEMS["bus_nothing_acknowledges"]["solutions"])
+    assert "60Ω" in text and "120Ω" in text and "40Ω" in text
+    assert "dbitrate" in text

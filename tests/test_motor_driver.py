@@ -106,3 +106,73 @@ class TestStatusFrameIdDecoding:
         # The release gate accepts a raw status frame in place of a candump trace.
         assert motor.last_status_frame["data_hex"].startswith("10")
         assert motor.last_status_frame["can_id"] == 0x20
+
+
+class TestLimitParamsMatchOfficial:
+    """(PMAX, VMAX, TMAX) scale every packed and unpacked MIT value.
+
+    A wrong entry does not fail loudly; it silently mis-scales that motor's readings,
+    and those readings go into a factory report. DM4340 carried VMAX 8 against the
+    official 10, so velocity for J3 and J4 was recorded 20% low on every arm.
+    """
+
+    # openarm_can 1.4.0, include/openarm/damiao_motor/dm_motor_constants.hpp
+    OFFICIAL = {
+        "DM4310": (12.5, 30, 10),
+        "DM4310_48V": (12.5, 50, 10),
+        "DM4340": (12.5, 10, 28),
+        "DM4340_48V": (12.5, 10, 28),
+        "DM6006": (12.5, 45, 20),
+        "DM8006": (12.5, 45, 40),
+        "DM8009": (12.5, 45, 54),
+        "DM10010L": (12.5, 25, 200),
+        "DM10010": (12.5, 20, 200),
+        "DMH3510": (12.5, 280, 1),
+        "DMH6215": (12.5, 45, 10),
+        "DMG6220": (12.5, 45, 10),
+    }
+
+    def test_every_motor_type_matches_the_official_table(self):
+        from src.damiao_motor_driver import LIMIT_PARAM, DM_Motor_Type
+
+        for motor_type in DM_Motor_Type:
+            expected = self.OFFICIAL[motor_type.name]
+            actual = tuple(float(value) for value in LIMIT_PARAM[int(motor_type)])
+            assert actual == tuple(float(v) for v in expected), motor_type.name
+
+    def test_the_table_is_indexed_by_our_own_enum_not_the_official_one(self):
+        # Official numbers DM3507 = 0 and DM4310 = 1; ours has no DM3507 and starts at
+        # DM4310 = 0. The indices are not interchangeable, and nothing may pass one
+        # across - the official library is addressed by name (oa.MotorType.DM8009).
+        from src.damiao_motor_driver import LIMIT_PARAM, DM_Motor_Type
+
+        assert int(DM_Motor_Type.DM4310) == 0
+        assert len(LIMIT_PARAM) == len(DM_Motor_Type)
+
+    def test_the_table_agrees_with_what_the_real_motors_reported(self):
+        """The 16 motors commissioned on 2026-09-17 read their own limits back."""
+        import json
+        from pathlib import Path
+
+        from src.damiao_motor_driver import LIMIT_PARAM, DM_Motor_Type
+
+        by_model = {
+            "DM-J4310-2EC": DM_Motor_Type.DM4310,
+            "DM-J4340-2EC": DM_Motor_Type.DM4340,
+            "DM-J4340P-2EC": DM_Motor_Type.DM4340,
+            "DM-J8009P-2EC": DM_Motor_Type.DM8009,
+        }
+        records = Path(__file__).parent / "golden" / "fixture" / "single_motor_records"
+        checked = 0
+        for path in records.glob("*.json"):
+            record = json.loads(path.read_text(encoding="utf-8"))
+            before = record.get("before") or {}
+            motor_type = by_model.get(record["motor_type"])
+            if motor_type is None or before.get("VMAX") is None:
+                continue
+            pmax, vmax, tmax = LIMIT_PARAM[int(motor_type)]
+            assert float(before["PMAX"]) == float(pmax), record["joint_name"]
+            assert float(before["VMAX"]) == float(vmax), record["joint_name"]
+            assert float(before["TMAX"]) == float(tmax), record["joint_name"]
+            checked += 1
+        assert checked == 16, f"expected all 16 motors checked, got {checked}"

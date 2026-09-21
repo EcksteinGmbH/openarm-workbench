@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.23.0-official-docs-and-2-0-zero`
+Current workstation version: `0.24.0-official-audit`
 
 ## Versioning Rule
 
@@ -13,6 +13,73 @@ Current workstation version: `0.23.0-official-docs-and-2-0-zero`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.24.0-official-audit - 2026-09-21
+
+Summary: re-checked everything 2.0 against the whole of official - the 1.4.0 source and
+the documentation - rather than one half of it. One real defect found and fixed, one
+value found to be unsourced, and four official diagnostic rules that were never carried
+over.
+
+What matched, checked value by value:
+
+- All 45 Damiao register IDs are identical to
+  `include/openarm/damiao_motor/dm_motor_constants.hpp`.
+- All 9 motor error codes match by value; three differ only in spelling
+  (MOS_OVERTEMP / MOS_OVERHEAT, COIL_OVERTEMP / COIL_OVERHEAT, COMM_LOST /
+  COMMUNICATION_LOST).
+- The baudrate register codes, and the CAN timing applied by `can_configure`, match
+  (0.22.0).
+- The 2.0 zero method matches the official procedure (0.23.0).
+
+**Defect found and fixed: DM4340 velocity limit.**
+
+- `LIMIT_PARAM` carried VMAX 8 for DM4340 where official has 10. These values scale
+  every packed and unpacked MIT figure, so velocity read from J3 and J4 was recorded
+  20% low on every arm this workstation has tested.
+- The 16 motors commissioned on 2026-09-17 read VMAX 10.0 back from the motor itself,
+  so the official table is right and ours was wrong. Three tests now pin the table to
+  official, to our own enum's indexing, and to what those 16 motors reported.
+- Blast radius: reporting only. Every MIT command this workstation sends uses dq=0.0,
+  so nothing was commanded wrongly, and the zero calibration script reads velocity
+  through the official library rather than ours, so limit detection was unaffected.
+
+**Value found to be unsourced: the 2.0 gripper angles.**
+
+- The registry carried right -90 deg / left +90 deg as though established. Re-checking
+  official found no gripper angle anywhere: the 2.0 gripper and general hardware pages
+  state no angle, direction, motor or camera model, and openarm_can 1.4.0 has no
+  gripper angle constant. The values came from the V5 plan, whose own source could not
+  be traced.
+- They are now marked `open_target_rad_source: unverified_from_v5_plan`, the lock
+  reason says plainly that there is no official source, and a test keeps them from
+  ever looking authoritative. 1.0's -1.0472 is left alone: twelve arm-sides ran it.
+
+**Four official diagnostic rules added**, from `diagnose --explain`
+(`setup/cli/commands/diagnose_commands.cpp`). These separate faults that look identical
+from outside, which an operator cannot do unaided:
+
+- `bus_reply_on_unlistened_id` - frames coming back on ids nothing listens for. MST_ID
+  defaults to 0, so an unconfigured motor answers on 0x00. A configuration fault, not
+  a wiring one.
+- `bus_daisy_chain_break` - a contiguous run of silent joints. The joints are
+  daisy-chained, so a break silences everything past it; the operator is pointed at the
+  link between the last answering joint and the first silent one.
+- `bus_silent_scattered` - silent joints that are not contiguous, which reads as
+  individual connectors rather than one break.
+- `bus_nothing_acknowledges` - no ACK at all. Missing termination, a wrong bitrate and
+  an unpowered bus are indistinguishable from the counters, so the entry says so and
+  gives the three measurements that separate them: 60 ohm across CAN_H/CAN_L is
+  correct (120 means one terminator, 40 means three), retry at a lower dbitrate, and
+  `ip -details link show`.
+
+Also recorded: `docs/official/setup-tutorial.md` now lists what official does **not**
+provide for 2.0 - gripper angle, direction, gripper motor, in-hand camera model, camera
+resolution/framerate/format, any camera acceptance criterion, joint limits, TIMEOUT.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 239 passed.
 
 ### 0.23.0-official-docs-and-2-0-zero - 2026-09-21
 

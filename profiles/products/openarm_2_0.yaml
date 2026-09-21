@@ -68,18 +68,27 @@ parameters:
 gripper:
   joint: J8
   close_target_rad: 0.0
-  # 2.0 keys direction off the arm side, not the CN prefix: right 0 -> -90 deg,
-  # left 0 -> +90 deg. This is a different scheme from 1.0, not a different number.
+  # UNSOURCED. Re-checked against official on 2026-09-21 and NOT confirmed: the 2.0
+  # gripper pages state no angle, no direction, no motor and no camera model, and
+  # openarm_can 1.4.0 contains no gripper angle constant anywhere. These values come
+  # from docs/ARM_WORKSTATION_V5_DUAL_VERSION_PLAN.md 2.1, whose own source could not
+  # be traced back. Treat them as a starting hypothesis to measure, not as a spec.
+  #
+  # Getting the sign wrong drives the gripper into its hard stop, so this stays locked
+  # until measured. The 0.14.0 midpoint progress check is the guard if it is wrong.
+  open_target_rad_source: unverified_from_v5_plan
   open_target_rad_by_arm_side:
-    right_arm: -1.5708   # -90 deg
-    left_arm: 1.5708     # +90 deg
+    right_arm: -1.5708   # -90 deg, unconfirmed
+    left_arm: 1.5708     # +90 deg, unconfirmed
   # Official docs publish no pass threshold. Left unset on purpose: an invented number
   # would turn into a PASS/FAIL verdict nobody decided.
   min_travel_rad: null
   hardware_verified: false
   locked_reason: >-
-    ±90° 方向与行程未在 2.0 真机验证，且验收阈值待定（V5 §9-7）。
-    open_target 会作为 --gripper-open-target 驱动电机，方向错会撞机械限位。
+    ±90° 这个数**没有官方出处**：2026-09-21 复核，官方 2.0 夹爪页面不给角度、方向、
+    型号，openarm_can 1.4.0 代码里也没有任何夹爪角度常量。现值来自 V5 方案，来源无法追溯。
+    open_target 会作为 --gripper-open-target 驱动电机，方向错会撞机械限位；
+    且验收阈值待定（V5 §9-7）。必须先实测方向和行程。
 
 zero:
   # The official 2.0 method, from docs/official/setup-tutorial.md section 2: clamp the

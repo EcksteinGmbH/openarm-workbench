@@ -115,3 +115,32 @@ SUBSYSTEM=="video4linux", ATTRS{idVendor}=="2b03", ATTRS{idProduct}=="f682", ATT
 我们的 DCXGW20 / D435i 同样可以按 VID/PID 或序列号固定命名。
 
 出厂**判据**（帧率、丢帧、清晰度）官方没有，必须我们自己定 —— 见 V5 §9-3。
+
+---
+
+## 附：2026-09-21 复核时确认「官方没有给」的内容
+
+复核范围：`docs.openarm.dev` 的 2.0 相关页面 + `openarm_can` 1.4.0 全部代码。
+
+| 我们需要的 | 官方状态 |
+|---|---|
+| 2.0 夹爪开合角度 | **未公布**。`hardware/openarm-2.0/gripper` 只说"结构紧凑、内置相机"，无任何数值 |
+| 2.0 夹爪开合方向（哪个符号是张开） | **未公布** |
+| 2.0 夹爪电机型号 | **未公布** |
+| 2.0 手内相机型号 | **未公布**，只说 "a built-in camera is integrated inside the case" |
+| 相机分辨率/帧率/格式 | **未公布** |
+| 任何相机验收判据 | **没有**。官方相机设置只做到"认得出" |
+| 2.0 关节限位角度 | 未在 general 页给出 |
+| 2.0 的 TIMEOUT 值 | 未公布 |
+
+**结论**：我们注册表里 2.0 夹爪的 ±90°（`open_target_rad_by_arm_side`）**没有一手来源**，
+来自 `ARM_WORKSTATION_V5_DUAL_VERSION_PLAN.md` §2.1，其自身出处已无法追溯。
+已在注册表里标记 `open_target_rad_source: unverified_from_v5_plan` 并保持锁定。
+
+官方确实公布的 2.0 差异（`overview/whats-new-in-2.0`）：
+
+- 电机阵容**和 1.0 相同**：DM-J4310-2EC、DM4340、DM-J8009P
+- 负载：标称 4.1 kg / 峰值 6.0 kg（**含末端执行器自重**）
+- 末端：紧凑夹爪 + 手内相机 + 可换指尖
+- Leader：2.0 的是**无电机的 KER**，不是带电机的主臂
+  → 所以 2.0 不存在 Follower/Leader 的电机差异

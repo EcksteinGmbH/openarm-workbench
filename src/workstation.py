@@ -328,6 +328,48 @@ SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
             "找不到对应记录时，说明这颗电机还没做单电机配置，请先去「单电机测试」完成。",
         ],
     },
+    # The rules below are the official `openarm-can-cli diagnose --explain` heuristics,
+    # from openarm_can 1.4.0 setup/cli/commands/diagnose_commands.cpp. They tell apart
+    # faults that otherwise look identical from the outside, which is exactly what an
+    # operator cannot do unaided.
+    "bus_reply_on_unlistened_id": {
+        "title": "有电机在没人监听的 ID 上应答",
+        "message": "总线上收到了回帧，但 ID 不是工作站在等的那些。电机是活的，只是身份配错了——这是配置问题，不是接线问题。",
+        "solutions": [
+            "MST_ID（RID 7）出厂默认是 0，没配过的电机会在 0x00 上回帧。",
+            "到「02 单电机测试」查看电机参数，核对 ESC_ID（RID 8）和 MST_ID（RID 7）。",
+            "工程师可用官方命令复核：openarm-can-cli -i can0 show_param --arm",
+        ],
+    },
+    "bus_daisy_chain_break": {
+        "title": "某一段之后的关节全部不应答",
+        "message": "前面的关节都回了，从某一个开始全部静默。关节是菊花链串联的，一处断开会让它后面全部失联。",
+        "solutions": [
+            "页面会指出最后一个有应答的关节和第一个没应答的关节。",
+            "重点检查这两个关节之间的那根线和两端接头，不要全臂乱查。",
+            "缺失的电机不会产生任何总线错误——CAN 只要有一个节点听到就会应答，所以只能靠这个缺口看出来。",
+        ],
+    },
+    "bus_silent_scattered": {
+        "title": "不连续的几个关节不应答",
+        "message": "静默的关节不挨在一起，所以不像是菊花链断在一处。",
+        "solutions": [
+            "逐个检查这几个关节自己的接头和电机供电。",
+            "更像是单个接插件或单颗电机的问题，而不是一处断链。",
+        ],
+    },
+    "bus_nothing_acknowledges": {
+        "title": "发得出去但一帧都回不来",
+        "message": "控制器报 ACK 错误或进入 bus-off。以下几种原因从这里看完全一样，工作站不会假装能分辨。",
+        "solutions": [
+            "终端电阻缺失，或只装了一端。",
+            "波特率或数据段波特率和电机对不上。",
+            "总线没供电，或根本没接上。",
+            "区分办法一：断电后量 CAN_H 到 CAN_L，60Ω 正确，120Ω 说明只有一端，40Ω 说明装了三个。",
+            "区分办法二：把 dbitrate 调低重试——低速能通说明线路勉强；只在某一个速率能通说明原来波特率就是错的。",
+            "区分办法三：ip -details link show can0 看实际生效的参数。",
+        ],
+    },
     "bus_no_motor": {
         "title": "CAN 口正常，但总线上没有电机",
         "message": "工作站已经能使用这个 CAN 口，但扫描 ID 0x01–0x20 没有任何电机应答。",

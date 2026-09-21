@@ -101,10 +101,18 @@ class Control_Type(IntEnum):
     Torque_Pos = 4
 
 
+# (PMAX, VMAX, TMAX) per DM_Motor_Type, indexed by the enum above. These are the
+# scaling factors for every packed and unpacked MIT value, so a wrong entry silently
+# mis-scales that motor's readings.
+#
+# Kept identical to openarm_can 1.4.0
+# include/openarm/damiao_motor/dm_motor_constants.hpp MOTOR_LIMIT_PARAMS. DM4340 read
+# 8 here against the official 10; the 16 motors commissioned on 2026-09-17 report
+# VMAX 10.0 from the motor itself, so the official table is right and this was wrong.
 LIMIT_PARAM = [
     [12.5, 30, 10],
     [12.5, 50, 10],
-    [12.5, 8, 28],
+    [12.5, 10, 28],
     [12.5, 10, 28],
     [12.5, 45, 20],
     [12.5, 45, 40],
