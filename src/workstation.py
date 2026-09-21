@@ -74,6 +74,21 @@ OFFICIAL_DEMO_MIN_GRIPPER_TRAVEL_RAD = 0.8
 # commissioning_policy cannot drift apart. J1-J4 used to sit at a superseded 1000
 # in the generic profile only, which would have failed a scan run with the default
 # profile; no production job ever used it (all used the derived arm profiles).
+# CAN timing the official CLI applies, from openarm_can 1.4.0
+# setup/cli/cli.hpp CanConfigureOptions. Kept identical so an interface prepared here
+# and one prepared with the official tool behave the same on the same bus.
+OFFICIAL_CAN_SAMPLE_POINT = "0.75"
+OFFICIAL_CAN_DSAMPLE_POINT = "0.75"
+OFFICIAL_CAN_DSJW = "2"
+OFFICIAL_CAN_RESTART_MS = 0
+
+# Damiao register codes for `can_br`, from openarm_can 1.4.0
+# setup/cli/commands/change_motor_baudrate_commands.cpp BAUDRATE_MAP.
+OFFICIAL_BAUDRATE_CODES = {
+    125000: 0, 200000: 1, 250000: 2, 500000: 3, 1000000: 4, 2000000: 5,
+    2500000: 6, 3200000: 7, 4000000: 8, 5000000: 9, 8000000: 10, 10000000: 11,
+}
+
 WHOLE_ARM_TARGET_TIMEOUT = 5000
 
 # Arm records written before the product registry existed carry no product_version.
@@ -82,7 +97,7 @@ WHOLE_ARM_TARGET_TIMEOUT = 5000
 DEFAULT_PRODUCT_VERSION = "openarm_1_0"
 OFFICIAL_COMMAND_STDOUT_LIMIT = 60000
 OFFICIAL_COMMAND_STDERR_LIMIT = 12000
-OPENARM_SUPPORTED_BAUDRATES = [125000, 200000, 250000, 500000, 1000000, 2000000, 2500000, 3200000, 4000000, 5000000]
+OPENARM_SUPPORTED_BAUDRATES = [125000, 200000, 250000, 500000, 1000000, 2000000, 2500000, 3200000, 4000000, 5000000, 8000000, 10000000]
 ZERO_COMMAND_CONFIRMATIONS = {
     "workspace_clear": "工作空间已清空",
     "estop_ready": "急停/断电手段可用",
@@ -1903,10 +1918,7 @@ class WorkstationService:
                 self._run_system_command(cmd)
             elif tool == "ip_link":
                 self._run_system_command(["ip", "link", "set", name, "down"])
-                cmd = ["ip", "link", "set", name, "type", "can", "bitrate", str(bitrate)]
-                if mode == "canfd":
-                    cmd.extend(["dbitrate", str(dbitrate), "fd", "on"])
-                self._run_system_command(cmd)
+                self._run_system_command(self._can_configure_command(name, mode, bitrate, dbitrate))
             else:
                 raise ValueError("unsupported tool")
 
@@ -1918,6 +1930,37 @@ class WorkstationService:
                 "interfaces": payload["interfaces"],
                 "recommended_channel": payload["recommended_channel"],
             }
+
+    def _can_configure_command(
+        self, name: str, mode: str, bitrate: int, dbitrate: Optional[int]
+    ) -> List[str]:
+        """The `ip link` arguments the official CLI applies, for the same interface.
+
+        Ported from `openarm-can-cli can_configure`
+        (external/openarm_can_1.4.0/setup/cli/commands/can_configure_commands.cpp), so a
+        port this workstation prepared and one the customer prepares with the official
+        tool carry the same timing. The sample point and DSJW are not cosmetic: at
+        5 Mbps data rate, a controller sampling at a different point can fail to agree
+        with the motors at all.
+
+        `restart-ms 0` is also the official default, and deliberate: leaving the
+        controller stopped after a bus-off surfaces the fault instead of hiding it
+        behind a silent recovery.
+        """
+        command = [
+            "ip", "link", "set", name, "type", "can",
+            "bitrate", str(int(bitrate)),
+            "sample-point", OFFICIAL_CAN_SAMPLE_POINT,
+            "restart-ms", str(OFFICIAL_CAN_RESTART_MS),
+        ]
+        if mode == "canfd":
+            command.extend([
+                "dbitrate", str(int(dbitrate or 0)),
+                "fd", "on",
+                "dsample-point", OFFICIAL_CAN_DSAMPLE_POINT,
+                "dsjw", OFFICIAL_CAN_DSJW,
+            ])
+        return command
 
     def can_interface_up(self, name: str) -> Dict[str, Any]:
         with self._lock:

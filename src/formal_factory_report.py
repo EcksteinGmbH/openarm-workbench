@@ -691,9 +691,9 @@ def _write_reportlab_pdf(
 
     sign_rows = [
         ["Role", "Name", "Date", "Conclusion / Signature"],
-        ["Test Engineer", operator_name, datetime.now().strftime("%Y-%m-%d"), "Factory test executed and recorded."],
-        ["Project Lead", lead_name, datetime.now().strftime("%Y-%m-%d"), "Released for factory archive."],
-        ["Whole-Arm Serial", arm_serial, datetime.now().strftime("%Y-%m-%d"), f"Final Conclusion: {final_result}"],
+        ["Test Engineer", operator_name, signature_date, "Factory test executed and recorded."],
+        ["Project Lead", lead_name, signature_date, "Released for factory archive."],
+        ["Whole-Arm Serial", arm_serial, signature_date, f"Final Conclusion: {final_result}"],
     ]
     story.append(Paragraph("12. Sign-Off", styles["SectionFormal"]))
     sign_table = Table([[para(cell, "CellBold" if index == 0 else "Cell") for cell in row] for index, row in enumerate(sign_rows)])
@@ -758,6 +758,14 @@ def _bus_sentence(bus: Dict[str, Any]) -> str:
     return f"classic CAN 2.0 at {_bus_rate_text(bus)} with CAN-FD disabled"
 
 
+def _display_date(report_date: str) -> str:
+    """YYYYMMDD as YYYY-MM-DD, leaving anything unexpected untouched."""
+    text = str(report_date)
+    if len(text) == 8 and text.isdigit():
+        return f"{text[:4]}-{text[4:6]}-{text[6:]}"
+    return text
+
+
 def render_formal_factory_report(
     *,
     root_dir: Path,
@@ -780,6 +788,11 @@ def render_formal_factory_report(
     role = _arm_role(arm)
     profile_id = str(profile.get("profile_id") or arm.get("bom_profile") or "-")
     report_date = str(report_date or datetime.now().strftime("%Y%m%d"))
+    # The signature rows record when the test was executed and released, which is the
+    # report's own date - not whenever the file happened to be rendered. They read the
+    # same for a report produced on the day, and stop a regenerated August report from
+    # claiming it was signed today.
+    signature_date = _display_date(report_date)
     bus = dict(bus or DEFAULT_REPORT_BUS)
     bus_label = _bus_label(bus)
     bus_health_expectation = _bus_health_expectation(bus)
@@ -1381,9 +1394,9 @@ def render_formal_factory_report(
   <table class="signature">
     <thead><tr><th>Role</th><th>Name</th><th>Date</th><th>Conclusion / Signature</th></tr></thead>
     <tbody>
-      <tr><td>Test Engineer</td><td>{escape(operator_name)}</td><td>{datetime.now().strftime('%Y-%m-%d')}</td><td>Factory test executed and recorded.</td></tr>
-      <tr><td>Project Lead</td><td>{escape(lead_name)}</td><td>{datetime.now().strftime('%Y-%m-%d')}</td><td>Released for factory archive.</td></tr>
-      <tr><td>Whole-Arm Serial</td><td>{escape(arm_serial)}</td><td>{datetime.now().strftime('%Y-%m-%d')}</td><td class="{_result_class(final_result)}">Final Conclusion: {escape(final_result)}</td></tr>
+      <tr><td>Test Engineer</td><td>{escape(operator_name)}</td><td>{escape(signature_date)}</td><td>Factory test executed and recorded.</td></tr>
+      <tr><td>Project Lead</td><td>{escape(lead_name)}</td><td>{escape(signature_date)}</td><td>Released for factory archive.</td></tr>
+      <tr><td>Whole-Arm Serial</td><td>{escape(arm_serial)}</td><td>{escape(signature_date)}</td><td class="{_result_class(final_result)}">Final Conclusion: {escape(final_result)}</td></tr>
     </tbody>
   </table>
   </section>

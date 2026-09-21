@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.21.2-step-timeline`
+Current workstation version: `0.22.0-official-1.4.0-alignment`
 
 ## Versioning Rule
 
@@ -13,6 +13,63 @@ Current workstation version: `0.21.2-step-timeline`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.22.0-official-1.4.0-alignment - 2026-09-21
+
+Summary: vendored the official openarm_can 1.4.0 source, aligned CAN interface
+configuration with what its CLI applies, and gave the driver CAN-FD support. Groundwork
+for the 2.0 steps that had a lock but no implementation behind it.
+
+Why: a customer testing with the official tools and this workstation should be
+configuring the same bus the same way. Where the two differ, the difference has to be a
+decision, not an accident.
+
+Changes:
+
+- `external/openarm_can_1.4.0/` holds the official source at 1.4.0 (commit f340d4b).
+  1.2.2 stays exactly where it was: the 1.0 flow calls its four scripts and the shipped
+  arms were tested through them, so it is not being replaced, only joined.
+- CAN interface configuration now applies the parameters the official
+  `openarm-can-cli can_configure` applies - sample point 0.75, data sample point 0.75,
+  DSJW 2, restart-ms 0 - taken from
+  `setup/cli/commands/can_configure_commands.cpp` and `setup/cli/cli.hpp`. The command
+  this workstation builds is now character-for-character what the official CLI builds.
+  The sample point is not cosmetic: at 5 Mbps a controller sampling elsewhere can fail
+  to agree with the motors at all. `restart-ms 0` is deliberate in the official code -
+  leaving the controller stopped after a bus-off surfaces the fault rather than hiding
+  it behind a silent recovery.
+- `DamiaoSocketCANDriver` takes `fd=`, opens the socket with `CAN_RAW_FD_FRAMES` as the
+  official `CANSocket` does, and sends FD frames with the bit rate switch set, matching
+  `create_canfd_frame` in `dm_motor_device.cpp`. Default stays classic, so nothing on
+  the 1.0 path changes. This closes the gap that made every 2.0 step after the FD
+  switch impossible.
+- `OPENARM_SUPPORTED_BAUDRATES` gains 8 Mbps and 10 Mbps, which official supports, and
+  the Damiao register codes from the official `BAUDRATE_MAP` are recorded as
+  `OFFICIAL_BAUDRATE_CODES`. 5 Mbps is code 9, matching the 2.0 registry.
+
+Also fixed, found by the golden report baseline when the day rolled over:
+
+- The report's signature rows - Test Engineer, Project Lead, Whole-Arm Serial - were
+  dated `datetime.now()` rather than the report's own date. Regenerating an August
+  report in September dated its signatures September. They now follow `report_date`,
+  which reads identically for a report produced on the day. `Generated UTC` still
+  records when the file was rendered, which is correct and now tested to stay separate.
+  The baseline moved by exactly those three lines per report; everything else is
+  byte-identical.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 229 passed.
+- The generated `ip link` command was compared against the official C++ string by hand
+  and matches exactly, in both classic and FD form.
+
+Operational Notes:
+
+- Nothing here was run on hardware. The FD driver path in particular has never sent a
+  frame; it is written to match the official library's behaviour, not verified against
+  a motor.
+- The official 1.4.0 CLI is vendored as source but not built. The workstation still
+  calls the 1.2.2 scripts.
 
 ### 0.21.2-step-timeline - 2026-09-20
 

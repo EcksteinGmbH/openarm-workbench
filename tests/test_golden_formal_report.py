@@ -101,3 +101,31 @@ def test_a_2_0_arm_report_states_can_fd_not_can_2_0(monkeypatch, tmp_path):
     assert "All dynamic commands used CAN FD at 1 Mbps arbitration / 5 Mbps data" in html
     assert "CAN 2.0" not in html
     assert "CAN-FD disabled" not in html
+
+
+def test_the_signature_dates_follow_the_report_date(monkeypatch, tmp_path):
+    """A regenerated report must not claim it was signed today.
+
+    The signature rows record when the test was executed and released. They used to
+    read `datetime.now()`, so regenerating an August report in September dated its
+    signatures September - and the golden baseline broke every time the day rolled
+    over, which is how this was found.
+    """
+    monkeypatch.setattr(workstation, "FACTORY_ARMS_DIR", materialise_fixture(tmp_path))
+    monkeypatch.setattr(workstation, "FORMAL_REPORTS_DIR", tmp_path / "out")
+    service = workstation.WorkstationService()
+    result = service.generate_formal_factory_acceptance_report(
+        "OAF26080401", operator="op", project_lead="lead", report_date="20260811"
+    )
+    html = next(Path(result["report_dir"]).glob("*.html")).read_text(encoding="utf-8")
+
+    assert "<td>2026-08-11</td><td>Factory test executed and recorded.</td>" in html
+    assert "<td>2026-08-11</td><td>Released for factory archive.</td>" in html
+    assert "<td>2026-08-11</td>" in html.split("Whole-Arm Serial")[1][:200]
+
+    # The two dates mean different things and must stay separate: Generated UTC is when
+    # the file was rendered, and it is correct for that to be today.
+    import datetime as _dt
+
+    generated = html.split("<td>Generated UTC</td><td>")[1][:10]
+    assert generated == _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d")
