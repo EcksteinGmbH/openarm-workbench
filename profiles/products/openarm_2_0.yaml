@@ -61,8 +61,16 @@ can:
 
 parameters:
   ctrl_mode: MIT
-  # Provisionally the same as 1.0. Official docs do not specify a 2.0 TIMEOUT.
+  # Decided 2026-09-21: the same as 1.0, because official specifies nothing to follow.
+  # openarm_can 1.4.0 describes RID 9 only as {"CAN Timeout", "RW", "uint32",
+  # "[0, 2^32-1]"} (motor_read_param_commands.cpp:51), and no value appears in the
+  # docs, the examples or the issues. The one timeout figure the docs do give -
+  # "1000-2000 microseconds" in api-reference/can - is the host-side recv_all() wait,
+  # not this watchdog, and mistaking the two would set the register a thousand times
+  # too small.
   timeout: 5000
+  timeout_source: same_as_1_0_no_official_value
+  # The value is settled; running a 2.0 arm at it is not.
   timeout_hardware_verified: false
 
 gripper:

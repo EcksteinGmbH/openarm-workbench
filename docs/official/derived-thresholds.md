@@ -95,17 +95,33 @@
 
 ---
 
-## 3. 2.0 TIMEOUT：推不出来，官方无依据
+## 3. 2.0 TIMEOUT：官方无值，决定同 1.0 = 5000
 
-`openarm_can` 1.4.0 对 RID 9 的全部描述（`motor_read_param_commands.cpp:51`）：
+### 官方确实没有
+
+`openarm_can` 1.4.0 对 RID 9 的**全部**描述（`motor_read_param_commands.cpp:51`）：
 
 ```
 {RID::TIMEOUT, {"CAN Timeout", "RW", "uint32", "[0, 2^32-1]"}}
 ```
 
-**只有类型和取值范围，没有推荐值。** 官方文档、示例、issue 里都没有出现过具体数值。
+只有类型和取值范围。代码、文档、示例、issue 全搜过，没有任何推荐数值。
 
-我们现用的 5000 是自己定的（1.0 两臂统一）。2.0 暂时沿用，标记
-`timeout_hardware_verified: false`。
+### 一个容易搞混的陷阱
 
-**这个数只能由你们按实际通信中断容忍度定**，官方帮不上忙。
+官方文档 `api-reference/can/can.mdx` 里确实有一段 timeout 数值：
+
+> Use longer timeout values (**1000-2000 microseconds**) for slow operations like
+> motor enabling and parameter queries. Fast control operations may use shorter
+> timeouts (300-500 microseconds).
+
+**这是 `recv_all()` 的主机端接收等待（微秒），不是电机里的看门狗寄存器（毫秒）。**
+两者名字都叫 timeout，量级差一千倍。**照抄会把寄存器设小一千倍。**
+
+### 决定
+
+**2026-09-21 决定：2.0 沿用 1.0 的 5000。** 理由是官方没有可follow的值，
+而 1.0 的 5000 已经在三台出厂臂上跑过。
+
+注册表记为 `timeout_source: same_as_1_0_no_official_value`，
+并保留 `timeout_hardware_verified: false`——**值定了，但还没在 2.0 真机上跑过。**

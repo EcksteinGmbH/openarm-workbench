@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.30.0-derived-thresholds`
+Current workstation version: `0.30.1-cell-jig-and-timeout`
 
 ## Versioning Rule
 
@@ -13,6 +13,50 @@ Current workstation version: `0.30.0-derived-thresholds`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.30.1-cell-jig-and-timeout - 2026-09-21
+
+Summary: official does describe the calibration jig, and the 2.0 TIMEOUT is now a
+recorded decision rather than a provisional value.
+
+**The Cell calibration jig is documented, and it is part of the Cell.**
+
+`website/docs/hardware/openarm-cell/general.mdx`:
+
+> OpenArm Cell also includes a high-precision dedicated calibration jig that secures
+> the gripper in a fixed position and physically constrains all degrees of freedom to
+> their ideal CAD-defined angles.
+
+It eliminates assembly error and component tolerance by holding the arm at its CAD
+angles, which is why 2.0 zeroing does not move the arm: the pose is guaranteed
+mechanically and the software only records it. The jig ships **with the Cell**, not as
+a separate part, and official provides 3D CAD plus a BOM.
+
+So the open question was never "how is 2.0 zeroed" - it is whether the line buys a
+Cell. Without the jig there is no CAD reference, and `set_zero` records whatever pose
+the arm happened to be in.
+
+Recorded in `docs/official/cell-and-jig.md`, together with the figures official asks
+you to check before installation: roughly **100 kg** and **480 W** per Cell, plus
+clearance along the whole transport route - door widths and heights, lift dimensions.
+
+**2.0 TIMEOUT: decided as 5000, the same as 1.0.**
+
+openarm_can 1.4.0 describes RID 9 only as `{"CAN Timeout", "RW", "uint32",
+"[0, 2^32-1]"}`. No value appears anywhere in the code, the docs, the examples or the
+issues.
+
+There is one timeout figure in the docs and it is a different quantity:
+`api-reference/can` says to use "1000-2000 microseconds" for slow operations. That is
+the host-side `recv_all()` wait, not the motor's watchdog - the two share a name and
+differ by a factor of a thousand, so copying it would set the register a thousand
+times too small. Noted in the registry so nobody makes that substitution later.
+
+The registry now carries `timeout_source: same_as_1_0_no_official_value`, and keeps
+`timeout_hardware_verified: false` - the value is settled, running a 2.0 arm at it is
+not.
+
+Verification: `.venv/bin/python -m pytest -q`, 272 passed.
 
 ### 0.30.0-derived-thresholds - 2026-09-21
 

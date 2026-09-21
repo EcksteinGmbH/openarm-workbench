@@ -420,3 +420,17 @@ def test_the_2_0_gripper_travel_figure_is_a_hypothesis_not_a_criterion(service):
     assert gripper["min_travel_rad"] is None, "still records only, never fails"
     assert gripper["expected_travel_rad_hypothesis"] == 1.20
     assert gripper["expected_travel_source"] == "extrapolated_from_1_0_achievement_ratio"
+
+
+def test_the_2_0_timeout_is_a_recorded_decision_not_a_leftover():
+    """Official specifies no value for RID 9, so ours has to say whose it is.
+
+    The one timeout figure the docs do give - 1000-2000 microseconds in
+    api-reference/can - is the host-side recv_all() wait, not this watchdog. Copying it
+    would set the register a thousand times too small.
+    """
+    parameters = workstation.ProductRegistry().get("openarm_2_0")["parameters"]
+    assert parameters["timeout"] == workstation.WHOLE_ARM_TARGET_TIMEOUT
+    assert parameters["timeout_source"] == "same_as_1_0_no_official_value"
+    # Settled, but not yet run on a 2.0 arm.
+    assert parameters["timeout_hardware_verified"] is False
