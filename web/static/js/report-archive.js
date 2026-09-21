@@ -198,3 +198,76 @@ export async function initReportArchive(refreshJobReport) {
     render();
     await load();
 }
+
+// ---- disk maintenance (engineer tools on tab 03) ---------------------------------
+// Job directories accumulated with no way to clear them but by hand. Cleanup is bulk,
+// so it shows what it would take first and never touches a directory anything cites.
+
+let maintenanceBusy = false;
+
+function renderMaintenance(payload) {
+    const target = document.getElementById('mtResult');
+    if (!target) return;
+    if (!payload) {
+        target.className = 'empty-state';
+        target.textContent = '点「检查未关联任务」看看有多少可以清理';
+        return;
+    }
+    const { unlinked, linked_count: linked, total_size_kb: size } = payload;
+    target.className = '';
+    if (!unlinked.length) {
+        target.innerHTML = `<p class="muted">没有可清理的任务：${linked}个任务全部被记录引用着。</p>`;
+        return;
+    }
+    target.innerHTML = `
+        <p>可清理 <strong>${unlinked.length}</strong> 个任务目录，约 ${size} KB。另有 ${linked} 个被引用，不会动。</p>
+        <table class="smw-table compact">
+            <thead><tr><th>目录</th><th>类型</th><th>状态</th><th>大小</th></tr></thead>
+            <tbody>${unlinked.slice(0, 20).map(job => `
+                <tr><td>${esc(job.directory)}</td><td>${esc(job.job_type || '-')}</td>
+                    <td>${esc(job.status || '-')}</td><td>${job.size_kb} KB</td></tr>`).join('')}
+            </tbody>
+        </table>
+        ${unlinked.length > 20 ? `<p class="muted">…另有 ${unlinked.length - 20} 个未列出</p>` : ''}
+        <div class="smw-actions">
+            <button class="btn btn-warning" id="mtArchiveBtn" ${maintenanceBusy ? 'disabled' : ''}>
+                ${maintenanceBusy ? '正在归档…' : `归档这 ${unlinked.length} 个任务`}
+            </button>
+            <span class="muted">移动到 artifacts/_archive_&lt;日期&gt;/jobs/，不会删除。</span>
+        </div>`;
+    document.getElementById('mtArchiveBtn')?.addEventListener('click', archiveUnlinked);
+}
+
+async function scanUnlinked() {
+    try {
+        renderMaintenance(await api('/api/maintenance/unlinked-jobs'));
+    } catch (error) {
+        addLog(`磁盘维护：检查失败 ${error.message}`, 'error', 'report');
+    }
+}
+
+function archiveUnlinked() {
+    showModal(
+        '归档未关联任务？',
+        '这些任务目录没有被任何机械臂档案或电机记录引用。它们会移动到 artifacts/_archive_<日期>/jobs/，不会删除，需要时可以移回来。',
+        async () => {
+            maintenanceBusy = true;
+            try {
+                const payload = await api('/api/maintenance/unlinked-jobs/archive', {
+                    method: 'POST',
+                    body: JSON.stringify({ confirmed: true })
+                });
+                addLog(`磁盘维护：已归档 ${payload.moved_count} 个任务到 ${payload.moved_to}`, 'success', 'report');
+            } catch (error) {
+                addLog(`磁盘维护：归档失败 ${error.message}`, 'error', 'report');
+            } finally {
+                maintenanceBusy = false;
+                await scanUnlinked();
+            }
+        }
+    );
+}
+
+export function initDiskMaintenance() {
+    document.getElementById('mtScanBtn')?.addEventListener('click', scanUnlinked);
+}

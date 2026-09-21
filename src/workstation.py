@@ -298,6 +298,20 @@ SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
             "如果只是不想继续测这台，放着不管即可，它不影响别的机械臂。",
         ],
     },
+    "motor_record_not_found": {
+        "title": "找不到这条电机记录",
+        "message": "单电机记录里没有这个编号。",
+        "solutions": ["点「刷新」重新读取列表。", "确认编号没有复制错。"],
+    },
+    "motor_record_in_use": {
+        "title": "这条记录正在被机械臂使用",
+        "message": "它已经挂在某台机械臂的关节上，是那台臂报告里该关节的电机凭证。",
+        "solutions": [
+            "到「03 整臂测试 → 关节电机」，在对应关节上点「取消挂载」。",
+            "取消挂载后再回来撤回这条记录。",
+            "如果那台臂已经出过报告，请先确认报告是否需要一并撤回。",
+        ],
+    },
     "report_not_found": {
         "title": "找不到这份报告",
         "message": "这台机械臂的档案里没有这个报告编号。",
@@ -6444,6 +6458,130 @@ class WorkstationService:
                 "arms": arms,
                 "total_reports": sum(len(item["reports"]) for item in arms),
             }
+
+    def _referenced_job_ids(self) -> set:
+        """Every job id any record points at, from all sources.
+
+        A job directory is evidence the moment something cites it, and the citations
+        live in two places: an arm's linked jobs, and the job a single-motor record was
+        produced by. Missing either would archive a directory a report still resolves.
+        """
+        referenced = set()
+        FACTORY_ARMS_DIR.mkdir(parents=True, exist_ok=True)
+        for path in FACTORY_ARMS_DIR.glob("*.json"):
+            arm = _load_json(path, {})
+            for field in ("linked_jobs", "zero_calibration_records", "demo_validation_records",
+                          "evidence_records", "command_run_history", "workflow_history"):
+                for item in arm.get(field) or []:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("job_id"):
+                        referenced.add(str(item["job_id"]))
+                    if item.get("artifact_dir"):
+                        referenced.add(Path(str(item["artifact_dir"])).name.rsplit("_", 1)[-1])
+        for record in self._load_single_motor_records():
+            if record.get("job_id"):
+                referenced.add(str(record["job_id"]))
+            if record.get("job_artifact_dir"):
+                referenced.add(Path(str(record["job_artifact_dir"])).name.rsplit("_", 1)[-1])
+        return referenced
+
+    def list_unlinked_jobs(self) -> Dict[str, Any]:
+        """Job directories nothing points at. Read-only: shows what cleanup would take."""
+        with self._lock:
+            ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
+            referenced = self._referenced_job_ids()
+            unlinked, linked = [], 0
+            for directory in sorted(ARTIFACTS_DIR.iterdir()):
+                if not directory.is_dir():
+                    continue
+                job_id = directory.name.rsplit("_", 1)[-1]
+                if job_id in referenced:
+                    linked += 1
+                    continue
+                payload = _load_json(directory / "job.json", {})
+                job = payload.get("job") or {}
+                unlinked.append(
+                    {
+                        "job_id": job_id,
+                        "directory": directory.name,
+                        "job_type": job.get("job_type"),
+                        "status": job.get("status"),
+                        "started_at": job.get("started_at"),
+                        "size_kb": round(sum(f.stat().st_size for f in directory.rglob("*") if f.is_file()) / 1024),
+                    }
+                )
+            unlinked.sort(key=lambda item: str(item.get("started_at") or ""))
+            return {
+                "ok": True,
+                "unlinked": unlinked,
+                "linked_count": linked,
+                "total_size_kb": sum(item["size_kb"] for item in unlinked),
+            }
+
+    def archive_unlinked_jobs(self, confirmed: bool = False) -> Dict[str, Any]:
+        """Move every unlinked job directory aside. Linked ones are never touched."""
+        with self._lock:
+            preview = self.list_unlinked_jobs()
+            if not confirmed:
+                return {**preview, "ok": False, "requires_confirmation": True}
+
+            target_root = ARTIFACTS_DIR.parent / f"_archive_{_now_iso()[:10].replace('-', '')}" / "jobs"
+            target_root.mkdir(parents=True, exist_ok=True)
+            # Recomputed here rather than trusted from the preview: a job may have been
+            # linked between the two calls, and moving it then would break a report.
+            referenced = self._referenced_job_ids()
+            moved = []
+            for item in preview["unlinked"]:
+                if item["job_id"] in referenced:
+                    continue
+                source = ARTIFACTS_DIR / item["directory"]
+                if source.is_dir():
+                    source.replace(target_root / source.name)
+                    moved.append(item["directory"])
+            return {
+                "ok": True,
+                "moved": moved,
+                "moved_count": len(moved),
+                "moved_to": str(target_root),
+                "kept_count": preview["linked_count"],
+            }
+
+    def withdraw_single_motor_record(self, record_id: str) -> Dict[str, Any]:
+        """Take a single-motor record out of use - a retest, or a bad run.
+
+        Refused while any arm still cites it: that record is the evidence behind a
+        joint in that arm's report. Detach it there first. The file moves to
+        `withdrawn_single_motor_records/` and is never erased.
+        """
+        with self._lock:
+            records_dir = self._single_motor_records_dir()
+            match = None
+            for path in records_dir.glob("*.json"):
+                record = _load_json(path, {})
+                if record.get("record_id") == record_id:
+                    match = (path, record)
+                    break
+            if match is None:
+                return self._wizard_problem("motor_record_not_found", f"record_id={record_id}")
+
+            FACTORY_ARMS_DIR.mkdir(parents=True, exist_ok=True)
+            for arm_path in FACTORY_ARMS_DIR.glob("*.json"):
+                arm = _load_json(arm_path, {})
+                for item in arm.get("single_motor_records") or []:
+                    if item.get("record_id") == record_id:
+                        return self._wizard_problem(
+                            "motor_record_in_use",
+                            f"{record_id} 已挂载在 {arm.get('arm_cn')} 的 {item.get('joint_name')}",
+                        )
+
+            path, record = match
+            target_dir = FACTORY_DIR / "withdrawn_single_motor_records"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            record["withdrawn_at"] = _now_iso()
+            _atomic_json(target_dir / path.name, record)
+            path.unlink(missing_ok=True)
+            return {"ok": True, "record_id": record_id, "joint_name": record.get("joint_name"), "moved_to": str(target_dir)}
 
     def delete_factory_report(self, arm_cn: str, report_id: str) -> Dict[str, Any]:
         """Withdraw a factory report that should not have been issued.

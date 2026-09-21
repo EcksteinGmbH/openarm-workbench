@@ -551,7 +551,7 @@ function renderRecords() {
     }
     container.innerHTML = `
         <table class="smw-table compact">
-            <thead><tr><th>时间</th><th>关节</th><th>型号</th><th>产品</th><th>ESC / MST</th><th>模式</th><th>波特率</th><th>TIMEOUT</th><th>结果</th></tr></thead>
+            <thead><tr><th>时间</th><th>关节</th><th>型号</th><th>产品</th><th>ESC / MST</th><th>模式</th><th>波特率</th><th>TIMEOUT</th><th>结果</th><th></th></tr></thead>
             <tbody>
                 ${wizard.records.slice(0, 12).map(record => {
                     const verified = verifiedValues(record);
@@ -566,6 +566,7 @@ function renderRecords() {
                         <td>${esc(verified.canBr)}</td>
                         <td>${esc(record.timeout_recorded ?? '-')}</td>
                         <td><span class="smw-badge ${record.result === 'PASS' ? 'pass' : 'fail'}">${esc(record.result)}</span></td>
+                        <td><button class="btn btn-ghost slim" data-withdraw="${esc(record.record_id)}" ${wizard.busy ? 'disabled' : ''}>撤回</button></td>
                     </tr>`;
                 }).join('')}
             </tbody>
@@ -704,6 +705,21 @@ function restart() {
     render();
 }
 
+function withdrawRecord(recordId) {
+    const record = wizard.records.find(item => item.record_id === recordId);
+    // A retested or bad motor leaves a record that is no longer the truth about that
+    // joint. Withdrawing moves it aside; it is still a hardware measurement, and a
+    // record an arm is using is refused with the way to free it.
+    showModal(
+        '撤回这条电机记录？',
+        `${record?.joint_name || recordId} 的记录会移出列表，文件保留在 withdrawn_single_motor_records/ 备查。如果它已挂在某台机械臂上，会提示你先去取消挂载。`,
+        () => run('正在撤回…', () => api(`/api/single-motor/records/${encodeURIComponent(recordId)}`, { method: 'DELETE' }), async () => {
+            addLog(`单电机记录已撤回：${record?.joint_name || recordId}`, 'info', 'wizard');
+            await refreshRecords();
+        })
+    );
+}
+
 async function refreshRecords() {
     try {
         const payload = await api('/api/single-motor/records?limit=50');
@@ -759,6 +775,11 @@ function handleClick(event) {
             wizard.selection.joint = 'J1';
         }
         render();
+        return;
+    }
+    const withdrawButton = event.target.closest('[data-withdraw]');
+    if (withdrawButton && !withdrawButton.disabled) {
+        withdrawRecord(withdrawButton.dataset.withdraw);
         return;
     }
     const actionButton = event.target.closest('[data-action]');

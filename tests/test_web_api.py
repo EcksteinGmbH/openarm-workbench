@@ -534,10 +534,13 @@ def test_the_beginner_path_asks_for_confirmation_only_before_irreversible_acts(c
         source = client.get(f"/static/js/{module}.js").data.decode()
         return len(re.findall(r"showModal\(", source)) + len(re.findall(r"openDeleteDialog\(\)\s*\{", source))
 
-    assert confirmations("link-wizard") == 0, "connecting writes nothing and should never interrupt"
-    assert confirmations("single-motor-wizard") == 1, "one: writing parameters to flash"
-    assert confirmations("arm-wizard") == 1, "one: deleting an arm archive"
-    assert confirmations("report-archive") == 2, "two: issuing a report, and withdrawing one"
+    # The budget, and what each one buys. A dialog costs an interruption, so it is
+    # spent only where the act is irreversible, destructive, or affects many things at
+    # once - never on a step that merely reads.
+    assert confirmations("link-wizard") == 0, "connecting writes nothing and never interrupts"
+    assert confirmations("single-motor-wizard") == 2, "writing to flash; withdrawing a record"
+    assert confirmations("arm-wizard") == 1, "deleting an arm archive"
+    assert confirmations("report-archive") == 3, "issuing a report; withdrawing one; bulk archiving jobs"
 
     # And nothing interrupts a step that only reads.
     arm = client.get("/static/js/arm-wizard.js").data.decode()
@@ -554,3 +557,24 @@ def test_every_destructive_action_is_reachable_from_the_page(client):
 
     report = client.get("/static/js/report-archive.js").data.decode()
     assert "data-ra-withdraw" in report, "a wrongly issued report must be withdrawable"
+
+
+def test_disk_maintenance_shows_before_it_moves(client):
+    # Bulk actions get to be seen first: the scan is read-only and the archive call
+    # refuses without explicit confirmation.
+    preview = _json(client.get("/api/maintenance/unlinked-jobs"))
+    assert preview["ok"] is True and "unlinked" in preview and "linked_count" in preview
+
+    refused = _json(client.post("/api/maintenance/unlinked-jobs/archive", json={}))
+    assert refused["requires_confirmation"] is True
+
+    page = client.get("/").data.decode()
+    # An engineer tool, not something an operator trips over on the wizard page.
+    assert 'id="mtScanBtn"' in page and 'id="armAdvancedTools"' in page
+    assert page.index('id="armAdvancedTools"') < page.index('id="mtScanBtn"')
+
+
+def test_a_single_motor_record_can_be_withdrawn_from_its_own_page(client):
+    source = client.get("/static/js/single-motor-wizard.js").data.decode()
+    assert "data-withdraw" in source
+    assert "/api/single-motor/records/" in source

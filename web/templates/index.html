@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpenARM 机械臂测试工作台</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=20260921-ui-pass">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=20260921-undo">
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
 </head>
 <body data-primary-flow="connectTab">
@@ -687,6 +687,18 @@
                         <strong>高级工具（工程师使用）</strong>
                         <span class="muted">整臂静态验收、问题诊断、官方动态测试与出厂放行的完整工程界面；操作员请使用整臂向导。</span>
                         <button class="btn btn-primary slim" id="awBackBtn" type="button">返回整臂向导</button>
+                    </div>
+                    <div class="panel">
+                        <div class="panel-body">
+                            <div class="panel-heading">
+                                <div>
+                                    <h2>磁盘维护</h2>
+                                    <p class="muted">清理没有任何记录引用的任务目录。被引用的任务是证据，永远不会被动。</p>
+                                </div>
+                                <button class="btn btn-secondary slim" id="mtScanBtn" type="button">检查未关联任务</button>
+                            </div>
+                            <div id="mtResult" class="empty-state">点「检查未关联任务」看看有多少可以清理</div>
+                        </div>
                     </div>
                     <div class="panel split-panel wide-side">
                         <div class="panel-body">
@@ -1394,6 +1406,6 @@
         </div>
     </div>
 
-    <script type="module" src="{{ url_for('static', filename='js/main.js') }}?v=20260921-ui-pass"></script>
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}?v=20260921-undo"></script>
 </body>
 </html>

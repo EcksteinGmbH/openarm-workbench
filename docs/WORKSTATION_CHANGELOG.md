@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.27.0-undo-paths`
+Current workstation version: `0.28.0-cleanup-paths`
 
 ## Versioning Rule
 
@@ -13,6 +13,52 @@ Current workstation version: `0.27.0-undo-paths`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.28.0-cleanup-paths - 2026-09-21
+
+Summary: the last two things that accumulated with no way to clear them - job
+directories and single-motor records - can now be cleaned up, with the guard that
+anything cited by a record is evidence and is never touched.
+
+Job directories:
+
+- `list_unlinked_jobs()` is read-only and reports what cleanup would take;
+  `archive_unlinked_jobs()` refuses without explicit confirmation. A bulk action should
+  be seen before it runs.
+- A job counts as cited from two places: an arm's linked jobs, workflow and command
+  history, and the job a single-motor record was produced by. Missing the second would
+  archive a directory a report still resolves, so both are scanned and a test asserts
+  the second source is covered.
+- The set is recomputed at the moment of moving rather than trusted from the preview:
+  a job may have been linked between the two calls.
+- Directories move to `artifacts/_archive_<date>/jobs/`. On this machine the scan
+  reports 0 to clean and 29 cited, which matches the 29 kept by hand in 0.12.0.
+- The control lives under the engineer tools on tab 03, not on a wizard page.
+
+Single-motor records:
+
+- `withdraw_single_motor_record()` takes a record out of use - a retest, or a bad run -
+  and moves it to `withdrawn_single_motor_records/`. It is still a hardware
+  measurement and is never erased.
+- Refused while any arm cites it, because that record is the evidence behind a joint in
+  that arm's report. The refusal names the joint and the arm and says to detach it
+  there first, which is now possible (0.27.0).
+- The withdraw button sits in the records table on tab 02, where the records are made.
+
+Dialog budget, updated and stated: 0 on tab 01, 2 on tab 02 (writing to flash,
+withdrawing a record), 1 on tab 03 (deleting an archive), 3 on tab 04 (issuing a
+report, withdrawing one, bulk archiving jobs). A dialog costs an interruption, so it
+is spent only where the act is irreversible, destructive, or affects many things at
+once - never on a step that only reads.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 267 passed, including that a cited job survives
+  cleanup, that a job cited only by a single-motor record is kept, and that a record an
+  arm uses cannot be withdrawn until it is detached.
+- Checked live against the production directories: 0 unlinked jobs of 29, archiving
+  refused without confirmation, withdrawing an attached record refused with the fix
+  named, and all 16 commissioned records intact.
 
 ### 0.27.0-undo-paths - 2026-09-21
 

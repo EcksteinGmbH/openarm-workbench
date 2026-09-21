@@ -615,3 +615,81 @@ def test_everything_the_wizard_creates_can_be_undone(service_with_records):
     ):
         for name in pair:
             assert hasattr(service_with_records, name), name
+
+
+# ---- cleaning up what accumulates -------------------------------------------------
+
+
+def test_a_job_nothing_points_at_can_be_archived(service):
+    """Job directories accumulated with no way to clear them but by hand.
+
+    Cleanup is bulk, so the guard is what matters: a directory anything cites is
+    evidence and must survive.
+    """
+    session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
+    loose = service.create_job("arm_acceptance", session["device_session_id"], "openarm_v1")
+    cited = service.create_job("arm_acceptance", session["device_session_id"], "openarm_v1")
+    service.bind_arm_identity("OAF26092160")
+    service.attach_job_to_arm("OAF26092160", cited["job_id"])
+
+    preview = service.list_unlinked_jobs()
+    ids = [item["job_id"] for item in preview["unlinked"]]
+    assert loose["job_id"] in ids
+    assert cited["job_id"] not in ids, "a cited job is evidence"
+    assert preview["linked_count"] == 1
+
+    def job_dir(job_id):
+        return next(d for d in workstation.ARTIFACTS_DIR.iterdir() if d.name.endswith(job_id))
+
+    loose_dir, cited_dir = job_dir(loose["job_id"]), job_dir(cited["job_id"])
+
+    # Without confirmation it only reports.
+    assert service.archive_unlinked_jobs()["requires_confirmation"] is True
+    assert loose_dir.exists()
+
+    result = service.archive_unlinked_jobs(confirmed=True)
+    assert result["ok"] is True and result["moved_count"] == 1
+    assert not loose_dir.exists()
+    assert cited_dir.exists(), "the cited job must stay"
+    # Moved, not destroyed.
+    assert (Path(result["moved_to"]) / loose_dir.name).exists()
+
+
+def test_a_job_cited_only_by_a_single_motor_record_is_kept(service_with_records):
+    # The other citation source. Missing it would archive a directory a report resolves.
+    referenced = service_with_records._referenced_job_ids()
+    job_ids = {r["job_id"] for r in service_with_records._load_single_motor_records() if r.get("job_id")}
+    assert job_ids, "expected the commissioned motors to cite their jobs"
+    assert job_ids <= referenced
+
+
+def test_a_motor_record_can_be_withdrawn_when_no_arm_uses_it(service_with_records):
+    records = service_with_records._load_single_motor_records()
+    target = records[0]
+    payload = service_with_records.withdraw_single_motor_record(target["record_id"])
+
+    assert payload["ok"] is True and payload["joint_name"] == target["joint_name"]
+    remaining = {r["record_id"] for r in service_with_records._load_single_motor_records()}
+    assert target["record_id"] not in remaining
+    # Moved, not destroyed: it is still a hardware measurement.
+    moved = workstation.FACTORY_DIR / "withdrawn_single_motor_records"
+    assert any(json.loads(p.read_text(encoding="utf-8"))["record_id"] == target["record_id"] for p in moved.glob("*.json"))
+
+
+def test_a_motor_record_an_arm_uses_cannot_be_withdrawn(service_with_records):
+    """That record is the evidence behind a joint in that arm's report."""
+    service_with_records.arm_wizard_create("OAF26092161", product_version="openarm_2_0")
+    record_id = service_with_records.arm_wizard_available_motor_records("OAF26092161")["records"][0]["record_id"]
+    service_with_records.arm_wizard_attach_motor_record("OAF26092161", record_id)
+
+    payload = service_with_records.withdraw_single_motor_record(record_id)
+    assert payload["problem"]["code"] == "motor_record_in_use"
+    assert "OAF26092161" in payload["problem"]["detail"]
+    assert any("取消挂载" in item for item in payload["problem"]["solutions"])
+    # Detaching clears the way, and the record is still there to withdraw.
+    service_with_records.arm_wizard_detach_motor_record("OAF26092161", record_id)
+    assert service_with_records.withdraw_single_motor_record(record_id)["ok"] is True
+
+
+def test_withdrawing_an_unknown_record_says_so(service):
+    assert service.withdraw_single_motor_record("smr_nope")["problem"]["code"] == "motor_record_not_found"
