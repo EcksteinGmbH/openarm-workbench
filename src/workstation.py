@@ -6080,8 +6080,13 @@ class WorkstationService:
             "id": "zero",
             "group": "dynamic",
             "label": "零位校准",
-            "purpose": "官方动态零位，保存整臂零点，随后恢复初始姿态。机械臂会运动。",
+            "purpose": "保存整臂零点。做法按产品版本不同，页面会说明这一次会不会动。",
             "motion": True,
+            # 1.0 searches the limits, which moves the arm. 2.0 clamps it in the Cell
+            # jig and writes the current position as zero, which does not. Telling the
+            # operator "the arm will move" when it will not is how a warning stops
+            # being read, so the flag follows the product.
+            "motion_from": "zero",
             "lock_section": "zero",
         },
         {
@@ -6126,17 +6131,25 @@ class WorkstationService:
     ]
 
     def _arm_wizard_step_view(self, step: Dict[str, Any], product_version: str) -> Dict[str, Any]:
-        """One step, resolved for a product: applicable, and locked or not."""
+        """One step, resolved for a product: applicable, locked or not, and whether it moves."""
         applies = product_version in step.get("products", [product_version])
         lock_reason = None
         if applies and step.get("lock_section"):
             lock_reason = self.product_registry.lock_reasons(product_version).get(step["lock_section"])
+
+        motion = bool(step.get("motion"))
+        section = step.get("motion_from")
+        if section:
+            node = self.product_registry.get(product_version).get(section)
+            if isinstance(node, dict) and node.get("motion") is not None:
+                motion = bool(node["motion"])
+
         return {
             "id": step["id"],
             "label": step["label"],
             "group": step["group"],
             "purpose": step["purpose"],
-            "motion": bool(step.get("motion")),
+            "motion": motion,
             "writes": bool(step.get("writes")),
             "applies": applies,
             "locked": bool(lock_reason),

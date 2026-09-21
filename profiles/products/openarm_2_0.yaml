@@ -82,11 +82,25 @@ gripper:
     open_target 会作为 --gripper-open-target 驱动电机，方向错会撞机械限位。
 
 zero:
-  # Cell jig `set_zero --arm` (no motion) vs limit search `--robot-version v2`
-  # (motion). Which one applies depends on whether a calibration jig exists - V5 §9-1.
-  method: null
+  # The official 2.0 method, from docs/official/setup-tutorial.md section 2: clamp the
+  # arm in the calibration jig so no joint can move, then write the current position as
+  # zero. No motion command is sent - the pose is guaranteed mechanically, not driven.
+  # This is a different method from 1.0's limit search, which does move the arm.
+  method: cell_jig_set_zero
+  command: openarm-can-cli
+  subcommand: set_zero
+  # Official uses `--arm` (IDs 1-8) with the left arm on can1. Plan A puts our left arm
+  # at 0x09-0x10 on the same can0, and `--id` overrides `--arm`
+  # (openarm_cli.cpp:245), so each side names its own IDs.
+  target_ids_by_arm_side:
+    right_arm: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+    left_arm: [0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]
+  motion: false
+  requires_jig: true
   hardware_verified: false
-  locked_reason: 2.0 零位方式待定（是否有 Cell 校准夹具），见 V5 §9-1。
+  locked_reason: >-
+    方式已按官方确定（夹具固定 + 原地清零，不运动），但尚未在 2.0 真机执行过，
+    且需确认产线有 Cell 校准夹具（HNTP6-6 螺母 + M6 螺丝）。
 
 cameras:
   - id: gripper

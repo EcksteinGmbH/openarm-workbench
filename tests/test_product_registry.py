@@ -230,3 +230,60 @@ def test_config_exposes_the_product_versions(service):
     assert by_version["openarm_2_0"]["hardware_verified"] is False
     assert by_version["openarm_2_0"]["operation_can_mode"] == "canfd"
     assert by_version["openarm_2_0"]["locked_sections"]
+
+
+def test_the_2_0_zero_method_matches_the_official_procedure():
+    """Official 2.0 zeroing is the jig plus set_zero, and it does not move the arm.
+
+    From docs/official/setup-tutorial.md, quoting the official tutorial:
+    `openarm-can-cli -i can0 set_zero --arm`, run with the arm clamped in the
+    calibration jig. The implementation in openarm_can 1.4.0
+    (setup/cli/commands/zero_position_commands.cpp) sends only a disable frame and a
+    set-zero frame per motor - no motion command at all.
+    """
+    zero = workstation.ProductRegistry().get("openarm_2_0")["zero"]
+    assert zero["method"] == "cell_jig_set_zero"
+    assert zero["subcommand"] == "set_zero"
+    assert zero["motion"] is False
+    assert zero["requires_jig"] is True
+
+
+def test_the_zero_target_ids_follow_plan_a_not_the_official_default():
+    # Official runs `--arm` (IDs 1-8) with the left arm on can1. Plan A puts our left
+    # arm at 0x09-0x10 on the same can0, and `--id` overrides `--arm`, so each side has
+    # to name its own IDs. Using `--arm` for our left arm would zero the right one.
+    by_side = workstation.ProductRegistry().get("openarm_2_0")["zero"]["target_ids_by_arm_side"]
+    assert by_side["right_arm"] == list(range(0x01, 0x09))
+    assert by_side["left_arm"] == list(range(0x09, 0x11))
+
+
+def test_zeroing_moves_a_1_0_arm_but_not_a_2_0_one(service):
+    # 1.0 searches the mechanical limits, which drives the joints. 2.0 is held by the
+    # jig. Telling an operator "the arm will move" when it will not is how a warning
+    # stops being read.
+    def zero_step(product_version):
+        steps = service.arm_wizard_options(product_version)["steps"]
+        return next(step for step in steps if step["id"] == "zero")
+
+    assert zero_step("openarm_1_0")["motion"] is True
+    assert zero_step("openarm_2_0")["motion"] is False
+    # Everything else keeps the flag its step declares.
+    assert zero_step("openarm_1_0")["group"] == zero_step("openarm_2_0")["group"] == "dynamic"
+
+
+def test_the_official_reference_is_kept_in_the_repo():
+    """The camera answer lives only in the docs, not in openarm_can.
+
+    Grepping the code package alone produced the wrong conclusion once already, so the
+    pages the workstation's behaviour depends on are stored under docs/official/ with
+    their URL and fetch date.
+    """
+    from pathlib import Path
+
+    official = Path(__file__).resolve().parent.parent / "docs" / "official"
+    pages = {path.name for path in official.glob("*.md")} - {"README.md"}
+    assert pages, "no official reference stored"
+    for page in pages:
+        text = (official / page).read_text(encoding="utf-8")
+        assert "https://docs.openarm.dev/" in text, f"{page} has no source URL"
+        assert "抓取日期" in text, f"{page} has no fetch date"

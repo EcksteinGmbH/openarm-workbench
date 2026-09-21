@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.22.0-official-1.4.0-alignment`
+Current workstation version: `0.23.0-official-docs-and-2-0-zero`
 
 ## Versioning Rule
 
@@ -13,6 +13,57 @@ Current workstation version: `0.22.0-official-1.4.0-alignment`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.23.0-official-docs-and-2-0-zero - 2026-09-21
+
+Summary: the official documentation is now kept in the repo alongside the official
+code, and reading it settled the 2.0 zero method, which was down as an open decision.
+
+Why this was needed: official content lives in two places - the `openarm_can` package
+and `docs.openarm.dev` - and only the code was vendored. Grepping the code alone
+produced the conclusion "official has nothing about cameras", which is wrong: the setup
+tutorial carries a complete camera identification scheme. An answer built from half the
+sources is worth less than no answer.
+
+Changes:
+
+- `docs/official/` holds extracts of the pages the workstation's behaviour depends on,
+  each with its source URL and fetch date, plus the rule that a superseded version is
+  kept rather than overwritten - a shipped arm was tested against the procedure as it
+  read then. Two pages so far: the 2.0 setup tutorial and the Cell calibration workflow.
+- **The 2.0 zero method is no longer an open question.** Official is: clamp the arm in
+  the calibration jig until no joint can move, then `openarm-can-cli -i can0 set_zero
+  --arm`. The implementation sends a disable frame and a set-zero frame per motor and
+  nothing else, over classic CAN - **the arm is not driven at all**. The registry now
+  records the method, the subcommand and the per-side target IDs.
+- Plan A needs `--id` rather than `--arm` for our left arm: official runs the left arm
+  on can1 at IDs 1-8, ours sits at 0x09-0x10 on the same can0, and `--id` overrides
+  `--arm` (openarm_cli.cpp:245). Using `--arm` for our left arm would zero the right
+  one. The IDs are recorded per side so this cannot be got wrong by hand.
+- A wizard step can take its `motion` flag from the product registry. 零位校准 now reads
+  "moves the arm" for 1.0, which searches the limits, and "does not" for 2.0, which is
+  held by the jig. Telling an operator the arm will move when it will not is how a
+  warning stops being read.
+
+What the official docs do **not** give, confirmed by reading them:
+
+- No camera resolution, framerate or format, and no acceptance criteria of any kind.
+  Official camera setup stops at identification: udev symlinks, Arducams matched by a
+  serial flashed with ArducamUvcConfigUpdateTool, the ZED by VID 2b03 / PID f682. The
+  identification pattern is worth copying for our DCXGW20 and D435i; the pass/fail
+  numbers still have to come from us (V5 §9-3).
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 233 passed, including that the 2.0 zero entry
+  matches the official procedure, that the target IDs follow Plan A rather than the
+  official default, that zeroing moves a 1.0 arm and not a 2.0 one, and that every
+  stored official page carries its URL and fetch date.
+
+Operational Notes:
+
+- The 2.0 zero step stays locked: the method is settled, but it has never been run on a
+  2.0 arm and the line needs the jig (HNTP6-6 nuts, M6 screws) before it can be.
 
 ### 0.22.0-official-1.4.0-alignment - 2026-09-21
 
