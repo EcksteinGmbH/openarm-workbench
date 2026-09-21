@@ -114,10 +114,14 @@ function renderPicker() {
             <div class="aw-group-title">正在测试的机械臂</div>
             <div class="aw-arm-list">${inProgress.map(item => armCard(item)).join('')}</div>`
         : (arm.creating ? '' : '<p class="muted aw-hint">目前没有正在测试的机械臂。</p>')}
-        ${arm.status?.deletable ? `
+        ${arm.status ? `
             <div class="aw-delete-row">
-                <span class="muted">${esc(arm.armCn)} 还没有任何测试记录。版本或编号填错了可以删掉重建。</span>
-                <button class="btn btn-secondary slim" data-delete-arm="1" ${arm.busy ? 'disabled' : ''}>删除这台机械臂</button>
+                <span class="muted">${arm.status.deletable
+                    ? `${esc(arm.armCn)} 还没有任何测试记录。版本或编号填错了可以删掉重建。`
+                    : `${esc(arm.armCn)} 上已有 ${arm.status.evidence_count} 条记录。建错了可以强制删除，档案会完整保留备查。`}</span>
+                <button class="btn btn-secondary slim" data-delete-arm="1" ${arm.busy ? 'disabled' : ''}>
+                    ${arm.status.deletable ? '删除这台机械臂' : '强制删除'}
+                </button>
             </div>` : ''}
         ${arm.completed.length ? `
             <button class="aw-toggle" data-toggle-completed="1">
@@ -277,22 +281,17 @@ function renderMotors() {
     const attached = arm.status.motor_records || [];
     const available = (arm.records?.records) || [];
 
-    // Say where these come from. "电机记录" alone told nobody that these are the
-    // motors configured at the single-motor station, or why they matter here.
+    // Two lines: where the records come from, and that attaching is safe. The rest of
+    // the explanation belongs in the manual - the page only has to stop a mistake.
     const intro = `
         <div class="aw-motors-intro">
-            <h4>这台臂用的是哪 16 颗电机</h4>
-            <p>装配之前，每颗电机都在「<strong>02 单电机测试</strong>」里单独配过 ID 和参数，
-            工作站为每颗存了一条记录。在这里把记录挂到对应关节上，就等于说明
-            「这台臂的 R-J1 用的是那一颗」。</p>
-            <p>出厂报告会引用这些记录，作为每个关节的电机配置凭证。<strong>挂载只是建立关联，
-            不会给电机发任何指令。</strong></p>
+            <p>把「<strong>02 单电机测试</strong>」配好的电机挂到对应关节，出厂报告会引用它们。</p>
+            <p><strong>挂载只是建立关联，不会给电机发任何指令。</strong>挂错了点「取消挂载」即可。</p>
         </div>`;
 
     if (!attached.length && !available.length) {
         target.innerHTML = `${intro}
-            <p class="muted">还没有属于这台臂的单电机记录。先到「02 单电机测试」把电机配好，
-            记录会自动出现在这里（只显示和本台产品版本一致的记录）。</p>`;
+            <p class="muted">还没有这台臂可用的电机记录。只显示和本台产品版本一致的记录。</p>`;
         return;
     }
 
@@ -311,7 +310,8 @@ function renderMotors() {
                     <small>${esc(source?.motor_type || '-')}</small>
                     <small>${source?.created_at ? `配置于 ${esc(String(source.created_at).slice(0, 10))}` : ''}</small>
                     ${done
-                        ? '<span class="aw-motor-state">已挂载</span>'
+                        ? `<span class="aw-motor-state">已挂载</span>
+                           <button class="btn btn-ghost slim" data-detach="${esc(done.record_id)}" ${arm.busy ? 'disabled' : ''}>取消挂载</button>`
                         : candidate
                             ? `<button class="btn btn-secondary slim" data-attach="${esc(candidate.record_id)}" ${arm.busy ? 'disabled' : ''}>挂到这个关节</button>`
                             : '<span class="aw-motor-state missing">还没配过这颗</span>'}
@@ -403,9 +403,14 @@ async function loadArms() {
 }
 
 function openDeleteDialog() {
+    const evidence = arm.status?.evidence_count || 0;
     document.getElementById('awDeleteTitle').textContent = `删除 ${arm.armCn}？`;
-    document.getElementById('awDeleteBody').textContent =
-        '这台机械臂还没有任何测试记录，所以可以删除。选一种方式：';
+    document.getElementById('awDeleteBody').textContent = evidence
+        ? `这台机械臂上已有 ${evidence} 条记录。确实建错了要清掉的话，只能保留归档删除。`
+        : '这台机械臂还没有任何测试记录，所以可以删除。选一种方式：';
+    // Purging a record that exists is not on offer: withdrawing a record and
+    // destroying one are different acts.
+    document.getElementById('awDeletePurgeBtn').classList.toggle('hidden', evidence > 0);
     document.getElementById('awDeleteModal').classList.remove('hidden');
 }
 
@@ -415,8 +420,9 @@ function closeDeleteDialog() {
 
 function deleteArm(mode) {
     const armCn = arm.armCn;
+    const force = (arm.status?.evidence_count || 0) > 0;
     closeDeleteDialog();
-    return run('正在删除…', () => api(`/api/arm/wizard/${encodeURIComponent(armCn)}?mode=${mode}`, { method: 'DELETE' }), async payload => {
+    return run('正在删除…', () => api(`/api/arm/wizard/${encodeURIComponent(armCn)}?mode=${mode}&force=${force ? 1 : 0}`, { method: 'DELETE' }), async payload => {
         addLog(
             `整臂向导：${armCn} 档案已${payload.mode === 'purge' ? '彻底删除' : `删除（记录保留在 ${payload.kept_at}）`}`,
             'info',
@@ -467,6 +473,18 @@ async function loadArm(armCn) {
         } catch (error) {
             arm.records = null;
         }
+    });
+}
+
+function detachRecord(recordId) {
+    // Attaching counts as evidence and evidence blocks deleting the arm, so without
+    // this one wrong click locked the archive: neither correctable nor discardable.
+    return run('正在取消挂载…', () => api(`/api/arm/wizard/${encodeURIComponent(arm.armCn)}/motor-records/${encodeURIComponent(recordId)}`, {
+        method: 'DELETE'
+    }), async () => {
+        addLog('整臂向导：已取消挂载', 'info', 'arm');
+        await loadArms();
+        await loadArm(arm.armCn);
     });
 }
 
@@ -551,6 +569,11 @@ function handleClick(event) {
     const attach = event.target.closest('[data-attach]');
     if (attach) {
         attachRecord(attach.dataset.attach);
+        return;
+    }
+    const detach = event.target.closest('[data-detach]');
+    if (detach) {
+        detachRecord(detach.dataset.detach);
         return;
     }
     const runButton = event.target.closest('[data-run]');

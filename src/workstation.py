@@ -290,12 +290,28 @@ SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
         ],
     },
     "arm_has_evidence": {
-        "title": "这台机械臂不能删除",
-        "message": "它上面已经有测试记录了，删掉就等于销毁证据。",
+        "title": "这台机械臂不能直接删除",
+        "message": "它上面已经有测试记录了，直接删掉就等于销毁证据。",
         "solutions": [
-            "只有刚建好、还没做过任何测试的档案才能删除。",
-            "如果产品版本或编号填错了，而且已经测过：请交给工程师处理，不要自行删除。",
-            "如果只是不想继续测这台，直接不管它即可，它不会影响别的机械臂。",
+            "只挂错了电机记录：到「关节电机」页点那个关节的「取消挂载」，取消后就能删了。",
+            "确实是建错了、必须清掉：用「强制删除」，档案会完整保留到 deleted_arms/，不会真丢。",
+            "如果只是不想继续测这台，放着不管即可，它不影响别的机械臂。",
+        ],
+    },
+    "report_not_found": {
+        "title": "找不到这份报告",
+        "message": "这台机械臂的档案里没有这个报告编号。",
+        "solutions": [
+            "点「刷新」重新读取，可能是列表过期了。",
+            "确认选的是同一台机械臂。",
+        ],
+    },
+    "arm_force_delete_keeps_record": {
+        "title": "有记录的档案只能保留归档",
+        "message": "强制删除是给「建错了不该存在」的档案用的，不是用来抹掉测试结果的。",
+        "solutions": [
+            "改用「仅删除，保留记录」，档案会完整移到 deleted_arms/ 备查。",
+            "想彻底不留痕迹，请先取消挂载、清空记录，让它回到空档案状态。",
         ],
     },
     "arm_not_found": {
@@ -6429,6 +6445,54 @@ class WorkstationService:
                 "total_reports": sum(len(item["reports"]) for item in arms),
             }
 
+    def delete_factory_report(self, arm_cn: str, report_id: str) -> Dict[str, Any]:
+        """Withdraw a factory report that should not have been issued.
+
+        A report generated against incomplete or wrong evidence is worse than no
+        report: it is a signed statement about an arm. There was no way to take one
+        back, and they are the largest thing on disk by far.
+
+        The files move to `withdrawn_reports/` rather than being erased. A report that
+        may have left the building has to stay reconstructable.
+        """
+        with self._lock:
+            try:
+                path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+
+            reports = list(arm.get("factory_reports") or [])
+            target = next((item for item in reports if item.get("report_id") == report_id), None)
+            if target is None:
+                return self._wizard_problem("report_not_found", f"{arm_cn} 上没有报告 {report_id}")
+
+            withdrawn_dir = FACTORY_DIR / "withdrawn_reports" / _safe_name(arm_cn)
+            withdrawn_dir.mkdir(parents=True, exist_ok=True)
+            moved = []
+            source_dir = None
+            for key in ("json_path", "html_path", "pdf_path"):
+                value = target.get(key)
+                if not value:
+                    continue
+                source = Path(value)
+                source_dir = source_dir or source.parent
+                if source.exists():
+                    destination = withdrawn_dir / source.name
+                    source.replace(destination)
+                    moved.append(str(destination))
+
+            record = dict(target)
+            record["withdrawn_at"] = _now_iso()
+            record["withdrawn_files"] = moved
+            record["original_directory"] = str(source_dir) if source_dir else None
+            _atomic_json(withdrawn_dir / f"{_safe_name(report_id)}.json", record)
+
+            arm["factory_reports"] = [item for item in reports if item.get("report_id") != report_id]
+            arm["withdrawn_reports"] = [*(arm.get("withdrawn_reports") or []), record]
+            arm["updated_at"] = _now_iso()
+            _atomic_json(path, arm)
+            return {"ok": True, "arm_cn": arm_cn, "report_id": report_id, "moved_to": str(withdrawn_dir), "files": moved}
+
     def arm_wizard_create(
         self,
         arm_cn: str,
@@ -6476,7 +6540,9 @@ class WorkstationService:
 
     ARM_DELETE_MODES = ("archive", "purge")
 
-    def arm_wizard_delete(self, arm_cn: str, mode: str = "archive") -> Dict[str, Any]:
+    def arm_wizard_delete(
+        self, arm_cn: str, mode: str = "archive", force: bool = False
+    ) -> Dict[str, Any]:
         """Discard an archive created by mistake - wrong product version, wrong serial.
 
         Two ways, because they answer different questions. `archive` takes the arm out
@@ -6497,9 +6563,17 @@ class WorkstationService:
             except KeyError:
                 return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
             evidence = self._arm_evidence_count(arm)
-            if evidence:
+            if evidence and not force:
                 return self._wizard_problem(
                     "arm_has_evidence", f"{arm_cn} 上已有 {evidence} 条记录"
+                )
+            if evidence and mode == "purge":
+                # Force exists for an archive that should not have been created, not
+                # for erasing test results. Keeping the file costs nothing and is the
+                # difference between withdrawing a record and destroying one.
+                return self._wizard_problem(
+                    "arm_force_delete_keeps_record",
+                    f"{arm_cn} 上有 {evidence} 条记录，强制删除只能保留归档",
                 )
 
             kept_at = None
@@ -6508,6 +6582,8 @@ class WorkstationService:
                 target_dir.mkdir(parents=True, exist_ok=True)
                 arm["deleted_at"] = _now_iso()
                 arm["deleted_mode"] = mode
+                arm["deleted_forced"] = bool(force)
+                arm["deleted_evidence_count"] = evidence
                 _atomic_json(target_dir / f"{_safe_name(arm_cn)}.json", arm)
                 kept_at = str(target_dir)
             path.unlink(missing_ok=True)
@@ -6667,6 +6743,30 @@ class WorkstationService:
             arm["updated_at"] = _now_iso()
             _atomic_json(path, arm)
             return {"ok": True, "arm_cn": arm_cn, "attached": arm["single_motor_records"]}
+
+    def arm_wizard_detach_motor_record(self, arm_cn: str, record_id: str) -> Dict[str, Any]:
+        """Undo an attachment. Attaching to the wrong joint must not be a one-way door.
+
+        Attaching counts as evidence, and evidence blocks deleting the arm. Without
+        this, one wrong click locked the archive: it could be neither corrected nor
+        discarded. The single-motor record itself is untouched - it belongs to the
+        motor, not to this arm.
+        """
+        with self._lock:
+            try:
+                path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+            attached = list(arm.get("single_motor_records") or [])
+            remaining = [item for item in attached if item.get("record_id") != record_id]
+            if len(remaining) == len(attached):
+                return self._wizard_problem(
+                    "arm_motor_record_mismatch", f"{arm_cn} 上没有挂载记录 {record_id}"
+                )
+            arm["single_motor_records"] = remaining
+            arm["updated_at"] = _now_iso()
+            _atomic_json(path, arm)
+            return {"ok": True, "arm_cn": arm_cn, "attached": remaining}
 
     def arm_wizard_available_motor_records(self, arm_cn: str) -> Dict[str, Any]:
         """The commissioned motors that could belong to this arm, newest first."""

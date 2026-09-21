@@ -761,6 +761,11 @@ def arm_wizard_options():
     return _wizard_call(service.arm_wizard_options, product_version=request.args.get("product_version"))
 
 
+@app.delete("/api/reports/<arm_cn>/<report_id>")
+def delete_factory_report(arm_cn: str, report_id: str):
+    return _wizard_call(service.delete_factory_report, arm_cn=arm_cn, report_id=report_id)
+
+
 @app.get("/api/reports/archive")
 def report_archive():
     return _wizard_call(service.report_archive)
@@ -789,7 +794,13 @@ def arm_wizard_delete(arm_cn: str):
         service.arm_wizard_delete,
         arm_cn=arm_cn,
         mode=str(request.args.get("mode") or "archive"),
+        force=str(request.args.get("force") or "").lower() in ("1", "true", "yes"),
     )
+
+
+@app.delete("/api/arm/wizard/<arm_cn>/motor-records/<record_id>")
+def arm_wizard_detach_motor_record(arm_cn: str, record_id: str):
+    return _wizard_call(service.arm_wizard_detach_motor_record, arm_cn=arm_cn, record_id=record_id)
 
 
 @app.get("/api/arm/wizard/<arm_cn>/status")

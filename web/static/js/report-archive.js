@@ -60,7 +60,7 @@ function renderDetail() {
     target.innerHTML = `
         ${arm.reports.length ? `
             <table class="smw-table compact ra-table">
-                <thead><tr><th>报告</th><th>生成时间</th><th>文件</th></tr></thead>
+                <thead><tr><th>报告</th><th>生成时间</th><th>文件</th><th></th></tr></thead>
                 <tbody>
                     ${arm.reports.map(report => `
                         <tr>
@@ -71,6 +71,7 @@ function renderDetail() {
                                 ${report.pdf_available ? '<span class="ra-file ok">PDF</span>' : '<span class="ra-file missing">PDF 未生成</span>'}
                                 ${report.directory ? `<br><small class="muted">${esc(report.directory)}</small>` : ''}
                             </td>
+                            <td><button class="btn btn-ghost slim" data-ra-withdraw="${esc(report.report_id)}" ${archive.busy ? 'disabled' : ''}>撤回</button></td>
                         </tr>`).join('')}
                 </tbody>
             </table>`
@@ -138,12 +139,43 @@ function generate() {
     );
 }
 
+function withdraw(reportId) {
+    const arm = selected();
+    if (!arm) return;
+    // A report issued against wrong or incomplete evidence is worse than none: it is a
+    // signed statement about an arm. Withdrawing moves the files aside rather than
+    // erasing them, because a report that may have left the building has to stay
+    // reconstructable.
+    showModal(
+        '撤回这份报告？',
+        `${reportId} 会从 ${arm.arm_cn} 的报告列表移除，文件移到 withdrawn_reports/ 备查，不会真正删除。撤回后可以重新生成。`,
+        async () => {
+            archive.busy = true;
+            render();
+            try {
+                await api(`/api/reports/${encodeURIComponent(arm.arm_cn)}/${encodeURIComponent(reportId)}`, { method: 'DELETE' });
+                addLog(`报告归档：${reportId} 已撤回`, 'info', 'report');
+            } catch (error) {
+                addLog(`报告归档：撤回失败 ${error.message}`, 'error', 'report');
+            } finally {
+                archive.busy = false;
+                await load();
+            }
+        }
+    );
+}
+
 function handleClick(event) {
     if (archive.busy) return;
     const pick = event.target.closest('[data-ra-arm]');
     if (pick) {
         archive.armCn = pick.dataset.raArm;
         render();
+        return;
+    }
+    const withdrawBtn = event.target.closest('[data-ra-withdraw]');
+    if (withdrawBtn) {
+        withdraw(withdrawBtn.dataset.raWithdraw);
         return;
     }
     if (event.target.closest('[data-ra-generate]')) generate();

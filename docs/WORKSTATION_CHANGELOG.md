@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.26.1-baseline-is-a-detector`
+Current workstation version: `0.27.0-undo-paths`
 
 ## Versioning Rule
 
@@ -13,6 +13,55 @@ Current workstation version: `0.26.1-baseline-is-a-detector`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.27.0-undo-paths - 2026-09-21
+
+Summary: the workstation had 23 ways to create something and 2 ways to remove anything.
+Three of the gaps mattered, and one of them was a deadlock introduced in 0.16.0.
+
+The deadlock, reproduced before fixing: attaching a motor record counts as evidence,
+and evidence blocks deleting the arm - with no way to detach. One wrong click therefore
+locked the archive. It could be neither corrected nor discarded, the serial stayed
+taken, and the file stayed on disk forever.
+
+Changes:
+
+- `arm_wizard_detach_motor_record()` undoes an attachment, and the joint card carries
+  取消挂载. The single-motor record itself is untouched: it belongs to the motor, not
+  to this arm.
+- `arm_wizard_delete(force=True)` removes an archive that has evidence but should not
+  exist - the wrong product version, a serial typed wrong and then scanned. Force
+  always keeps the file: purging an archive that carries results is refused, because
+  withdrawing a record and destroying one are different acts and only one of them
+  belongs in a wizard. The kept copy records that it was forced and how much evidence
+  it had.
+- `delete_factory_report()` withdraws a report. A report issued against wrong or
+  incomplete evidence is worse than none - it is a signed statement about an arm - and
+  there was no way to take one back. Reports are also by far the largest thing on disk
+  (18 MB against 1.7 MB of jobs). The files move to `withdrawn_reports/`: one that may
+  have left the building has to stay reconstructable.
+- The delete button on an arm now appears whether or not the archive is empty, and
+  reads 强制删除 when it is not. It was previously hidden exactly when it was needed
+  most.
+- `arm_has_evidence` now names the fix instead of only refusing: detach the record, or
+  force delete and keep the archive.
+
+Dialogs, counted rather than assumed: a full factory pass asks for confirmation twice -
+writing parameters to flash, and issuing a report. Everything else on the four wizard
+pages is inline, and the blocking dialog is still reserved for failures the operator
+cannot clear from the page. A test pins that budget per page.
+
+Text trimmed where it taught rather than prevented a mistake: the 关节电机 introduction
+went from three explanatory sentences to two operational ones. Kept as they were: the
+warning that J3 and J4 read identically and must be told apart by their nameplate, and
+the note that a step with no record on a passed arm does not mean it was skipped.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 260 passed, including a test that reproduces the
+  old deadlock and one asserting every creating method has a matching removal.
+- Checked live end to end: attach, blocked delete, detach, delete, and the production
+  directory unchanged.
 
 ### 0.26.1-baseline-is-a-detector - 2026-09-21
 

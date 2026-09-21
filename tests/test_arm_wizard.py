@@ -488,3 +488,130 @@ def test_an_unknown_delete_mode_is_refused(service):
     with pytest.raises(ValueError, match="mode must be one of"):
         service.arm_wizard_delete("OAF26092094", mode="shred")
     assert (workstation.FACTORY_ARMS_DIR / "OAF26092094.json").exists()
+
+
+# ---- undoing mistakes ------------------------------------------------------------
+
+
+def test_attaching_the_wrong_record_is_not_a_one_way_door(service_with_records):
+    """Attaching counted as evidence, and evidence blocked deleting the arm.
+
+    One wrong click therefore locked the archive: it could be neither corrected nor
+    discarded, and it stayed on disk forever. This is the deadlock that existed before
+    detach, and it must not come back.
+    """
+    service_with_records.arm_wizard_create("OAF26092150", product_version="openarm_2_0")
+    record_id = service_with_records.arm_wizard_available_motor_records("OAF26092150")["records"][0]["record_id"]
+    service_with_records.arm_wizard_attach_motor_record("OAF26092150", record_id)
+    assert service_with_records.arm_wizard_status("OAF26092150")["deletable"] is False
+
+    payload = service_with_records.arm_wizard_detach_motor_record("OAF26092150", record_id)
+    assert payload["ok"] is True and payload["attached"] == []
+    # Back to an empty archive, so the ordinary delete works again.
+    assert service_with_records.arm_wizard_status("OAF26092150")["deletable"] is True
+    assert service_with_records.arm_wizard_delete("OAF26092150")["ok"] is True
+
+
+def test_detaching_leaves_the_motor_record_itself_alone(service_with_records):
+    # The record belongs to the motor, not to this arm.
+    service_with_records.arm_wizard_create("OAF26092151", product_version="openarm_2_0")
+    before = len(service_with_records._load_single_motor_records())
+    record_id = service_with_records.arm_wizard_available_motor_records("OAF26092151")["records"][0]["record_id"]
+    service_with_records.arm_wizard_attach_motor_record("OAF26092151", record_id)
+    service_with_records.arm_wizard_detach_motor_record("OAF26092151", record_id)
+    assert len(service_with_records._load_single_motor_records()) == before
+
+
+def test_detaching_something_that_is_not_attached_says_so(service):
+    service.arm_wizard_create("OAF26092152", product_version="openarm_1_0")
+    payload = service.arm_wizard_detach_motor_record("OAF26092152", "smr_nope")
+    assert payload["problem"]["code"] == "arm_motor_record_mismatch"
+
+
+def test_an_archive_built_by_mistake_can_be_force_deleted(service):
+    # Built with the wrong product version and already scanned: without force it would
+    # sit on disk forever, and the serial would stay taken.
+    service.arm_wizard_create("OAF26092153", product_version="openarm_1_0")
+    path = workstation.FACTORY_ARMS_DIR / "OAF26092153.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["linked_jobs"] = [{"job_id": "x", "job_type": "arm_acceptance", "status": "failed"}]
+    path.write_text(json.dumps(record), encoding="utf-8")
+
+    assert service.arm_wizard_delete("OAF26092153")["problem"]["code"] == "arm_has_evidence"
+
+    forced = service.arm_wizard_delete("OAF26092153", force=True)
+    assert forced["ok"] is True
+    assert not path.exists()
+    kept = workstation.FACTORY_DIR / "deleted_arms" / "OAF26092153.json"
+    assert kept.exists()
+    saved = json.loads(kept.read_text(encoding="utf-8"))
+    assert saved["deleted_forced"] is True and saved["deleted_evidence_count"] == 1
+
+
+def test_force_delete_will_not_purge_a_record_that_exists(service):
+    """Force is for an archive that should not exist, not for erasing results.
+
+    Withdrawing a record and destroying one are different acts, and only one of them
+    should be reachable from a wizard.
+    """
+    service.arm_wizard_create("OAF26092154", product_version="openarm_1_0")
+    path = workstation.FACTORY_ARMS_DIR / "OAF26092154.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["factory_reports"] = [{"report_id": "r"}]
+    path.write_text(json.dumps(record), encoding="utf-8")
+
+    payload = service.arm_wizard_delete("OAF26092154", mode="purge", force=True)
+    assert payload["problem"]["code"] == "arm_force_delete_keeps_record"
+    assert path.exists()
+    # The keeping variant is allowed.
+    assert service.arm_wizard_delete("OAF26092154", mode="archive", force=True)["ok"] is True
+
+
+def test_a_report_can_be_withdrawn_without_being_destroyed(service, tmp_path):
+    """A report issued against wrong evidence is worse than none - it is signed.
+
+    There was no way to take one back, and reports are by far the largest thing on
+    disk. Withdrawing moves the files aside: one that may have left the building has
+    to stay reconstructable.
+    """
+    service.arm_wizard_create("OAF26092155", product_version="openarm_1_0")
+    path = workstation.FACTORY_ARMS_DIR / "OAF26092155.json"
+    report_dir = tmp_path / "issued"
+    report_dir.mkdir()
+    html = report_dir / "report.html"
+    html.write_text("<html>report</html>", encoding="utf-8")
+
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["factory_reports"] = [{"report_id": "OA-TEST-001", "title": "t", "html_path": str(html)}]
+    path.write_text(json.dumps(record), encoding="utf-8")
+
+    payload = service.delete_factory_report("OAF26092155", "OA-TEST-001")
+    assert payload["ok"] is True
+    assert not html.exists(), "the file should have moved"
+    moved = workstation.FACTORY_DIR / "withdrawn_reports" / "OAF26092155" / "report.html"
+    assert moved.exists() and moved.read_text(encoding="utf-8") == "<html>report</html>"
+
+    after = json.loads(path.read_text(encoding="utf-8"))
+    assert after["factory_reports"] == []
+    assert after["withdrawn_reports"][0]["report_id"] == "OA-TEST-001"
+    assert after["withdrawn_reports"][0]["withdrawn_at"]
+
+
+def test_withdrawing_an_unknown_report_says_so(service):
+    service.arm_wizard_create("OAF26092156", product_version="openarm_1_0")
+    assert service.delete_factory_report("OAF26092156", "nope")["problem"]["code"] == "report_not_found"
+
+
+def test_everything_the_wizard_creates_can_be_undone(service_with_records):
+    """The rule behind the three tests above, stated once.
+
+    A wizard that can create a thing and not remove it accumulates mistakes on disk and
+    blocks the operator from fixing them.
+    """
+    for pair in (
+        ("arm_wizard_create", "arm_wizard_delete"),
+        ("arm_wizard_attach_motor_record", "arm_wizard_detach_motor_record"),
+        ("generate_formal_factory_acceptance_report", "delete_factory_report"),
+    ):
+        for name in pair:
+            assert hasattr(service_with_records, name), name

@@ -518,3 +518,39 @@ def test_the_report_archive_api_lists_reports_per_arm(client):
     assert "OAF26092130" in by_cn
     assert by_cn["OAF26092130"]["reports"] == []
     assert by_cn["OAF26092130"]["product_label"] == "OpenArm 1.0"
+
+
+def test_the_beginner_path_asks_for_confirmation_only_before_irreversible_acts(client):
+    """Dialogs interrupt the run, so they are spent only where a mistake is permanent.
+
+    A full factory pass hits two: writing parameters to a motor's flash, and issuing a
+    factory report. Everything else on the four wizard pages is inline.
+    """
+    import re
+
+    # Two mechanisms exist: the shared showModal, and the arm wizard's own delete
+    # dialog. Count the confirmations, not the implementation.
+    def confirmations(module):
+        source = client.get(f"/static/js/{module}.js").data.decode()
+        return len(re.findall(r"showModal\(", source)) + len(re.findall(r"openDeleteDialog\(\)\s*\{", source))
+
+    assert confirmations("link-wizard") == 0, "connecting writes nothing and should never interrupt"
+    assert confirmations("single-motor-wizard") == 1, "one: writing parameters to flash"
+    assert confirmations("arm-wizard") == 1, "one: deleting an arm archive"
+    assert confirmations("report-archive") == 2, "two: issuing a report, and withdrawing one"
+
+    # And nothing interrupts a step that only reads.
+    arm = client.get("/static/js/arm-wizard.js").data.decode()
+    assert "showProblemModal" in arm, "a blocking failure still deserves a dialog"
+
+
+def test_every_destructive_action_is_reachable_from_the_page(client):
+    # A thing you can create and not remove accumulates on disk and blocks the operator
+    # from fixing their own mistake.
+    arm = client.get("/static/js/arm-wizard.js").data.decode()
+    assert "data-detach" in arm, "a wrongly attached motor record must be removable"
+    assert "data-delete-arm" in arm
+    assert "强制删除" in arm, "an archive built by mistake must be removable even with evidence"
+
+    report = client.get("/static/js/report-archive.js").data.decode()
+    assert "data-ra-withdraw" in report, "a wrongly issued report must be withdrawable"
