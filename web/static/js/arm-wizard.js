@@ -1,6 +1,7 @@
 import { api } from './api.js';
 import { addLog } from './log.js';
-import { showProblemModal } from './problem-modal.js?v=20260920-arm-wizard';
+import { showProblemModal } from './problem-modal.js?v=20260921-words';
+import { PROBLEM_KICKER, FIX_HEADING, RETRY, REDO_STEP, restartLabel } from './wizard-words.js?v=20260921-words';
 
 // Beginner wizard for tab 03 (整臂测试). Every step is laid out on the page with its
 // own button - the operator sees the whole flow, what is done, what is next and what
@@ -115,6 +116,10 @@ function renderPicker() {
             <div class="aw-arm-list">${inProgress.map(item => armCard(item)).join('')}</div>`
         : (arm.creating ? '' : '<p class="muted aw-hint">目前没有正在测试的机械臂。</p>')}
         ${arm.status ? `
+            <div class="aw-restart-row">
+                <button class="btn btn-ghost slim" data-restart="1" ${arm.busy ? 'disabled' : ''}>${restartLabel('这台机械臂')}</button>
+                <span class="muted">回到步骤一，重新读取这台臂的进度。已完成的步骤不会被清掉。</span>
+            </div>
             <div class="aw-delete-row">
                 <span class="muted">${arm.status.deletable
                     ? `${esc(arm.armCn)} 还没有任何测试记录。版本或编号填错了可以删掉重建。`
@@ -259,11 +264,11 @@ function renderStep(step, index) {
                         ${armed ? `
                             <button class="btn ${repeat ? 'btn-secondary' : 'btn-primary'}"
                                 data-run="${esc(step.id)}" ${arm.busy || !safetyReady(step) ? 'disabled' : ''}>
-                                ${repeat ? '重新测这一步' : `开始「${esc(step.label)}」`}
+                                ${repeat ? REDO_STEP : `开始「${esc(step.label)}」`}
                             </button>
                             ${step.motion && !safetyReady(step) ? '<span class="muted">勾选完上面三条才能开始</span>' : ''}`
                         : `<button class="btn btn-ghost slim" data-toggle="${esc(step.id)}" ${arm.busy ? 'disabled' : ''}>
-                                ${repeat ? '重测这一步' : '改做这一步'}
+                                ${repeat ? REDO_STEP : '改做这一步'}
                            </button>`}
                     </div>` : ''}
             </div>
@@ -338,13 +343,13 @@ function renderProblem() {
     const target = document.getElementById(arm.creating || !arm.status ? 'awPicker' : 'awPhaseBody');
     target.insertAdjacentHTML('afterbegin', `
         <div class="smw-card smw-problem">
-            <div class="smw-problem-kicker">需要处理</div>
+            <div class="smw-problem-kicker">${PROBLEM_KICKER}</div>
             <h3>${esc(arm.problem.title)}</h3>
             <p>${esc(arm.problem.message)}</p>
-            <strong>怎么解决</strong>
+            <strong>${FIX_HEADING}</strong>
             <ol>${(arm.problem.solutions || []).map(item => `<li>${esc(item)}</li>`).join('')}</ol>
             <div class="smw-actions">
-                <button class="btn btn-primary" data-reload="1" ${arm.busy ? 'disabled' : ''}>处理好了，刷新</button>
+                <button class="btn btn-primary" data-reload="1" ${arm.busy ? 'disabled' : ''}>${RETRY}</button>
             </div>
             ${arm.problem.detail ? `<details><summary>技术信息（发给工程师）</summary><code>${esc(arm.problem.code)}: ${esc(arm.problem.detail)}</code></details>` : ''}
         </div>`);
@@ -365,7 +370,7 @@ function clientProblem(error) {
         code: 'unknown_error',
         title: '发生未知错误',
         message: '请求失败。',
-        solutions: ['点「处理好了，刷新」再试一次；仍失败请截图发给工程师。'],
+        solutions: [`点「${RETRY}」再试一次；仍失败请截图发给工程师。`],
         detail: error?.message
     };
 }
@@ -537,6 +542,15 @@ function handleClick(event) {
         arm.creating = false;
         arm.problem = null;
         render();
+        return;
+    }
+    if (event.target.closest('[data-restart]')) {
+        // Re-reads from the record rather than clearing anything: "start over" here
+        // means the operator starts over, not the arm.
+        arm.phase = null;
+        arm.open = null;
+        arm.safety = {};
+        loadArm(arm.armCn);
         return;
     }
     if (event.target.closest('[data-delete-arm]')) {

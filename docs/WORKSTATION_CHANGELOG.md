@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.28.0-cleanup-paths`
+Current workstation version: `0.29.0-one-vocabulary`
 
 ## Versioning Rule
 
@@ -13,6 +13,38 @@ Current workstation version: `0.28.0-cleanup-paths`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.29.0-one-vocabulary - 2026-09-21
+
+Summary: the three wizards now use one vocabulary, held in one module, and tab 03
+gained the way back to the start that the other two already had.
+
+An operator uses 01, 02 and 03 in the same shift. The same act read three different
+ways: 从头开始, 重新开始这颗电机, and on tab 03 it was missing entirely - someone who
+opened the wrong arm had to hunt for the picker. The failure panel said 出错了 on one
+page, 需要处理 on another and 读取失败 on a third, and only two of the three put a
+heading above the fix steps.
+
+Changes:
+
+- `web/static/js/wizard-words.js` holds the words the three share: the failure kicker
+  需要处理, the fix heading 怎么解决, the retry 处理好了，再试一次, 重新测这一步 and
+  返回上一步, plus `restartLabel(subject)` so starting over reads the same everywhere
+  and the only thing that differs is the noun - 这条链路 / 这颗电机 / 这台机械臂.
+- Tab 03 gained 重新开始这台机械臂. It re-reads the arm's progress rather than clearing
+  anything: starting over here means the operator starts over, not the arm.
+- A test asserts all three import the module, that none of the old hand-written
+  variants survive on any page, and that every wizard offers a way to start over.
+
+Found while doing it: four hint texts named a button by a label that had just been
+renamed, so they pointed at a button the operator could no longer find. They now build
+the name from the same constant the button does, which is the drift the shared module
+exists to prevent.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 268 passed.
+- Checked live: each wizard reports the shared words and its own restart label.
 
 ### 0.28.0-cleanup-paths - 2026-09-21
 

@@ -430,7 +430,7 @@ def test_the_arm_wizard_page_is_wired_like_the_other_two_wizards(client):
     source = client.get("/static/js/arm-wizard.js").data.decode()
     # Every step is on the page with its own button; dialogs are for blocking failures.
     assert "data-run=" in source and "data-toggle=" in source
-    assert "重新测这一步" in source, "re-running a finished step must be reachable"
+    assert "REDO_STEP" in source, "re-running a finished step must be reachable"
     assert "SAFETY_CHECKS" in source and "safetyReady(" in source
     assert "showProblemModal" in source
     # Building a new arm is the starting point; shipped arms fold away behind a toggle.
@@ -578,3 +578,32 @@ def test_a_single_motor_record_can_be_withdrawn_from_its_own_page(client):
     source = client.get("/static/js/single-motor-wizard.js").data.decode()
     assert "data-withdraw" in source
     assert "/api/single-motor/records/" in source
+
+
+def test_the_three_wizards_use_one_vocabulary(client):
+    """An operator uses 01, 02 and 03 in the same shift.
+
+    If the same act reads "从头开始" on one page, "重新开始这颗电机" on the next and is
+    missing on the third, they relearn the page instead of doing the job. The words
+    live in one module so they cannot drift apart again.
+    """
+    words = client.get("/static/js/wizard-words.js").data.decode()
+    assert "PROBLEM_KICKER" in words and "需要处理" in words
+    assert "FIX_HEADING" in words and "怎么解决" in words
+    assert "RETRY" in words and "处理好了，再试一次" in words
+    assert "restartLabel" in words
+
+    sources = {
+        tab: client.get(f"/static/js/{module}.js").data.decode()
+        for tab, module in (("01", "link-wizard"), ("02", "single-motor-wizard"), ("03", "arm-wizard"))
+    }
+    for tab, source in sources.items():
+        assert "wizard-words.js" in source, f"{tab} does not use the shared words"
+        # The old hand-written variants are gone from every page.
+        for stale in ("出错了", "读取失败", "从头开始", "重新开始这颗电机", "处理好了，刷新"):
+            assert stale not in source, f"{tab} still says {stale}"
+
+    # Every wizard offers a way back to the start of the unit it works on. 03 had none,
+    # so an operator who opened the wrong arm had to hunt for the picker.
+    for tab, source in sources.items():
+        assert "restartLabel(" in source, f"{tab} offers no way to start over"

@@ -2286,3 +2286,12 @@ body[data-primary-flow="armWizardTab"]:not(.arm-advanced) .right-rail {
 body[data-primary-flow="reportTab"] .workspace { grid-template-columns: minmax(0, 1fr); }
 body[data-primary-flow="reportTab"] .left-rail,
 body[data-primary-flow="reportTab"] .right-rail { display: none; }
+
+.aw-restart-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    font-size: 12px;
+}

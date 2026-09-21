@@ -1,7 +1,8 @@
 import { api } from './api.js';
 import { addLog } from './log.js';
 import { showModal } from './modal.js';
-import { showProblemModal } from './problem-modal.js?v=20260920-problem-modal';
+import { showProblemModal } from './problem-modal.js?v=20260921-words';
+import { PROBLEM_KICKER, FIX_HEADING, RETRY, restartLabel } from './wizard-words.js?v=20260921-words';
 
 const STEPS = [
     { id: 'select', label: '选择关节' },
@@ -343,10 +344,10 @@ function renderInspect() {
     }
     if (wizard.inspectProblem) {
         const problem = wizard.inspectProblem;
-        meta.textContent = '读取失败';
+        meta.textContent = PROBLEM_KICKER;
         body.innerHTML = `
             <div class="smw-problem">
-                <div class="smw-problem-kicker">读取失败</div>
+                <div class="smw-problem-kicker">${PROBLEM_KICKER}</div>
                 <h3>${esc(problem.title)}</h3>
                 <p>${esc(problem.message)}</p>
                 <ol>${(problem.solutions || []).map(item => `<li>${esc(item)}</li>`).join('')}</ol>
@@ -521,16 +522,16 @@ function renderHelp() {
             : '';
         help.innerHTML = `
             <div class="smw-problem">
-                <div class="smw-problem-kicker">需要处理</div>
+                <div class="smw-problem-kicker">${PROBLEM_KICKER}</div>
                 <h3>${esc(problem.title)}</h3>
                 <p>${esc(problem.message)}</p>
                 ${problem.found_esc_ids ? `<p>检测到的电机 ID：${problem.found_esc_ids.map(hex).join('、')}</p>` : ''}
                 ${mismatches}
-                <strong>怎么解决</strong>
+                <strong>${FIX_HEADING}</strong>
                 <ol>${(problem.solutions || []).map(item => `<li>${esc(item)}</li>`).join('')}</ol>
                 <div class="smw-actions">
-                    ${retry ? `<button class="btn btn-primary" data-action="${retry}" ${wizard.busy ? 'disabled' : ''}>处理好了，再试一次</button>` : ''}
-                    <button class="btn btn-secondary" data-action="restart" ${wizard.busy ? 'disabled' : ''}>重新开始这颗电机</button>
+                    ${retry ? `<button class="btn btn-primary" data-action="${retry}" ${wizard.busy ? 'disabled' : ''}>${RETRY}</button>` : ''}
+                    <button class="btn btn-secondary" data-action="restart" ${wizard.busy ? 'disabled' : ''}>${restartLabel('这颗电机')}</button>
                 </div>
                 ${problem.detail ? `<details><summary>技术信息（发给工程师）</summary><code>${esc(problem.code)}: ${esc(problem.detail)}</code></details>` : ''}
             </div>`;
@@ -600,7 +601,7 @@ function clientProblem(error) {
             code: 'job_lost',
             title: '工作站重启过，当前进度丢失',
             message: '工作站程序重新启动后，正在进行的电机任务不再有效。',
-            solutions: ['点「重新开始这颗电机」重新识别。已经保存到电机的参数不会丢失。'],
+            solutions: [`点「${restartLabel('这颗电机')}」重新识别。已经保存到电机的参数不会丢失。`],
             detail: message
         };
     }
@@ -613,7 +614,7 @@ function clientProblem(error) {
             detail: message
         };
     }
-    return { code: 'unknown_error', title: '发生未知错误', message: '请求失败。', solutions: ['点「重新开始这颗电机」再试一次；仍失败请截图发给工程师。'], detail: message };
+    return { code: 'unknown_error', title: '发生未知错误', message: '请求失败。', solutions: [`点「${restartLabel('这颗电机')}」再试一次；仍失败请截图发给工程师。`], detail: message };
 }
 
 async function run(busyText, request, onSuccess) {

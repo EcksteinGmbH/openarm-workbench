@@ -1,6 +1,7 @@
 import { api } from './api.js';
 import { addLog } from './log.js';
-import { showProblemModal } from './problem-modal.js?v=20260920-problem-modal';
+import { showProblemModal } from './problem-modal.js?v=20260921-words';
+import { PROBLEM_KICKER, FIX_HEADING, RETRY, restartLabel } from './wizard-words.js?v=20260921-words';
 
 // Beginner wizard for tab 01 (建联). Same shape as the single-motor wizard:
 // one primary button per step, every failure explains cause and fix.
@@ -220,14 +221,15 @@ function renderProblem() {
     const retry = RETRY_ACTION[problem.code];
     return `
         <div class="smw-card smw-problem">
-            <div class="smw-problem-kicker">出错了</div>
+            <div class="smw-problem-kicker">${PROBLEM_KICKER}</div>
             <h3>${esc(problem.title)}</h3>
             <p>${esc(problem.message)}</p>
+            <strong>${FIX_HEADING}</strong>
             <ol>${(problem.solutions || []).map(item => `<li>${esc(item)}</li>`).join('')}</ol>
             ${problem.detail ? `<code>${esc(problem.detail)}</code>` : ''}
             <div class="smw-actions">
-                <button class="btn btn-secondary" data-link-action="restart" ${link.busy ? 'disabled' : ''}>从头开始</button>
-                ${retry ? busyButton('处理好了，再试一次', retry) : ''}
+                <button class="btn btn-secondary" data-link-action="restart" ${link.busy ? 'disabled' : ''}>${restartLabel('这条链路')}</button>
+                ${retry ? busyButton(RETRY, retry) : ''}
             </div>
         </div>`;
 }
@@ -284,7 +286,7 @@ function clientProblem(error) {
             detail: message
         };
     }
-    return { code: 'unknown_error', title: '发生未知错误', message: '请求失败。', solutions: ['点「从头开始」再试一次；仍失败请截图发给工程师。'], detail: message };
+    return { code: 'unknown_error', title: '发生未知错误', message: '请求失败。', solutions: [`点「${restartLabel('这条链路')}」再试一次；仍失败请截图发给工程师。`], detail: message };
 }
 
 async function run(busyText, request, onSuccess) {

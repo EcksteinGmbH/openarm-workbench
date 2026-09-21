@@ -35,11 +35,11 @@ import { bindEvents } from './event-bindings.js';
 import { initSocket } from './socket-client.js';
 import { kvRow, setButtonDisabled, updateActionStatus } from './ui-helpers.js';
 import { state } from './store.js';
-import { initSingleMotorWizard } from './single-motor-wizard.js?v=20260920-problem-modal';
-import { initLinkWizard } from './link-wizard.js?v=20260920-problem-modal';
-import { bindProblemModal } from './problem-modal.js?v=20260920-problem-modal';
-import { initArmWizard } from './arm-wizard.js?v=20260920-arm-wizard';
-import { initReportArchive, initDiskMaintenance } from './report-archive.js?v=20260921-undo';
+import { initSingleMotorWizard } from './single-motor-wizard.js?v=20260921-words';
+import { initLinkWizard } from './link-wizard.js?v=20260921-words';
+import { bindProblemModal } from './problem-modal.js?v=20260921-words';
+import { initArmWizard } from './arm-wizard.js?v=20260921-words';
+import { initReportArchive, initDiskMaintenance } from './report-archive.js?v=20260921-words';
 
 function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>"']/g, character => ({
