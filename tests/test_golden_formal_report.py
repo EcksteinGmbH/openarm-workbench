@@ -129,3 +129,66 @@ def test_the_signature_dates_follow_the_report_date(monkeypatch, tmp_path):
 
     generated = html.split("<td>Generated UTC</td><td>")[1][:10]
     assert generated == _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d")
+
+
+def test_the_report_states_the_method_it_was_produced_with(monkeypatch, tmp_path):
+    """A report that cannot say how it was made cannot be reconciled with a later one.
+
+    Before this, a customer holding an August report and a later one could not tell
+    whether a difference was the arm or the procedure: the report named no workstation
+    version, no official tool version, no gripper control mode and no criteria.
+    """
+    monkeypatch.setattr(workstation, "FACTORY_ARMS_DIR", materialise_fixture(tmp_path))
+    monkeypatch.setattr(workstation, "FORMAL_REPORTS_DIR", tmp_path / "out")
+    service = workstation.WorkstationService()
+    html = next(
+        Path(
+            service.generate_formal_factory_acceptance_report(
+                "OAF26080401", operator="op", project_lead="lead", report_date=PINNED_DATE
+            )["report_dir"]
+        ).glob("*.html")
+    ).read_text(encoding="utf-8")
+
+    assert "Test Method And Basis" in html
+    assert workstation.WORKSTATION_VERSION in html
+    assert workstation.OFFICIAL_TOOL_VERSION in html
+    # A 1.0 arm is still driven in MIT, and the report says so rather than leaving a
+    # reader to assume the current official method was used.
+    assert "MIT (kp=5.0, kd=0.6, 无力矩上限)" in html
+    assert "-1.0472" in html and "0.8 rad" in html
+    assert "limit_search" in html
+
+
+def test_a_2_0_report_states_the_official_gripper_method(monkeypatch, tmp_path):
+    import json
+    import shutil
+
+    arms_dir = materialise_fixture(tmp_path)
+    record = json.loads((arms_dir / "OAF26080401.json").read_text(encoding="utf-8"))
+    record["arm_cn"] = "OAF26092120"
+    record["product_version"] = "openarm_2_0"
+    (arms_dir / "OAF26092120.json").write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
+
+    monkeypatch.setattr(workstation, "FACTORY_ARMS_DIR", arms_dir)
+    monkeypatch.setattr(workstation, "FORMAL_REPORTS_DIR", tmp_path / "out")
+    service = workstation.WorkstationService()
+    result = service.generate_formal_factory_acceptance_report(
+        "OAF26092120", operator="op", project_lead="lead", report_date=PINNED_DATE
+    )
+    html = next(Path(result["report_dir"]).glob("*.html")).read_text(encoding="utf-8")
+    shutil.rmtree(result["report_dir"], ignore_errors=True)
+
+    assert "POS_FORCE (速度上限 25.0 rad/s, 力矩上限 0.15 pu)" in html
+    assert "CAN FD / 1 Mbps arb + 5 Mbps data" in html
+    assert "cell_jig_set_zero（不运动）" in html
+    # No invented threshold: the report says the number is undecided rather than
+    # printing one nobody agreed to.
+    assert "行程阈值未定" in html
+
+
+def test_the_method_block_does_not_renumber_the_sections():
+    # Customers may already cite "section 4". The method table sits with Document
+    # Control rather than taking a number of its own.
+    html = (REPORTS_DIR / "OAF26080401.html").read_text(encoding="utf-8")
+    assert "<h2>1. Scope And Traceability</h2>" in html
+    assert "<h2>2. Acceptance Matrix</h2>" in html

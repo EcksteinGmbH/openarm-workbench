@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.24.0-official-audit`
+Current workstation version: `0.25.0-report-states-its-method`
 
 ## Versioning Rule
 
@@ -13,6 +13,76 @@ Current workstation version: `0.24.0-official-audit`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.25.0-report-states-its-method - 2026-09-21
+
+Summary: a factory report now states how it was produced, and the official gripper
+parameters are on record with their source. Two corrections to yesterday's audit.
+
+Why the report change matters more than the method question behind it: the three
+shipped arms' reports name no workstation version, no official tool version, no gripper
+control mode and no acceptance threshold. A customer holding one of those and a later
+report cannot tell whether a difference is the arm or the procedure. Until a report can
+say how it was made, *any* method improvement turns every earlier report into an
+unexplainable one.
+
+Changes:
+
+- The report carries a **Test Method And Basis** table beside Document Control: product
+  version, profile revision, workstation version, official tool version, bus mode,
+  gripper control mode with its gains or limits, gripper targets, gripper criteria, and
+  the zero method with whether it moves the arm. Everything is read from the product
+  registry and the running workstation, so it states what was applied rather than what
+  was intended.
+- It is deliberately **not** a numbered section. Customers may already cite "section 4";
+  adding one would renumber the rest. The golden baseline for all three real arms grew
+  by exactly four lines each and is otherwise byte-identical.
+- A report produced by a workstation that did not record this says so, rather than
+  leaving the row blank.
+
+Two corrections to the 0.24.0 audit, both found by re-checking on request:
+
+- **"Official does not publish the 2.0 gripper motor" was wrong.** It is in the code:
+  `init_gripper_motor(MotorType::DM4310, 0x08, 0x18)` in `examples/demo.cpp:41` and
+  `examples/gripper_posforce.cpp:33`.
+- **"The +/-90 deg figure has no source" was wrong.** `3.14 / 2.0` is exactly what the
+  official gripper example commands (`gripper_posforce.cpp:45`, and the Python
+  counterpart). The `unverified_from_v5_plan` marking is removed.
+- Both errors had the same cause as the camera one before them: checking the
+  documentation pages and not the examples. Official hardware figures often live only
+  in example code.
+
+Recorded from official, each with its source line:
+
+- 2.0 gripper: DM4310, ESC 0x08 / MST 0x18, **POS_FORCE**, +/-1.5708 rad, speed limit
+  25 rad/s, torque limit 0.15 pu. MIT carries no torque ceiling, so a gripper commanded
+  onto a hard object keeps adding force until it overheats - reported as
+  `openarm_can#81`, accepted by the maintainers, which is why the posforce examples
+  exist. The travel threshold stays unset: official publishes none.
+- The left-arm sign is the one the official example uses (it runs on can1); the right
+  arm is its mirror and is marked as not independently sourced.
+- 1.0 gripper records the method actually in use - MIT, kp 5.0, kd 0.6, no torque
+  ceiling - plus a `pending_change` to POS_FORCE naming the reason and what blocks it.
+  A recorded decision, not an oversight.
+- `zero_multiple_arms_on_bus`: zero calibration is run one arm at a time
+  (`openarm_can#101`). This matters here because Plan A puts both arms on can0.
+- `gripper_control_mode_not_applied`: the control mode write is RAM-only and
+  unacknowledged, so a lost write leaves the motor in its flash mode while every later
+  command is silently discarded - it reads as a disconnected gripper. Check RID 10.
+
+Also fixed while recording the above:
+
+- `_official_demo_gripper_targets()` preferred a single `open_target_rad` over a
+  per-side table. On a mirroring product that would have opened one arm into its
+  mechanical stop. A per-side table now always wins, and an unknown arm side is an
+  error rather than a default.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 245 passed, including that a 1.0 report states MIT
+  with its gains and a 2.0 report states POS_FORCE with its limits, that a 2.0 report
+  prints "threshold undecided" rather than an invented number, and that the section
+  numbering is unchanged.
 
 ### 0.24.0-official-audit - 2026-09-21
 

@@ -67,28 +67,36 @@ parameters:
 
 gripper:
   joint: J8
+  # Every value below is from official openarm_can 1.4.0, not inferred:
+  #   examples/gripper_posforce.cpp:33,43-48
+  #   python/examples/test_gripper_posforce.py:24-25,36-47
+  #   examples/demo.cpp:41
+  motor: DM4310
+  esc_id: 0x08
+  mst_id: 0x18
+  # POS_FORCE, not MIT. MIT carries no torque ceiling, so a gripper commanded onto a
+  # hard object keeps adding force until it overheats - reported as openarm_can#81 and
+  # accepted by the maintainers, which is why the posforce examples exist at all.
+  control_mode: POS_FORCE
+  # No single open_target_rad here on purpose: 2.0 mirrors, so a lone value would be
+  # right for one arm and drive the other into its stop. Only the per-side table below.
   close_target_rad: 0.0
-  # UNSOURCED. Re-checked against official on 2026-09-21 and NOT confirmed: the 2.0
-  # gripper pages state no angle, no direction, no motor and no camera model, and
-  # openarm_can 1.4.0 contains no gripper angle constant anywhere. These values come
-  # from docs/ARM_WORKSTATION_V5_DUAL_VERSION_PLAN.md 2.1, whose own source could not
-  # be traced back. Treat them as a starting hypothesis to measure, not as a spec.
-  #
-  # Getting the sign wrong drives the gripper into its hard stop, so this stays locked
-  # until measured. The 0.14.0 midpoint progress check is the guard if it is wrong.
-  open_target_rad_source: unverified_from_v5_plan
+  speed_limit_rad_s: 25.0      # gripper_posforce.cpp:45
+  torque_limit_pu: 0.15        # per-unit 0.0-1.0; the python example writes 1.5/10
+  # The official example runs on can1, which is officially the left arm, and commands
+  # a POSITIVE pi/2. The right arm's sign is the mirror of that and has no official
+  # example, so it stays a measurement to make rather than a stated fact.
   open_target_rad_by_arm_side:
-    right_arm: -1.5708   # -90 deg, unconfirmed
-    left_arm: 1.5708     # +90 deg, unconfirmed
-  # Official docs publish no pass threshold. Left unset on purpose: an invented number
-  # would turn into a PASS/FAIL verdict nobody decided.
+    left_arm: 1.5708           # matches the official example on can1
+    right_arm: -1.5708         # mirror, not independently sourced
+  # Official publishes no acceptance threshold for gripper travel. Left unset rather
+  # than invented: a number here becomes a PASS/FAIL nobody decided.
   min_travel_rad: null
   hardware_verified: false
   locked_reason: >-
-    ±90° 这个数**没有官方出处**：2026-09-21 复核，官方 2.0 夹爪页面不给角度、方向、
-    型号，openarm_can 1.4.0 代码里也没有任何夹爪角度常量。现值来自 V5 方案，来源无法追溯。
-    open_target 会作为 --gripper-open-target 驱动电机，方向错会撞机械限位；
-    且验收阈值待定（V5 §9-7）。必须先实测方向和行程。
+    官方参数已确认（POS_FORCE / π/2 / 25 rad/s / 0.15 pu），但工作站尚未接入 POS_FORCE
+    （本地 openarm_can 1.2.2 的 Python 绑定没有这个模式，需升级到 1.4.0），
+    且右臂符号与行程阈值未实测。
 
 zero:
   # The official 2.0 method, from docs/official/setup-tutorial.md section 2: clamp the

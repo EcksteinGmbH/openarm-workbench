@@ -758,6 +758,30 @@ def _bus_sentence(bus: Dict[str, Any]) -> str:
     return f"classic CAN 2.0 at {_bus_rate_text(bus)} with CAN-FD disabled"
 
 
+# What this report says about how the arm was tested. Without it a report cannot be
+# reconciled with one produced later: a reader cannot tell whether a difference is the
+# arm or the procedure. Every row states what was actually applied, not a target.
+#
+# Deliberately not a numbered section - it sits with Document Control, because it
+# describes the document rather than a test result, and adding a section would
+# renumber everything a customer may already have cited.
+METHOD_FIELDS = (
+    ("product_version", "Product Version"),
+    ("profile_revision", "Profile Revision"),
+    ("workstation_version", "Workstation Version"),
+    ("official_tool", "Official Tool"),
+    ("bus_mode", "Bus Mode"),
+    ("gripper_control_mode", "Gripper Control Mode"),
+    ("gripper_targets", "Gripper Targets"),
+    ("gripper_criteria", "Gripper Criteria"),
+    ("zero_method", "Zero Position Method"),
+)
+
+
+def _method_rows(method: Dict[str, Any]) -> List[List[str]]:
+    return [[label, str(method[key])] for key, label in METHOD_FIELDS if method.get(key)]
+
+
 def _display_date(report_date: str) -> str:
     """YYYYMMDD as YYYY-MM-DD, leaving anything unexpected untouched."""
     text = str(report_date)
@@ -779,6 +803,7 @@ def render_formal_factory_report(
     pdf_writer: Optional[Callable[[Path, Path], bool]] = None,
     allow_reportlab_fallback: bool = False,
     bus: Optional[Dict[str, Any]] = None,
+    method: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     arm_serial = str(arm.get("arm_cn") or "").strip()
     if not arm_serial:
@@ -793,6 +818,7 @@ def render_formal_factory_report(
     # same for a report produced on the day, and stop a regenerated August report from
     # claiming it was signed today.
     signature_date = _display_date(report_date)
+    method_rows = _method_rows(method or {})
     bus = dict(bus or DEFAULT_REPORT_BUS)
     bus_label = _bus_label(bus)
     bus_health_expectation = _bus_health_expectation(bus)
@@ -1360,6 +1386,10 @@ def render_formal_factory_report(
         <tr><td>Generated UTC</td><td>{escape(generated_at)}</td></tr>
         <tr><td>Operator</td><td>{escape(operator_name)}</td></tr>
         <tr><td>Project Lead</td><td>{escape(lead_name)}</td></tr>
+      </table>
+      <table class="method">
+        <tr><th colspan="2">Test Method And Basis</th></tr>
+        {''.join(f'<tr><td>{escape(str(label))}</td><td>{escape(str(value))}</td></tr>' for label, value in method_rows) or '<tr><td colspan="2">Not recorded by the workstation version that produced this report.</td></tr>'}
       </table>
     </div>
   </div>

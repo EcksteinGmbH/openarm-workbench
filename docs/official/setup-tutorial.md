@@ -144,3 +144,54 @@ SUBSYSTEM=="video4linux", ATTRS{idVendor}=="2b03", ATTRS{idProduct}=="f682", ATT
 - 末端：紧凑夹爪 + 手内相机 + 可换指尖
 - Leader：2.0 的是**无电机的 KER**，不是带电机的主臂
   → 所以 2.0 不存在 Follower/Leader 的电机差异
+
+---
+
+## 附二：2026-09-21 复核的更正与补充
+
+**我在 2026-09-21 第一次复核时下过两个错结论，这里更正：**
+
+| 错误结论 | 实际 | 出处 |
+|---|---|---|
+| "官方未公布 2.0 夹爪电机型号" | **DM4310，ID 0x08 / MST 0x18** | `examples/demo.cpp:41`、`examples/gripper_posforce.cpp:33` |
+| "±90° 没有一手来源" | **`3.14/2.0` = 1.5708 rad 就是官方示例的值** | `examples/gripper_posforce.cpp:45` |
+
+错因相同：**只查了文档页，没查 examples 代码**。官方的硬件参数很多只出现在示例代码里，不在文档。
+
+### 官方夹爪参数（一手来源）
+
+| 项 | 值 | 出处 |
+|---|---|---|
+| 电机 | DM4310 | `examples/gripper_posforce.cpp:33` |
+| ID / MST | 0x08 / 0x18 | 同上 |
+| **控制模式** | **POS_FORCE** | 同上 |
+| 开合位置 | 3.14/2.0 = 1.5708 rad | `gripper_posforce.cpp:45` |
+| 速度上限 | 25.0 rad/s | 同上 |
+| 力矩上限 | 0.15 pu（0–1 标幺） | 同上；Python 版写 `1.5/10` |
+
+Python 版同参：`python/examples/test_gripper_posforce.py:24-25, 36-47`
+
+### 为什么官方从 MIT 换成 POS_FORCE
+
+**enactic/openarm_can issue #81**（2025-12-18 提出，2026-01-13 关闭）
+
+> 提问者：MIT 模式无法设置最大力矩，夹到硬物时力矩过大，电机很容易过热
+> 官方 tokirobot：完全同意……POS_FORCE 正是我们想走的方向
+
+**时间线注意**：#81 提出时官方主仓库最新 release 是 2025-10-31 的 **1.1**，还没有 2.0。
+所以这条反馈**大概率针对的是 1.0**。另外三个官方仓库搜过，没有第二例夹爪过热报告。
+
+### 官方在代码注释里留的坑
+
+`gripper_posforce.cpp:29-32`：
+
+> `init_gripper_motor` 写控制模式是**只写 RAM、不回读**。写丢了电机就还停在 Flash 里的
+> 旧模式，而后面所有指令被**静默丢弃**。夹爪不响应就去查 RID 10。
+
+### issue #101：零位校准要一条臂一条臂做
+
+https://github.com/enactic/openarm_can/issues/101（OPEN）
+
+> 官方 abetomo：零位校准应对每条臂单独执行，不要主从同时连着跑。
+
+**对我们尤其重要**：方案 A 把左右臂放在同一条 can0 上。

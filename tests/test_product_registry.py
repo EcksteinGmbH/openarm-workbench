@@ -112,9 +112,11 @@ def test_2_0_keys_the_gripper_target_on_the_arm_side():
 @pytest.mark.parametrize(
     "product_version, arm_side, expected",
     [
+        # 1.0 states one value: both arms open the same way.
         ("openarm_1_0", "right_arm", -1.0472),
         ("openarm_1_0", "left_arm", -1.0472),
         ("openarm_1_0", None, -1.0472),
+        # 2.0 mirrors, so the side decides the sign.
         ("openarm_2_0", "right_arm", -1.5708),
         ("openarm_2_0", "left_arm", 1.5708),
     ],
@@ -289,18 +291,48 @@ def test_the_official_reference_is_kept_in_the_repo():
         assert "抓取日期" in text, f"{page} has no fetch date"
 
 
-def test_the_2_0_gripper_angles_are_marked_unsourced():
-    """Official publishes no 2.0 gripper angle, so ours must not look authoritative.
+def test_the_2_0_gripper_values_come_from_the_official_examples():
+    """Every 2.0 gripper value is from openarm_can 1.4.0, not inferred.
 
-    Re-checked 2026-09-21: the 2.0 gripper and general hardware pages state no angle,
-    direction, motor or camera model, and openarm_can 1.4.0 has no gripper angle
-    constant. The values here came from the V5 plan and could not be traced further.
-    Recording a guess without saying it is one is how a guess becomes a spec.
+    An earlier pass marked these unsourced after checking only the documentation
+    pages. They are in the code: examples/gripper_posforce.cpp:33,43-48 and
+    python/examples/test_gripper_posforce.py. Official hardware figures often live in
+    the examples rather than the docs, so checking one and concluding for both is how
+    that went wrong.
     """
     gripper = workstation.ProductRegistry().get("openarm_2_0")["gripper"]
-    assert gripper["open_target_rad_source"] == "unverified_from_v5_plan"
-    assert gripper["hardware_verified"] is False
-    assert "没有官方出处" in gripper["locked_reason"]
+    assert gripper["motor"] == "DM4310"
+    assert gripper["esc_id"] == 0x08 and gripper["mst_id"] == 0x18
+    assert gripper["control_mode"] == "POS_FORCE"
+    assert gripper["speed_limit_rad_s"] == 25.0
+    assert gripper["torque_limit_pu"] == 0.15
+    assert gripper["open_target_rad_by_arm_side"]["left_arm"] == 1.5708
+    # Still unset: official publishes no travel threshold, and inventing one turns
+    # into a PASS/FAIL nobody decided.
+    assert gripper["min_travel_rad"] is None
+
+
+def test_a_mirroring_product_states_no_single_open_target():
+    # A lone value beside a per-side table is ambiguous, and whichever the code picked
+    # would be right for one arm and drive the other into its mechanical stop.
+    gripper = workstation.ProductRegistry().get("openarm_2_0")["gripper"]
+    assert "open_target_rad" not in gripper
+    assert set(gripper["open_target_rad_by_arm_side"]) == {"left_arm", "right_arm"}
+
+
+def test_the_1_0_gripper_records_the_mode_it_actually_uses(service):
+    """The report has to be able to state how the gripper was driven.
+
+    1.0 is still MIT, which has no torque ceiling. That is a recorded decision with a
+    stated blocker, not an oversight - official moved to POS_FORCE after
+    openarm_can#81, and following them needs the 1.4.0 bindings plus a hardware check
+    that swapping the library alone changes nothing.
+    """
+    gripper = workstation.ProductRegistry().get("openarm_1_0")["gripper"]
+    assert gripper["control_mode"] == "MIT"
+    assert gripper["torque_limit_pu"] is None, "MIT cannot express a torque ceiling"
+    assert gripper["pending_change"]["to_control_mode"] == "POS_FORCE"
+    assert gripper["pending_change"]["reason"] and gripper["pending_change"]["blocked_by"]
 
 
 def test_the_1_0_gripper_target_is_backed_by_real_runs():
@@ -331,3 +363,14 @@ def test_the_official_diagnose_rules_are_in_the_problem_catalogue():
     text = " ".join(workstation.SINGLE_MOTOR_PROBLEMS["bus_nothing_acknowledges"]["solutions"])
     assert "60Ω" in text and "120Ω" in text and "40Ω" in text
     assert "dbitrate" in text
+
+
+def test_the_bus_and_control_mode_gotchas_are_in_the_catalogue():
+    # Two failures that look like bad wiring but are not.
+    zero = workstation.SINGLE_MOTOR_PROBLEMS["zero_multiple_arms_on_bus"]
+    assert "#101" in " ".join(zero["solutions"]), "the official ruling should be citable"
+
+    mode = workstation.SINGLE_MOTOR_PROBLEMS["gripper_control_mode_not_applied"]
+    # The control mode write is RAM-only and unacknowledged; a lost write makes every
+    # later command vanish silently, which reads as a disconnected gripper.
+    assert "RID 10" in " ".join(mode["solutions"])

@@ -55,6 +55,23 @@ gripper:
   # One value for Follower and Leader alike, matching the official limit table
   # [-60 deg, 0 deg] in openarm-can-zero-position-calibration. Verified on 12 Follower
   # arm-sides (2026-05-18 .. 2026-09-03), which reached 90-98% of this target.
+  motor: DM4310
+  esc_id: 0x08
+  mst_id: 0x18
+  # What this workstation actually does today, recorded so the report can state it.
+  # MIT has no torque ceiling: a gripper driven onto a hard stop keeps adding force
+  # (openarm_can#81). Official moved to POS_FORCE; we have not yet, because the
+  # installed openarm_can 1.2.2 bindings do not expose it and swapping the library
+  # under the 1.0 path has to be proven on hardware first. This is a recorded
+  # decision, not an oversight.
+  control_mode: MIT
+  control_kp: 5.0
+  control_kd: 0.6
+  torque_limit_pu: null        # MIT cannot express one
+  pending_change:
+    to_control_mode: POS_FORCE
+    reason: openarm_can#81 - MIT 无力矩上限，夹到硬物会持续加力直至过热；官方已转向 POS_FORCE
+    blocked_by: 需先升级到 openarm_can 1.4.0 并在真机上证明换库本身不改变结果
   open_target_rad: -1.0472   # -60 deg
   close_target_rad: 0.0
   min_travel_rad: 0.8

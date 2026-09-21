@@ -89,6 +89,11 @@ OFFICIAL_BAUDRATE_CODES = {
     2500000: 6, 3200000: 7, 4000000: 8, 5000000: 9, 8000000: 10, 10000000: 11,
 }
 
+# The official package the dynamic steps actually run through. 1.4.0 is vendored
+# alongside but not yet in use; changing this is a decision that has to be proven on
+# hardware, and the report has to state which one produced it.
+OFFICIAL_TOOL_VERSION = "openarm_can 1.2.2"
+
 WHOLE_ARM_TARGET_TIMEOUT = 5000
 
 # Arm records written before the product registry existed carry no product_version.
@@ -332,6 +337,24 @@ SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
     # from openarm_can 1.4.0 setup/cli/commands/diagnose_commands.cpp. They tell apart
     # faults that otherwise look identical from the outside, which is exactly what an
     # operator cannot do unaided.
+    "zero_multiple_arms_on_bus": {
+        "title": "零位校准时总线上不能有第二条臂",
+        "message": "检测到总线上同时挂着不止一条机械臂。零位校准必须一条一条做。",
+        "solutions": [
+            "断开另一条臂的 CAN 连接（或断电），只保留正在校准的这一条。",
+            "校准完这条再接另一条，分两次做。",
+            "官方也确认零位校准要对每条臂单独执行（enactic/openarm_can issue #101）。",
+        ],
+    },
+    "gripper_control_mode_not_applied": {
+        "title": "夹爪没有响应位置指令",
+        "message": "夹爪控制模式是只写 RAM、不回读的。这一次写丢了，电机仍停在 Flash 里的旧模式，后面发的指令会被静默丢弃——看起来像没接好，其实是模式没切过去。",
+        "solutions": [
+            "在「02 单电机测试 → 查看电机参数」里读 CTRL_MODE（RID 10），确认它是期望的模式。",
+            "重新初始化夹爪再试一次；这个写入没有确认帧，重发是安全的。",
+            "官方在 gripper_posforce.cpp 的注释里专门提示过这一点。",
+        ],
+    },
     "bus_reply_on_unlistened_id": {
         "title": "有电机在没人监听的 ID 上应答",
         "message": "总线上收到了回帧，但 ID 不是工作站在等的那些。电机是活的，只是身份配错了——这是配置问题，不是接线问题。",
@@ -912,6 +935,14 @@ def _command_arm_side(command: List[str]) -> Optional[str]:
     return None
 
 
+def _bus_mode_text(bus: Dict[str, Any]) -> str:
+    """e.g. "CAN 2.0 / 1 Mbps" or "CAN FD / 1 Mbps arb + 5 Mbps data"."""
+    bitrate = int(bus.get("bitrate") or 0)
+    if str(bus.get("mode")) == "canfd":
+        return f"CAN FD / {bitrate / 1e6:g} Mbps arb + {int(bus.get('dbitrate') or 0) / 1e6:g} Mbps data"
+    return f"CAN 2.0 / {bitrate / 1e6:g} Mbps"
+
+
 def _official_demo_gripper_targets(gripper: Dict[str, Any], arm_side: Optional[str]) -> tuple:
     """(open, close) targets for one arm, taken from the product registry.
 
@@ -922,16 +953,23 @@ def _official_demo_gripper_targets(gripper: Dict[str, Any], arm_side: Optional[s
     reads whichever one the product actually declares.
     """
     close_target = float(gripper.get("close_target_rad") or 0.0)
+
+    # A per-side table always wins. Falling back to a single value on a product that
+    # mirrors would open one arm into its mechanical stop, so an unknown side is an
+    # error rather than a default.
+    by_arm_side = gripper.get("open_target_rad_by_arm_side") or {}
+    if by_arm_side:
+        if arm_side in by_arm_side:
+            return float(by_arm_side[arm_side]), close_target
+        raise ValueError(
+            "this product keys the gripper open target on the arm side; "
+            f"the demo command must state --arm_side (one of {sorted(by_arm_side)})"
+        )
+
     open_target = gripper.get("open_target_rad")
     if open_target is not None:
         return float(open_target), close_target
-    by_arm_side = gripper.get("open_target_rad_by_arm_side") or {}
-    if arm_side and arm_side in by_arm_side:
-        return float(by_arm_side[arm_side]), close_target
-    raise ValueError(
-        "this product keys the gripper open target on the arm side; "
-        f"the demo command must state --arm_side (one of {sorted(by_arm_side)})"
-    )
+    raise ValueError("this product states no gripper open target")
 
 
 def _normalize_official_demo_command(
@@ -3538,6 +3576,7 @@ class WorkstationService:
                 arm=report_arm,
                 profile=profile,
                 bus=bus,
+                method=self._report_method(product_version, bus, profile.get("arm_side")),
                 operator=operator,
                 project_lead=project_lead,
                 notes=notes,
@@ -3546,6 +3585,64 @@ class WorkstationService:
             )
             self._attach_report_to_arm(path, arm, report["report_ref"])
             return report
+
+    def _report_method(
+        self, product_version: str, bus: Dict[str, Any], arm_side: Optional[str]
+    ) -> Dict[str, Any]:
+        """How this arm was tested, for the report to state on its own face.
+
+        A report that does not say which method produced it cannot be reconciled with
+        one produced later: the reader cannot tell whether a difference is the arm or
+        the procedure. Everything here is read from the product registry and the
+        running workstation, so it describes what was applied rather than what was
+        intended.
+        """
+        try:
+            product = self.product_registry.get(product_version)
+        except KeyError:
+            product = self.product_registry.get(DEFAULT_PRODUCT_VERSION)
+
+        gripper = product.get("gripper") or {}
+        mode = str(gripper.get("control_mode") or "-")
+        if mode == "MIT":
+            mode_text = f"MIT (kp={gripper.get('control_kp')}, kd={gripper.get('control_kd')}, 无力矩上限)"
+        elif mode == "POS_FORCE":
+            mode_text = (
+                f"POS_FORCE (速度上限 {gripper.get('speed_limit_rad_s')} rad/s, "
+                f"力矩上限 {gripper.get('torque_limit_pu')} pu)"
+            )
+        else:
+            mode_text = mode
+
+        try:
+            open_target, close_target = _official_demo_gripper_targets(gripper, arm_side)
+            targets = f"开 {open_target:+.4f} rad / 关 {close_target:.4f} rad"
+        except ValueError:
+            targets = "-"
+
+        threshold = gripper.get("min_travel_rad")
+        criteria = (
+            f"实测行程 >= {threshold} rad"
+            if threshold is not None
+            else "行程阈值未定，仅记录实测值，不判 PASS/FAIL"
+        )
+
+        zero = product.get("zero") or {}
+        zero_text = str(zero.get("method") or "-")
+        if zero.get("motion") is not None:
+            zero_text += "（运动）" if zero["motion"] else "（不运动）"
+
+        return {
+            "product_version": f"{product_version} ({product.get('label')})",
+            "profile_revision": product.get("profile_revision"),
+            "workstation_version": WORKSTATION_VERSION,
+            "official_tool": OFFICIAL_TOOL_VERSION,
+            "bus_mode": _bus_mode_text(bus),
+            "gripper_control_mode": mode_text,
+            "gripper_targets": targets,
+            "gripper_criteria": criteria,
+            "zero_method": zero_text,
+        }
 
     def _formal_factory_report_arm_view(self, arm: Dict[str, Any], profile_id: str, profile: Dict[str, Any]) -> Dict[str, Any]:
         """Build a side-specific arm record view for formal report rendering.
