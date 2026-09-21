@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.29.0-one-vocabulary`
+Current workstation version: `0.30.0-derived-thresholds`
 
 ## Versioning Rule
 
@@ -13,6 +13,58 @@ Current workstation version: `0.29.0-one-vocabulary`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.30.0-derived-thresholds - 2026-09-21
+
+Summary: worked the three undecided numbers from official, the code and our own
+measurements. One came out solid, one is a hypothesis, and one cannot be derived at
+all. `docs/official/derived-thresholds.md` carries each chain and where it stops.
+
+**Camera acceptance - derived, and recorded as criteria.**
+
+The figures come from what the data pipeline needs, not from what a camera can do.
+`enactic/openarm` `website/docs/dataset/dataset.mdx` shows real data at 960x600 on
+every stream, and `api.mdx` resamples with `Dataset.sample(hz=30)`.
+
+The rate is a hard floor rather than a preference. `sample()` takes the
+previous-or-equal frame by timestamp, with no interpolation and no tolerance, so a
+camera below 30 fps makes it **silently repeat the last frame** - a dataset that looks
+complete and is not. That is undetectable after delivery, which is exactly why it
+belongs in a factory test. Recorded: >= 960x600, >= 30 fps sustained, no frame gap over
+33.3 ms, zero drops, over at least 30 s. Sharpness and white balance stay unset: they
+are lens-specific and official states none.
+
+**2.0 gripper travel - a hypothesis, deliberately not a criterion.**
+
+17 real measurements on 1.0 achieved 82.9%-97.4% of the commanded 1.0472 rad, against a
+threshold set at 76.4%. The same fraction of 1.5708 gives about 1.20 rad. Recorded as
+`expected_travel_rad_hypothesis`, with `min_travel_rad` left null so the step still
+records without failing. Three reasons it does not transfer, each needing hardware:
+2.0 drives POS_FORCE under a 0.15 pu torque cap rather than MIT and can stop short on
+torque; the mechanism is the compact gripper, not the linkage-parallel one; and 1.0's
+own margin is only 6.5 points wide.
+
+**2.0 TIMEOUT - cannot be derived.**
+
+Official describes RID 9 as `{"CAN Timeout", "RW", "uint32", "[0, 2^32-1]"}` and
+nothing else. No value appears in the docs, the examples or the issues. Our 5000 is
+ours; it stays marked unverified for 2.0.
+
+Also fixed, found while restructuring the registry:
+
+- `cameras` grew an `acceptance` block, moving the entries under `cameras.streams`.
+  The lock scanner read only the old bare-list shape, so **both camera locks silently
+  disappeared** - and a product with no locks can produce a formal report. A data-shape
+  change had quietly removed a safety gate. Both shapes now resolve, and a test holds
+  that.
+- The provenance test now accepts either a fetch date or a derivation date: extracts
+  and derivations are different kinds of document and each carries its own.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 271 passed, including that the camera criteria match
+  the pipeline figures, that the gripper number stays a hypothesis, and that
+  restructuring the camera entry cannot drop its lock again.
 
 ### 0.29.0-one-vocabulary - 2026-09-21
 

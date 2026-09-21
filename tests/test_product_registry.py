@@ -288,7 +288,9 @@ def test_the_official_reference_is_kept_in_the_repo():
     for page in pages:
         text = (official / page).read_text(encoding="utf-8")
         assert "https://docs.openarm.dev/" in text, f"{page} has no source URL"
-        assert "抓取日期" in text, f"{page} has no fetch date"
+        # Two kinds live here and each carries its own provenance: an extract says when
+        # it was fetched, a derivation says when it was worked out and from what.
+        assert ("抓取日期" in text) or ("推导日期" in text), f"{page} has no date"
 
 
 def test_the_2_0_gripper_values_come_from_the_official_examples():
@@ -374,3 +376,47 @@ def test_the_bus_and_control_mode_gotchas_are_in_the_catalogue():
     # The control mode write is RAM-only and unacknowledged; a lost write makes every
     # later command vanish silently, which reads as a disconnected gripper.
     assert "RID 10" in " ".join(mode["solutions"])
+
+
+def test_restructuring_the_camera_entry_cannot_silently_drop_its_lock():
+    """`cameras` changed from a bare list to a mapping with `streams`.
+
+    Reading only the old shape dropped both camera locks, and a product with no locks
+    can produce a formal report - a data-shape change quietly removing a safety gate.
+    """
+    registry = workstation.ProductRegistry()
+    locks = registry.lock_reasons("openarm_2_0")
+    assert "camera.gripper" in locks and "camera.top" in locks
+
+    # Both shapes resolve, so an older file does not lose its locks either.
+    new_shape = {"cameras": {"streams": [{"id": "a", "hardware_verified": False}]}}
+    old_shape = {"cameras": [{"id": "a", "hardware_verified": False}]}
+    assert registry._camera_streams(new_shape) == registry._camera_streams(old_shape)
+
+
+def test_the_camera_criteria_come_from_the_data_pipeline(service):
+    """Not "how good should a camera be" but "what does the dataset need".
+
+    Official real data is 960x600 and `Dataset.sample(hz=30)` resamples onto a 30 Hz
+    grid, picking the previous-or-equal frame with no interpolation - so a camera below
+    30 fps makes it silently repeat the last frame. That is undetectable after
+    delivery, which is why it is a factory criterion.
+    """
+    acceptance = workstation.ProductRegistry().get("openarm_2_0")["cameras"]["acceptance"]
+    assert acceptance["min_width"] == 960 and acceptance["min_height"] == 600
+    assert acceptance["min_fps"] == 30
+    assert acceptance["max_frame_gap_ms"] == pytest.approx(1000 / 30, abs=0.1)
+    assert acceptance["max_dropped_frames"] == 0
+    assert acceptance["min_test_seconds"] >= 30
+    # Lens-specific and official states none, so it stays unset rather than invented.
+    assert acceptance["image_quality_criteria"] is None
+
+
+def test_the_2_0_gripper_travel_figure_is_a_hypothesis_not_a_criterion(service):
+    # 1.0 achieved 82.9%-97.4% of its target across 17 measurements; the same fraction
+    # of 1.5708 gives ~1.20. It does not transfer: 2.0 drives POS_FORCE under a torque
+    # cap, on a different mechanism, and 1.0's own margin is only 6.5 points wide.
+    gripper = workstation.ProductRegistry().get("openarm_2_0")["gripper"]
+    assert gripper["min_travel_rad"] is None, "still records only, never fails"
+    assert gripper["expected_travel_rad_hypothesis"] == 1.20
+    assert gripper["expected_travel_source"] == "extrapolated_from_1_0_achievement_ratio"

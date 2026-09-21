@@ -1628,12 +1628,25 @@ class ProductRegistry:
             if section.get("hardware_verified") is False and not section.get("locked_reason"):
                 raise ValueError(f"product registry {filename} has an unverified section with no locked_reason")
 
+    @staticmethod
+    def _camera_streams(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """The camera entries, whichever shape the file uses.
+
+        `cameras` was a bare list before acceptance criteria existed; it is now a
+        mapping with `streams`. Reading only the old shape drops every camera lock,
+        and a product with no locks can produce a formal report.
+        """
+        cameras = data.get("cameras")
+        if isinstance(cameras, dict):
+            cameras = cameras.get("streams")
+        return [item for item in (cameras or []) if isinstance(item, dict)]
+
     def _lockable_sections(self, data: Dict[str, Any]) -> List[Dict[str, Any]]:
         sections = [data["can"]["commissioning"], data["can"]["operation"]]
         for key in ("gripper", "zero"):
             if isinstance(data.get(key), dict):
                 sections.append(data[key])
-        sections.extend(item for item in (data.get("cameras") or []) if isinstance(item, dict))
+        sections.extend(self._camera_streams(data))
         return sections
 
     def cross_check(self, profile_manager: "ProfileManager") -> List[str]:
@@ -1712,8 +1725,8 @@ class ProductRegistry:
         ):
             if isinstance(node, dict) and node.get("hardware_verified") is False:
                 reasons[name] = str(node.get("locked_reason") or "")
-        for camera in product.get("cameras") or []:
-            if isinstance(camera, dict) and camera.get("hardware_verified") is False:
+        for camera in self._camera_streams(product):
+            if camera.get("hardware_verified") is False:
                 reasons[f"camera.{camera.get('id')}"] = str(camera.get("locked_reason") or "")
         return reasons
 

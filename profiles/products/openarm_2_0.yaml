@@ -89,9 +89,18 @@ gripper:
   open_target_rad_by_arm_side:
     left_arm: 1.5708           # matches the official example on can1
     right_arm: -1.5708         # mirror, not independently sourced
-  # Official publishes no acceptance threshold for gripper travel. Left unset rather
-  # than invented: a number here becomes a PASS/FAIL nobody decided.
+  # Official publishes no travel threshold. Still null on purpose - the value below is
+  # an extrapolation to record against, not a criterion to fail on.
   min_travel_rad: null
+  # 1.0 achieved 82.9%-97.4% of its commanded 1.0472 rad across 17 real measurements,
+  # with the threshold set at 76.4%. The same fraction of 1.5708 gives ~1.20 rad.
+  # Three reasons that does not transfer, all needing hardware to settle: 2.0 drives
+  # the gripper in POS_FORCE under a 0.15 pu torque cap rather than MIT, so it can stop
+  # short on torque; the mechanism is the compact gripper, not the linkage-parallel
+  # one; and 1.0's own margin is only 6.5 points wide. See
+  # docs/official/derived-thresholds.md.
+  expected_travel_rad_hypothesis: 1.20
+  expected_travel_source: extrapolated_from_1_0_achievement_ratio
   hardware_verified: false
   locked_reason: >-
     官方参数已确认（POS_FORCE / π/2 / 25 rad/s / 0.15 pu），但工作站尚未接入 POS_FORCE
@@ -120,17 +129,36 @@ zero:
     且需确认产线有 Cell 校准夹具（HNTP6-6 螺母 + M6 螺丝）。
 
 cameras:
-  - id: gripper
-    model: DCXGW20
-    required: true
-    mode: 1080p60
-    hardware_verified: false
-    locked_reason: 相机工位判据（帧率、丢帧、清晰度）待给出，见 V5 §9-3。
-  - id: top
-    model: D435i
-    required: per_order
-    hardware_verified: false
-    locked_reason: 选配项；未购买时记为 N/A，不算失败。
+  # What the data pipeline needs, not what a camera can do. From the official dataset
+  # documentation (enactic/openarm website/docs/dataset/): every stream in real data is
+  # 960x600, and `Dataset.sample(hz=30)` resamples onto a 30 Hz grid.
+  #
+  # The rate is a hard floor, not a preference. `sample()` picks the previous-or-equal
+  # frame by timestamp with no interpolation and no tolerance, so a camera below 30 fps
+  # makes it silently repeat the last frame - a dataset that looks complete and is not.
+  # That cannot be found after delivery, so it has to be caught here.
+  acceptance:
+    min_width: 960
+    min_height: 600
+    min_fps: 30
+    max_frame_gap_ms: 33.3        # 1/30 s; longer produces a repeated frame
+    min_test_seconds: 30          # a short window misses intermittent drops
+    max_dropped_frames: 0
+    source: 官方数据集文档（960x600，sample(hz=30)，previous-or-equal 对齐）
+    # Sharpness, focus and white balance are lens-specific and official states none.
+    image_quality_criteria: null
+  streams:
+    - id: gripper
+      model: DCXGW20
+      alternatives: [D405]
+      required: true
+      hardware_verified: false
+      locked_reason: 相机工位尚未实现；判据已按官方数据管线推出（见 docs/official/derived-thresholds.md）。
+    - id: top
+      model: D435i
+      required: per_order
+      hardware_verified: false
+      locked_reason: 选配项；未购买时记为 N/A，不算失败。
 
 firmware_baseline:
   DM4310: V5017_04
