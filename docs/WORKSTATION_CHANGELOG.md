@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.26.0-ui-pass-report-tab`
+Current workstation version: `0.26.1-baseline-is-a-detector`
 
 ## Versioning Rule
 
@@ -13,6 +13,45 @@ Current workstation version: `0.26.0-ui-pass-report-tab`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.26.1-baseline-is-a-detector - 2026-09-21
+
+Summary: corrected what the frozen outputs under `tests/golden/` are for. They detect
+change. They do not define what is correct, and they must not shape the test procedure.
+
+The symptom was already visible twice: the baseline failed when the day rolled over,
+and again when the version was bumped. Both were patched by normalising the value,
+without asking why a reference kept behaving like a specification. The word "golden"
+was doing that work - it reads as "the right answer".
+
+Changes:
+
+- `tests/golden/README.md` states the authority order plainly: **official (docs plus
+  the examples code plus the issues) > what the motors themselves report > this
+  directory**. Where they disagree, this directory is not the tie-breaker. The DM4340
+  velocity limit is the worked example: 16 motors read back 10.0, which settled it
+  against any table.
+- It also says when refreshing is right - whenever the change is intended - and that
+  the only requirement is reading the diff. The full text is stored rather than a hash
+  precisely so the diff is readable.
+- And when this set should be replaced outright: once there are whole-arm records from
+  a mature procedure, on CAN FD, with the gripper in POS_FORCE, those become the
+  reference and these three 1.0 arms become history. The test for that is whether
+  "these three arms represent how we work now" is still true.
+- The two tests are renamed to `..._has_not_moved_unnoticed`, and a failure now says
+  it is reporting change rather than judging it, and carries the refresh command.
+- A test asserts the README keeps the authority order, the refresh instructions, and
+  the section on replacing the set - so a later rename cannot quietly turn a reference
+  back into a specification.
+- The same correction is carried into the handoff notes.
+
+Nothing about the detector's coverage changed: the same verdicts and the same report
+text are still compared field by field.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 248 passed. A deliberate one-word edit to a frozen
+  report was used to check the failure message reads as intended.
 
 ### 0.26.0-ui-pass-report-tab - 2026-09-21
 

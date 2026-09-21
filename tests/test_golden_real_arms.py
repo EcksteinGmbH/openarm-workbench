@@ -1,22 +1,12 @@
-"""Golden regression against the three 1.0 arms that were actually built and tested.
+"""Change detector for the release verdict of the three arms tested on hardware.
 
-Real hardware runs are the only ground truth this project has, and right now they
-cannot be repeated - there is no adapter or arm attached. What survives from those
-runs is their recorded evidence, so it is frozen here: any change that alters the
-release verdict or the linked evidence of a real arm fails this test. This is the
-strongest check available while hardware is out of reach, and it guards the 1.0 path
-specifically, which must not move while 2.0 is being added.
+NOT a specification, and not a constraint on how testing should work. These verdicts
+are what the workstation decided in 2026-05..09 under the procedure of that time. If
+following official more closely moves them, move the baseline - see
+tests/golden/README.md for the authority order and when to replace this set entirely.
 
-The evidence is committed under `tests/golden/fixture/` because `artifacts/` is
-gitignored - a baseline that only exists on one machine is not protection. The fixture
-is the minimum the gate reads, with command output stripped, and
-`tests/golden/build_fixture.py` refuses to produce one whose verdict differs from the
-real records'. `test_the_fixture_still_matches_the_real_records` re-checks that on any
-machine that still has them.
-
-Refreshing the baseline is a deliberate act: re-run
-`tests/golden/refresh_release_gate_baseline.py` and review the diff. A baseline that
-changes without a decision behind it means 1.0 behaviour changed.
+The evidence is committed under tests/golden/fixture/ because artifacts/ is gitignored
+and a detector that only exists on one machine detects nothing.
 """
 from __future__ import annotations
 
@@ -104,8 +94,13 @@ def golden_service(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("arm_cn", sorted(BASELINE))
-def test_release_gate_verdict_for_a_real_arm_is_unchanged(golden_service, arm_cn):
-    assert _gate_view(golden_service.factory_release_gate(arm_cn)) == BASELINE[arm_cn]
+def test_release_gate_verdict_for_a_real_arm_has_not_moved_unnoticed(golden_service, arm_cn):
+    actual = _gate_view(golden_service.factory_release_gate(arm_cn))
+    assert actual == BASELINE[arm_cn], (
+        f"{arm_cn}'s release verdict moved. This reports change, it does not judge it.\n"
+        "If the change is intended, refresh and record why:\n"
+        "  .venv/bin/python tests/golden/refresh_release_gate_baseline.py"
+    )
 
 
 def test_every_arm_in_the_fixture_is_covered_by_the_baseline():
@@ -146,3 +141,32 @@ def test_the_fixture_still_matches_the_real_records(monkeypatch):
         if not (REAL_ARMS_DIR / f"{arm_cn}.json").exists():
             pytest.skip(f"{arm_cn} is no longer on this machine")
         assert _gate_view(service.factory_release_gate(arm_cn)) == expected, arm_cn
+
+
+def test_the_baseline_says_what_it_is_and_what_it_is_not():
+    """A frozen output is one rename away from being mistaken for a specification.
+
+    These three arms were tested under the procedure and the official version of
+    2026-05..09. They are a change detector. Official and the motors decide what is
+    correct. Someone reaching for this directory has to meet that in writing.
+    """
+    readme = (GOLDEN_DIR / "README.md").read_text(encoding="utf-8")
+    assert "不是标准答案" in readme
+    # The authority order, in order.
+    assert readme.index("官方") < readme.index("真机实测") < readme.index("本目录")
+    # Refreshing has to read as normal, not as defeat.
+    assert "基准让路，不是流程让路" in readme
+    assert "refresh_release_gate_baseline.py" in readme
+    assert "build_report_baseline.py" in readme
+    # And it has to say when this set stops being the right reference at all.
+    assert "什么时候该换掉" in readme
+
+
+def test_a_failure_tells_the_reader_it_is_reporting_change_not_judging_it():
+    from pathlib import Path as _Path
+
+    for name in ("test_golden_real_arms.py", "test_golden_formal_report.py"):
+        source = (_Path(__file__).parent / name).read_text(encoding="utf-8")
+        assert "NOT a specification" in source, name
+        # The refresh command belongs in the failure, not in a doc nobody opens.
+        assert "tests/golden/" in source and "refresh" in source.lower(), name

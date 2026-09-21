@@ -1,11 +1,13 @@
-"""Golden regression on the formal acceptance report of the three real 1.0 arms.
+"""Change detector for the formal report of the three arms tested on hardware.
 
-The report is where the product version matters most: a 2.0 arm must never ship a
-report claiming CAN 2.0 / 1 Mbps. Moving those hardcoded strings onto the product
-registry is exactly the change that can silently alter a 1.0 report, so the 1.0 output
-is frozen in full - a failure shows a diff of what moved, not just that something did.
+NOT a specification. These outputs are what the workstation produced in 2026-05..09,
+under the procedure and the official version (openarm_can 1.2.2) of that time. When a
+deliberate change to the procedure moves them, move the baseline - official and the
+motors themselves decide what is correct, not this file. See tests/golden/README.md
+for the authority order.
 
-Refresh deliberately with `tests/golden/build_report_baseline.py` and review the diff.
+The full text is stored rather than a hash so a failure shows *what* moved, which is
+the only way reviewing the diff is realistic.
 """
 from __future__ import annotations
 
@@ -46,12 +48,20 @@ def _render(arm_cn: str) -> tuple[str, str]:
 def _assert_same(actual: str, expected: str, label: str):
     if actual == expected:
         return
-    diff = "\n".join(list(difflib.unified_diff(expected.splitlines(), actual.splitlines(), "baseline", "current", lineterm="", n=1))[:40])
-    pytest.fail(f"{label} changed:\n{diff}")
+    diff = "\n".join(
+        list(difflib.unified_diff(expected.splitlines(), actual.splitlines(), "baseline", "current", lineterm="", n=1))[:40]
+    )
+    pytest.fail(
+        f"{label} moved. This is a report of change, not a verdict on correctness.\n"
+        "If the change is intended, refresh the baseline and record why:\n"
+        "  .venv/bin/python tests/golden/build_report_baseline.py\n"
+        "  git diff tests/golden/fixture/reports/\n"
+        f"\n{diff}"
+    )
 
 
 @pytest.mark.parametrize("arm_cn", ARM_CNS)
-def test_the_formal_report_of_a_real_arm_is_unchanged(arm_cn, monkeypatch):
+def test_the_formal_report_of_a_real_arm_has_not_moved_unnoticed(arm_cn, monkeypatch):
     monkeypatch.setattr(workstation, "FACTORY_ARMS_DIR", workstation.FACTORY_ARMS_DIR)
     html, payload = _render(arm_cn)
     _assert_same(html, (REPORTS_DIR / f"{arm_cn}.html").read_text(encoding="utf-8"), f"{arm_cn} report HTML")
