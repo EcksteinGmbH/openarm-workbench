@@ -38,7 +38,7 @@ import { state } from './store.js';
 import { initSingleMotorWizard } from './single-motor-wizard.js?v=20260921-words';
 import { initLinkWizard } from './link-wizard.js?v=20260921-words';
 import { bindProblemModal } from './problem-modal.js?v=20260921-words';
-import { initArmWizard } from './arm-wizard.js?v=20260921-words';
+import { initArmWizard } from './arm-wizard.js?v=20260930-pass-label';
 import { initReportArchive, initDiskMaintenance } from './report-archive.js?v=20260921-words';
 
 function escapeHtml(value) {

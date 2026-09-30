@@ -37,6 +37,8 @@ const arm = {
     creating: false,
     showCompleted: false,
     phase: null,
+    results: {},
+    side: 'right_arm',
     draft: { product_version: 'openarm_2_0', arm_type: 'OpenARM Follower', arm_cn: '' }
 };
 
@@ -212,8 +214,17 @@ function renderSteps() {
     }
     const view = views.find(item => item.id === active);
     let index = arm.status.steps.findIndex(step => step.group === active);
+    const sidePicker = active === 'static' ? `
+        <div class="smw-field aw-side-field">
+            <span>这次测哪一侧</span>
+            <div class="smw-segment">
+                <button data-side="right_arm" class="${arm.side === 'right_arm' ? 'on' : ''}">右臂 · ESC 0x01–0x08</button>
+                <button data-side="left_arm" class="${arm.side === 'left_arm' ? 'on' : ''}">左臂 · ESC 0x09–0x10</button>
+            </div>
+        </div>` : '';
     body.innerHTML = `
         <p class="aw-phase-purpose">${esc(view.purpose)}</p>
+        ${sidePicker}
         <ol class="aw-timeline">${view.steps.map(step => renderStep(step, index++)).join('')}</ol>`;
 }
 
@@ -258,6 +269,8 @@ function renderStep(step, index) {
                                 <span>${esc(check.label)}</span>
                             </label>`).join('')}
                     </div>` : ''}
+
+                ${runnable && arm.results[step.id] ? `<div class="aw-node-result">${stepResult(step)}</div>` : ''}
 
                 ${runnable ? `
                     <div class="aw-node-actions">
@@ -507,19 +520,81 @@ function attachRecord(recordId) {
 function runStep(stepId) {
     const step = (arm.status?.steps || []).find(item => item.id === stepId);
     if (!step) return;
-    // Execution lands with the next release. Said on the step itself rather than in a
-    // dialog: the operator asked a question by pressing it, and an answer that covers
-    // the page is a worse answer.
-    arm.problem = {
-        code: 'step_not_wired',
-        title: `「${step.label}」的执行入口还在工程工具里`,
-        message: '这一步的顺序、判据和安全检查已经就位，执行按钮下一版接入向导。',
-        solutions: [
-            '点右上角「高级工具（工程师）」，在工程界面里执行这一步。',
-            '做完点「返回整臂向导」，这里的进度会自动更新。'
-        ]
-    };
-    render();
+    const side = arm.side;
+    return run(`正在执行「${step.label}」…`, () => api(`/api/arm/wizard/${arm.armCn}/steps/${stepId}`, {
+        method: 'POST',
+        body: JSON.stringify({ arm_side: side, channel: 'can0', bitrate: 1000000 })
+    }), async payload => {
+        arm.results = { ...arm.results, [stepId]: payload };
+        addLog(`整臂向导：「${step.label}」${payload.passed ? '通过' : '未通过'}`, payload.passed ? 'info' : 'error', 'arm');
+        await loadArm(arm.armCn);
+    });
+}
+
+// What a finished step found, shown on the step itself: the operator ran it here, so
+// the answer belongs here too rather than in the engineer tools.
+function stepResult(step) {
+    const result = arm.results[step.id];
+    if (!result) return '';
+    const verdict = result.passed
+        ? '<div class="smw-ok">这一步通过。</div>'
+        : '<div class="smw-warning">这一步没有通过，下面是读到的实际情况。</div>';
+    if (step.id === 'link') {
+        const rows = (result.joints || []).map(joint => `
+            <tr class="${joint.present && !joint.has_error ? '' : 'changed'}">
+                <td>${esc(joint.joint_name)}</td>
+                <td>${joint.present ? `0x${Number(joint.esc_id).toString(16).toUpperCase().padStart(2, '0')}` : '未应答'}</td>
+                <td class="${joint.has_error ? 'smw-bad' : 'smw-good'}">${esc(joint.status || '-')}</td>
+                <td>${esc(joint.t_mos ?? '-')} / ${esc(joint.t_rotor ?? '-')} °C</td>
+            </tr>`).join('');
+        return `
+            ${verdict}
+            ${result.missing_joints?.length ? `<div class="smw-warning">没有应答的关节：${esc(result.missing_joints.join('、'))}。检查供电、CAN 线和终端电阻。</div>` : ''}
+            ${result.unexpected_esc_ids?.length ? `<div class="smw-warning">总线上有 Profile 之外的节点：${esc(result.unexpected_esc_ids.map(id => `0x${Number(id).toString(16).toUpperCase()}`).join('、'))}。</div>` : ''}
+            <table class="smw-table"><thead><tr><th>关节</th><th>ESC_ID</th><th>状态</th><th>温度 MOS/线圈</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    const summary = result.summary || {};
+    const labelCls = { PASS: 'smw-good', PENDING: 'smw-warn', WARNING: 'smw-warn', FAIL: 'smw-bad' };
+    const joints = (result.joints || []).map(joint => {
+        const cells = joint.fields.map(field => {
+            const bad = field.matches === false;
+            const pending = bad && field.field === 'TIMEOUT' && joint.timeout_pending;
+            const cls = pending ? 'smw-warn' : bad ? 'smw-bad' : '';
+            const wanted = pending
+                ? `<small>待标准化（目标 ${esc(field.expected_display)}）</small>`
+                : (field.expected_display && bad ? `<small>（期望 ${esc(field.expected_display)}）</small>` : '');
+            return `<td class="${cls}">${field.display === null || field.display === undefined ? '<span class="smw-missing">读不到</span>' : esc(field.display)}${wanted}</td>`;
+        }).join('');
+        return `
+            <tr>
+                <th scope="row">${esc(joint.joint_name)}<small>${esc(joint.motor_type || '')}</small></th>
+                <td class="${labelCls[joint.result_label] || ''}">${esc(joint.result_label || '-')}</td>
+                ${cells}
+                <td class="${joint.status.has_error ? 'smw-bad' : ''}">${esc(joint.status.status || '-')}</td>
+                <td>${Number.isFinite(Number(joint.status.position)) ? Number(joint.status.position).toFixed(4) : '-'}</td>
+                <td>${esc(joint.status.t_mos ?? '-')} / ${esc(joint.status.t_rotor ?? '-')}</td>
+            </tr>`;
+    }).join('');
+    const headers = (result.joints?.[0]?.fields || []).map(field => `<th>${esc(field.field)}</th>`).join('');
+
+    return `
+        ${verdict}
+        ${summary.timeout_standardized === false ? `<div class="smw-note">TIMEOUT 待标准化：${esc((summary.timeout_pending || []).join('、'))}。下一步「参数标准化」会按 Profile 写入 5000。</div>` : ''}
+        <div class="aw-result-counts">
+            <span>在线 <strong>${esc(summary.total_present ?? '-')} / ${esc(summary.total_expected ?? '-')}</strong></span>
+            <span>缺失 <strong>${esc(summary.total_missing ?? 0)}</strong></span>
+            <span>参数不一致 <strong>${esc(summary.total_mismatches ?? 0)}</strong></span>
+            <span>故障 <strong>${esc(summary.total_faults ?? 0)}</strong></span>
+            <span>意外节点 <strong>${esc(summary.total_unexpected ?? 0)}</strong></span>
+            <span>重复 ID <strong>${esc(summary.total_duplicate_ids ?? 0)}</strong></span>
+        </div>
+        <div class="aw-result-scroll">
+            <table class="smw-table aw-joint-table">
+                <thead><tr><th>关节</th><th>判定</th>${headers}<th>状态</th><th>位置 rad</th><th>温度 MOS/线圈</th></tr></thead>
+                <tbody>${joints}</tbody>
+            </table>
+        </div>
+        <p class="muted">任务编号 ${esc(result.job_id || '-')}，结果已记入这台臂的档案，可用于放行检查和出厂报告。</p>`;
 }
 
 // ---- wiring ----------------------------------------------------------------------
@@ -532,6 +607,13 @@ function setAdvanced(open) {
 
 function handleClick(event) {
     if (arm.busy) return;
+    const sideButton = event.target.closest('[data-side]');
+    if (sideButton) {
+        arm.side = sideButton.dataset.side;
+        arm.results = {};
+        render();
+        return;
+    }
     if (event.target.closest('[data-new-arm]')) {
         arm.creating = true;
         arm.problem = null;

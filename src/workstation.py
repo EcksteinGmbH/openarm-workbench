@@ -328,6 +328,14 @@ SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
             "想彻底不留痕迹，请先取消挂载、清空记录，让它回到空档案状态。",
         ],
     },
+    "step_not_wired": {
+        "title": "这一步还不能在向导里执行",
+        "message": "这一步的顺序、判据和安全检查已经就位，但执行入口还在工程工具里。",
+        "solutions": [
+            "点右上角「高级工具（工程师）」，在工程界面里执行这一步。",
+            "做完点「返回整臂向导」，这里的进度会自动更新。",
+        ],
+    },
     "arm_not_found": {
         "title": "找不到这台机械臂的档案",
         "message": "输入的整机编号在工作站里没有对应记录。",
@@ -1131,6 +1139,11 @@ def _motor_result_label(present: bool, issues: Iterable[str]) -> str:
         return "PASS"
     if issue_set == {"status_read_anomaly"}:
         return "WARNING"
+    # TIMEOUT is written by the standardization step, which runs after acceptance:
+    # a joint waiting for it has passed everything acceptance checks. The pending
+    # TIMEOUT stays visible on the field itself and in `summary.timeout_pending`.
+    if issue_set == {"timeout_pending"}:
+        return "PASS"
     return "FAIL"
 
 
@@ -2038,10 +2051,10 @@ class WorkstationService:
                     cmd.extend(["-fd", "-b", str(bitrate), "-d", str(dbitrate)])
                 elif bitrate != 1000000:
                     cmd.extend(["-b", str(bitrate)])
-                self._run_system_command(cmd)
+                self._run_system_command(self._privileged_command(cmd))
             elif tool == "ip_link":
-                self._run_system_command(["ip", "link", "set", name, "down"])
-                self._run_system_command(self._can_configure_command(name, mode, bitrate, dbitrate))
+                self._run_system_command(self._privileged_command(["ip", "link", "set", name, "down"]))
+                self._run_system_command(self._privileged_command(self._can_configure_command(name, mode, bitrate, dbitrate)))
             else:
                 raise ValueError("unsupported tool")
 
@@ -2088,7 +2101,7 @@ class WorkstationService:
     def can_interface_up(self, name: str) -> Dict[str, Any]:
         with self._lock:
             self._require_interface(name)
-            self._run_system_command(["ip", "link", "set", name, "up"])
+            self._run_system_command(self._privileged_command(["ip", "link", "set", name, "up"]))
             payload = self.system_can_interfaces()
             self._emit("interface_status", payload)
             return {"ok": True, "interface": self._interface_snapshot(name)}
@@ -2097,7 +2110,7 @@ class WorkstationService:
         with self._lock:
             self._require_interface(name)
             self._invalidate_socketcan_sessions(name)
-            self._run_system_command(["ip", "link", "set", name, "down"])
+            self._run_system_command(self._privileged_command(["ip", "link", "set", name, "down"]))
             payload = self.system_can_interfaces()
             self._emit("interface_status", payload)
             return {"ok": True, "interface": self._interface_snapshot(name)}
@@ -5599,6 +5612,17 @@ class WorkstationService:
             "berr_rx": int(berr_match.group(2)) if berr_match else None,
         }
 
+    def _privileged_command(self, cmd: List[str]) -> List[str]:
+        """Prefix `sudo -n` unless the workstation already runs as root.
+
+        Interface configuration needs root. The web service normally does not have
+        it, so a bare `ip link` fails with "Operation not permitted" and the wizard
+        reports a configuration failure it could have avoided.
+        """
+        if hasattr(os, "geteuid") and os.geteuid() == 0:
+            return list(cmd)
+        return ["sudo", "-n", *cmd]
+
     def _run_system_command(self, cmd: List[str], check: bool = True):
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=False)
@@ -6740,6 +6764,181 @@ class WorkstationService:
             path.unlink(missing_ok=True)
             return {"ok": True, "arm_cn": arm_cn, "mode": mode, "kept_at": kept_at}
 
+    # Steps the wizard can run itself. The rest still live in the engineer tools;
+    # each one moves here as it is wired, so the operator never leaves this page for
+    # a step listed as available.
+    ARM_WIZARD_RUNNABLE = {"link", "static"}
+
+    def arm_wizard_run_step(
+        self,
+        arm_cn: str,
+        step_id: str,
+        arm_side: str = "right_arm",
+        channel: str = "can0",
+        bitrate: int = 1000000,
+    ) -> Dict[str, Any]:
+        """Run one wizard step for this arm, without leaving the wizard.
+
+        Only read-only steps are wired: 连接自检 and 静态验收. Both refuse to send a
+        motion command and neither writes to a motor.
+        """
+        with self._lock:
+            try:
+                _path, arm = self._load_arm_record(arm_cn)
+            except KeyError:
+                return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+            if step_id not in self.ARM_WIZARD_RUNNABLE:
+                return self._wizard_problem("step_not_wired", f"step={step_id}")
+            if arm_side not in SINGLE_WIZARD_ARM_PROFILES:
+                raise ValueError("arm_side must be right_arm or left_arm")
+            profile_id = SINGLE_WIZARD_ARM_PROFILES[arm_side]["profile_id"]
+
+            problem = self._wizard_can_precheck(channel, int(bitrate))
+            if problem:
+                return problem
+            try:
+                session = self._wizard_session(channel, int(bitrate))
+            except Exception as error:
+                return self._wizard_problem("connect_failed", str(error))
+
+            if step_id == "link":
+                return self._arm_wizard_link_check(session, arm_cn, profile_id, channel, int(bitrate))
+            return self._arm_wizard_static_check(session, arm, arm_cn, profile_id, channel, int(bitrate))
+
+    JOINT_VIEW_FIELDS = ("ESC_ID", "MST_ID", "CTRL_MODE", "TIMEOUT", "can_br", "Gr", "KT_Value", "PMAX", "VMAX", "TMAX", "sw_ver")
+
+    def _arm_wizard_joint_view(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        """One joint's acceptance row, measured values included."""
+        params = item.get("params") or {}
+        status = item.get("status") or {}
+        matrix = {row["field"]: row for row in (item.get("consistency_matrix") or [])}
+        fields = []
+        for name in self.JOINT_VIEW_FIELDS:
+            row = matrix.get(name) or {}
+            fields.append(
+                {
+                    "field": name,
+                    "actual": params.get(name),
+                    "display": self._inspect_display(name, params.get(name)),
+                    "expected": row.get("expected"),
+                    "expected_display": self._inspect_display(name, row.get("expected")),
+                    "matches": row.get("matches"),
+                }
+            )
+        return {
+            "joint_name": item.get("joint_name"),
+            "motor_type": (item.get("expected") or {}).get("motor_type"),
+            "present": bool(item.get("present")),
+            "issues": list(item.get("issues") or []),
+            "result_label": item.get("result_label"),
+            "comm_ok": bool(item.get("comm_ok")),
+            "timeout_pending": "timeout_pending" in (item.get("issues") or []),
+            "fields": fields,
+            "status": {
+                "status": status.get("status"),
+                "has_error": bool(status.get("has_error")),
+                "position": status.get("position"),
+                "t_mos": status.get("t_mos"),
+                "t_rotor": status.get("t_rotor"),
+            },
+        }
+
+    def _arm_wizard_link_check(
+        self, session: DeviceSession, arm_cn: str, profile_id: str, channel: str, bitrate: int
+    ) -> Dict[str, Any]:
+        """连接自检: is the bus usable and do the expected joints answer? Read-only."""
+        profile = self.profile_manager.get_profile(profile_id)
+        expected = {int(joint["target_esc_id"]): joint["joint_name"] for joint in profile["joints"]}
+        candidates, duplicate_ids = self._inventory_scan(session, DEFAULT_ARM_SCAN_IDS)
+        if not candidates:
+            return self._wizard_problem("bus_no_motor", f"channel={channel}")
+
+        seen = {int(item["detected_esc_id"]): item for item in candidates}
+        joints = []
+        for esc_id, joint_name in sorted(expected.items()):
+            item = seen.get(esc_id)
+            status = (item or {}).get("status") or {}
+            joints.append(
+                {
+                    "joint_name": joint_name,
+                    "esc_id": esc_id,
+                    "present": item is not None,
+                    "mst_id": (item or {}).get("detected_mst_id"),
+                    "status": status.get("status"),
+                    "has_error": bool(status.get("has_error")),
+                    "t_mos": status.get("t_mos"),
+                    "t_rotor": status.get("t_rotor"),
+                }
+            )
+        missing = [item["joint_name"] for item in joints if not item["present"]]
+        unexpected = sorted(set(seen) - set(expected))
+        faulted = [item["joint_name"] for item in joints if item["has_error"]]
+        passed = not missing and not unexpected and not duplicate_ids and not faulted
+        return {
+            "ok": True,
+            "step_id": "link",
+            "passed": passed,
+            "read_only": True,
+            "arm_cn": arm_cn,
+            "channel": channel,
+            "bitrate": bitrate,
+            "profile_id": profile_id,
+            "joints": joints,
+            "missing_joints": missing,
+            "unexpected_esc_ids": unexpected,
+            "duplicate_esc_ids": sorted(duplicate_ids),
+            "faulted_joints": faulted,
+            "checked_at": _now_iso(),
+        }
+
+    def _arm_wizard_static_check(
+        self,
+        session: DeviceSession,
+        arm: Dict[str, Any],
+        arm_cn: str,
+        profile_id: str,
+        channel: str,
+        bitrate: int,
+    ) -> Dict[str, Any]:
+        """静态验收: the full read-only arm acceptance job, attached to this arm."""
+        try:
+            self.scan_device(
+                session_id=session.session_id,
+                job_type="arm_acceptance",
+                profile_id=profile_id,
+                repeat_count=2,
+                allow_motion=False,
+            )
+            created = self.create_job("arm_acceptance", session.session_id, profile_id, None)
+            job_id = created["job_id"]
+            job = self._job(job_id)
+            job.product_line = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            result = self.run_arm_acceptance(job_id, confirmed=True, allow_motion=False)
+            self.attach_job_to_arm(arm_cn, job_id)
+        except Exception as error:
+            return self._wizard_problem(self._wizard_error_code(error, "unknown_error"), str(error))
+
+        # test() wraps the acceptance result as {"tested": ..., "metrics": {...}}.
+        metrics = (result.get("metrics") or {}) if isinstance(result, dict) else {}
+        summary = metrics.get("summary") or {}
+        return {
+            "ok": True,
+            "step_id": "static",
+            "passed": bool(summary.get("passed") if summary else metrics.get("passed")),
+            "read_only": True,
+            "arm_cn": arm_cn,
+            "job_id": job_id,
+            "profile_id": profile_id,
+            "channel": channel,
+            "bitrate": bitrate,
+            "summary": summary,
+            # Per joint: what the Profile expects, what the motor answered, and what
+            # that makes it. The operator ran the step here, so the full table belongs
+            # here rather than in the job artifacts.
+            "joints": [self._arm_wizard_joint_view(item) for item in (metrics.get("joints") or [])],
+            "checked_at": _now_iso(),
+        }
+
     def arm_wizard_status(self, arm_cn: str) -> Dict[str, Any]:
         """Where this arm stands: which steps are done, which is next, what blocks it."""
         with self._lock:
@@ -7190,7 +7389,7 @@ class WorkstationService:
                     ["ip", "link", "set", channel, "type", "can", "bitrate", str(int(bitrate))],
                     ["ip", "link", "set", channel, "up"],
                 ):
-                    self._run_system_command(["sudo", "-n", *cmd])
+                    self._run_system_command(self._privileged_command(cmd))
             except Exception as error:
                 return self._wizard_problem("can_interface_down", str(error))
             iface = self._interface_snapshot(channel)
@@ -7687,6 +7886,9 @@ class WorkstationService:
         ctrl_mode_mismatches = []
         bus_mismatches = []
         matrix_mismatch_joints = []
+        # Joints still carrying the factory TIMEOUT of 0: standardization runs after
+        # static acceptance, so this is a pending step, not a wrong value.
+        timeout_pending = []
         total_present = 0
         total_comm_ok = 0
         status_read_anomalies = []
@@ -7754,7 +7956,6 @@ class WorkstationService:
             consistency_matrix = self._build_consistency_matrix(joint, params)
             matrix_mismatch_fields = [row["field"] for row in consistency_matrix if row["matches"] is False]
             if matrix_mismatch_fields:
-                matrix_mismatch_joints.append({"joint_name": joint["joint_name"], "fields": matrix_mismatch_fields})
                 matrix_issue_names = {
                     "ESC_ID": "esc_id_mismatch",
                     "MST_ID": "mst_id_mismatch",
@@ -7764,12 +7965,21 @@ class WorkstationService:
                 }
                 for field_name in matrix_mismatch_fields:
                     issue_name = matrix_issue_names.get(field_name, f"{field_name.lower()}_mismatch")
+                    if field_name == "TIMEOUT" and int(params.get("TIMEOUT") or 0) == 0:
+                        issue_name = "timeout_pending"
                     if issue_name not in issues:
                         issues.append(issue_name)
-            if issues:
-                mismatch_record = {"joint_name": joint["joint_name"], "issues": list(issues)}
-                if matrix_mismatch_fields:
-                    mismatch_record["matrix_fields"] = matrix_mismatch_fields
+            blocking_issues = [issue for issue in issues if issue != "timeout_pending"]
+            pending_timeout = "timeout_pending" in issues
+            if pending_timeout:
+                timeout_pending.append(joint["joint_name"])
+            blocking_matrix_fields = [field for field in matrix_mismatch_fields if not (field == "TIMEOUT" and pending_timeout)]
+            if blocking_matrix_fields:
+                matrix_mismatch_joints.append({"joint_name": joint["joint_name"], "fields": blocking_matrix_fields})
+            if blocking_issues:
+                mismatch_record = {"joint_name": joint["joint_name"], "issues": list(blocking_issues)}
+                if blocking_matrix_fields:
+                    mismatch_record["matrix_fields"] = blocking_matrix_fields
                 mismatches.append(mismatch_record)
             else:
                 total_comm_ok += 1
@@ -7806,6 +8016,8 @@ class WorkstationService:
             "ctrl_mode_mismatches": ctrl_mode_mismatches,
             "bus_mismatches": bus_mismatches,
             "matrix_mismatch_joints": matrix_mismatch_joints,
+            "timeout_pending": timeout_pending,
+            "timeout_standardized": not timeout_pending,
             "unexpected_ids": [int(item["detected_esc_id"]) for item in unexpected],
             "duplicate_esc_ids": duplicate_esc_ids,
             "passed": passed,

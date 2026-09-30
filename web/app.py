@@ -824,6 +824,19 @@ def arm_wizard_status(arm_cn: str):
     return _wizard_call(service.arm_wizard_status, arm_cn=arm_cn)
 
 
+@app.post("/api/arm/wizard/<arm_cn>/steps/<step_id>")
+def arm_wizard_run_step(arm_cn: str, step_id: str):
+    data = _body()
+    return _wizard_call(
+        service.arm_wizard_run_step,
+        arm_cn=arm_cn,
+        step_id=step_id,
+        arm_side=str(data.get("arm_side", "right_arm")),
+        channel=str(data.get("channel", "can0")),
+        bitrate=int(data.get("bitrate", 1000000)),
+    )
+
+
 @app.get("/api/arm/wizard/<arm_cn>/motor-records")
 def arm_wizard_motor_records(arm_cn: str):
     return _wizard_call(service.arm_wizard_available_motor_records, arm_cn=arm_cn)

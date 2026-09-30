@@ -2295,3 +2295,55 @@ body[data-primary-flow="reportTab"] .right-rail { display: none; }
     margin-top: 16px;
     font-size: 12px;
 }
+
+/* Arm wizard: a step's own result, including the full per-joint measurement table */
+.aw-node-result {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.aw-result-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.aw-result-counts strong {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+
+.aw-result-scroll {
+    overflow-x: auto;
+}
+
+.aw-joint-table {
+    min-width: 900px;
+    font-variant-numeric: tabular-nums;
+}
+
+.aw-joint-table th[scope="row"] {
+    text-align: left;
+    white-space: nowrap;
+}
+
+.aw-joint-table th[scope="row"] small {
+    display: block;
+    font-weight: 400;
+    color: var(--muted);
+}
+
+.aw-joint-table td small {
+    display: block;
+    color: var(--muted);
+}
+
+.smw-warn { color: #a97400; }
+
+.aw-side-field {
+    margin-bottom: 12px;
+}

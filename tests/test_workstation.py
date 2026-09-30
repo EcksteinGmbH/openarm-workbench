@@ -2216,6 +2216,9 @@ def test_system_can_configure_and_toggle(monkeypatch):
 
     def fake_run(cmd, check=True):
         commands.append(cmd)
+        # Interface writes are issued as `sudo -n ip link ...` when not root.
+        if cmd[:2] == ["sudo", "-n"]:
+            cmd = cmd[2:]
         if cmd[:4] == ["ip", "link", "set", "can0"] and cmd[-1] == "down":
             interface_state["state"] = "DOWN"
         elif cmd[:4] == ["ip", "link", "set", "can0"] and cmd[-1] == "up":
@@ -2244,7 +2247,7 @@ def test_system_can_configure_and_toggle(monkeypatch):
     down = service.can_interface_down("can0")
     assert down["ok"] is True
     assert down["interface"]["state"] == "DOWN"
-    assert any(cmd == ["ip", "link", "set", "can0", "down"] for cmd in commands)
+    assert any(cmd[-5:] == ["ip", "link", "set", "can0", "down"] for cmd in commands)
 
 
 def test_api_system_can_endpoints(monkeypatch):
@@ -2714,7 +2717,8 @@ def test_link_wizard_prepare_and_connect_flow(monkeypatch):
     prepared = service.link_wizard_prepare(channel="can0", mode="can20", bitrate=1000000)
     assert prepared["ok"] is True
     assert prepared["interface"]["healthy"] is True
-    assert ["ip", "link", "set", "can0", "up"] in commands
+    # Interface writes go through sudo -n; see test_interface_configuration_runs_privileged.
+    assert ["sudo", "-n", "ip", "link", "set", "can0", "up"] in commands
 
     monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate: None)
     connected = service.link_wizard_connect(channel="can0", bitrate=1000000)
@@ -2952,3 +2956,80 @@ def test_single_motor_record_reads_its_can_mode_from_the_product(monkeypatch):
     # Records written before the registry existed state no product.
     assert service._can_mode_label(None, "commissioning") == "CAN 2.0"
     assert service._can_mode_label("openarm_9_9", "commissioning") == "CAN 2.0"
+
+
+def test_interface_configuration_runs_privileged(monkeypatch):
+    """The web service is not root, so every `ip link` write needs `sudo -n`."""
+    service = _link_service(monkeypatch)
+    commands = []
+    monkeypatch.setattr(service, "_run_system_command", lambda cmd, **kwargs: commands.append(cmd))
+    monkeypatch.setattr(workstation.os, "geteuid", lambda: 1000)
+
+    service.configure_can_interface(name="can0", mode="can20", bitrate=1000000)
+    service.can_interface_up("can0")
+    service.can_interface_down("can0")
+
+    assert commands, "no system command issued"
+    for cmd in commands:
+        assert cmd[:2] == ["sudo", "-n"], f"not privileged: {cmd}"
+        assert "ip" in cmd
+
+    # Running as root must not add sudo, which may not exist in that environment.
+    commands.clear()
+    monkeypatch.setattr(workstation.os, "geteuid", lambda: 0)
+    service.can_interface_up("can0")
+    assert commands[0][0] == "ip"
+
+
+def _arm_scan_service(monkeypatch, timeout_value):
+    """A right-arm scan where every joint reads back `timeout_value`."""
+    service = workstation.WorkstationService()
+    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
+    driver = service.sessions[session["device_session_id"]].driver
+    profile = service.profile_manager.get_profile("openarm_right_arm_v1")
+    template = copy.deepcopy(driver.registry[1])
+    driver.registry.clear()
+    for joint in profile["joints"]:
+        entry = copy.deepcopy(template)
+        entry["params"][int(DM_variable.ESC_ID)] = int(joint["target_esc_id"])
+        entry["params"][int(DM_variable.MST_ID)] = int(joint["target_mst_id"])
+        entry["params"][int(DM_variable.TIMEOUT)] = timeout_value
+        driver.registry[int(joint["target_esc_id"])] = entry
+    return service, session["device_session_id"]
+
+
+def test_static_acceptance_treats_unwritten_timeout_as_pending(monkeypatch):
+    """Standardization runs after static acceptance, so a factory 0 is not a failure."""
+    service, session_id = _arm_scan_service(monkeypatch, 0)
+    scan = service.scan_device(session_id=session_id, job_type="arm_acceptance", profile_id="openarm_right_arm_v1")
+    summary = scan["summary"]
+
+    assert summary["passed"] is True
+    assert summary["timeout_standardized"] is False
+    assert len(summary["timeout_pending"]) == len(summary["missing"]) + summary["total_expected"]
+    assert summary["total_mismatches"] == 0
+    assert summary["matrix_mismatch_joints"] == []
+
+
+def test_static_acceptance_still_fails_a_wrong_timeout(monkeypatch):
+    """A written-but-wrong TIMEOUT is a real mismatch and must block."""
+    service, session_id = _arm_scan_service(monkeypatch, 1000)
+    summary = service.scan_device(
+        session_id=session_id, job_type="arm_acceptance", profile_id="openarm_right_arm_v1"
+    )["summary"]
+
+    assert summary["passed"] is False
+    assert summary["timeout_pending"] == []
+    assert summary["total_mismatches"] == summary["total_expected"]
+    assert all("timeout_mismatch" in item["issues"] for item in summary["mismatches"])
+
+
+def test_joint_label_separates_pending_timeout_from_failure():
+    assert workstation._motor_result_label(True, []) == "PASS"
+    # A joint waiting only for standardization passes acceptance; the pending TIMEOUT
+    # is carried on the field and in the summary, not as a joint-level verdict.
+    assert workstation._motor_result_label(True, ["timeout_pending"]) == "PASS"
+    assert workstation._motor_result_label(True, ["timeout_mismatch"]) == "FAIL"
+    assert workstation._motor_result_label(True, ["timeout_pending", "mst_id_mismatch"]) == "FAIL"
+    assert workstation._motor_result_label(False, ["timeout_pending"]) == "FAIL"

@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.30.1-cell-jig-and-timeout`
+Current workstation version: `0.31.0-arm-wizard-runs-static`
 
 ## Versioning Rule
 
@@ -13,6 +13,55 @@ Current workstation version: `0.30.1-cell-jig-and-timeout`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.31.0-arm-wizard-runs-static - 2026-09-30
+
+Summary: the arm wizard runs its two read-only steps itself, interface configuration
+no longer fails for want of privilege, and an unwritten TIMEOUT is a pending step
+rather than a failed acceptance. Found by bringing a real 2.0 right arm to the bench.
+
+**Interface configuration ran without sudo.**
+
+`configure_can_interface`, `can_interface_up` and `can_interface_down` issued a bare
+`ip link`, while the link wizard's own precheck used `sudo -n`. The web service is not
+root, so the wizard's 配置并启动 button and the engineer 配置 / Up / Down buttons always
+failed with "Operation not permitted" - every operator had been reaching for a
+terminal instead. All four now go through `_privileged_command()`, which prefixes
+`sudo -n` unless the process is already root.
+
+**连接自检 and 静态验收 now run in the wizard.**
+
+Every arm step used to answer with "执行入口还在工程工具里". The two read-only steps are
+wired: `POST /api/arm/wizard/<arm_cn>/steps/<step_id>`. 连接自检 checks the expected
+joints against the side's Profile and reports per joint presence, status and
+temperatures; 静态验收 runs the full acceptance job, attaches it to the arm and shows
+the counts plus the job id. Neither enables a motor, writes a parameter or sends a
+motion command. The page shows each result under its own step, and gained a side
+selector - acceptance is judged against the right-arm or left-arm Profile.
+
+**An unwritten TIMEOUT no longer fails static acceptance.**
+
+The factory order is 静态验收 -> 参数标准化, but acceptance judged TIMEOUT against the
+post-standardization target, so it could never pass before the step that writes it:
+the wizard could not advance past its third step. A joint reading the factory 0 is now
+`timeout_pending` and the summary carries `timeout_standardized`. Any other value is
+still `timeout_mismatch` and still blocks - a wrongly written 1000 fails exactly as
+before. The release gate still requires the standardization evidence, so nothing ships
+on a pending TIMEOUT.
+
+Verification:
+
+- `.venv/bin/python -m pytest -q`: 275 passed, including that interface writes are
+  privileged, that a factory 0 passes as pending while 1000 fails, and the step runner.
+- Live, 2026-09-30, OpenArm 2.0 right arm `OAF26093001` on can0 at CAN 2.0 / 1 Mbps:
+  连接自检 PASS with R-J1 through R-J8 present, DISABLED, no fault, 26-29 °C; 静态验收
+  PASS, 8/8 present, no missing, mismatched, faulted or unexpected node, TIMEOUT
+  pending on all eight. The wizard advanced to 参数标准化 on its own.
+
+Operational Notes:
+
+- Read-only throughout: this session wrote nothing to the eight motors.
+- The remaining steps still point at the engineer tools; each moves as it is wired.
 
 ### 0.30.1-cell-jig-and-timeout - 2026-09-21
 
