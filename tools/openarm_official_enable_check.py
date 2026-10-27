@@ -40,10 +40,18 @@ DRIVER_MOTOR_TYPES = [
 ]
 
 
-def id_map(arm_side: str) -> tuple[List[int], List[int], int, int]:
-    if arm_side == "left_arm":
-        return list(range(0x09, 0x10)), list(range(0x19, 0x20)), 0x10, 0x20
-    return list(range(0x01, 0x08)), list(range(0x11, 0x18)), 0x08, 0x18
+def id_map(arm_side: str, first_esc_id: int | None = None) -> tuple[List[int], List[int], int, int]:
+    """Build seven arm IDs plus the gripper ID for the selected product profile.
+
+    The arm side alone no longer determines IDs: legacy 1.0 left starts at 0x09,
+    while official 2.0 left starts at 0x01 on can1. Direct CLI use keeps the legacy
+    default; the workstation always supplies the profile's first ESC ID explicitly.
+    """
+    first = int(first_esc_id) if first_esc_id is not None else (0x09 if arm_side == "left_arm" else 0x01)
+    send_ids = list(range(first, first + 7))
+    recv_ids = [send_id + 0x10 for send_id in send_ids]
+    gripper_send = first + 7
+    return send_ids, recv_ids, gripper_send, gripper_send + 0x10
 
 
 def status_name(code: int) -> str:
@@ -88,8 +96,13 @@ def collect_status(bus: can.BusABC, recv_ids: List[int], duration_s: float) -> D
     return latest
 
 
-def read_positions_with_workbench_driver(canport: str, arm_side: str, samples: int = 5) -> tuple[List[float], List[float]]:
-    send_ids, recv_ids, gripper_send, gripper_recv = id_map(arm_side)
+def read_positions_with_workbench_driver(
+    canport: str,
+    arm_side: str,
+    first_esc_id: int | None = None,
+    samples: int = 5,
+) -> tuple[List[float], List[float]]:
+    send_ids, recv_ids, gripper_send, gripper_recv = id_map(arm_side, first_esc_id)
     driver = DamiaoSocketCANDriver(channel=canport, bitrate=1000000)
     if not driver.connect():
         raise RuntimeError("workbench driver failed to connect for position pre-read")
@@ -170,11 +183,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Official OpenArm enable check without motion.")
     parser.add_argument("--canport", default="can0")
     parser.add_argument("--arm-side", "--arm_side", dest="arm_side", choices=["right_arm", "left_arm"], default="right_arm")
+    parser.add_argument("--first-esc-id", type=lambda value: int(value, 0), default=None)
     parser.add_argument("--hold-ms", type=int, default=300)
     parser.add_argument("--fd", action="store_true", help="Use CAN-FD. Default is classic CAN 2.0.")
     args = parser.parse_args()
 
-    send_ids, recv_ids, gripper_send, gripper_recv = id_map(args.arm_side)
+    send_ids, recv_ids, gripper_send, gripper_recv = id_map(args.arm_side, args.first_esc_id)
     all_recv_ids = recv_ids + [gripper_recv]
     hold_s = max(0.05, min(args.hold_ms / 1000.0, 10.0))
 
@@ -191,7 +205,7 @@ def main() -> int:
 
     try:
         collect_status(bus, all_recv_ids, 0.05)
-        arm_q, grip_q = read_positions_with_workbench_driver(args.canport, args.arm_side)
+        arm_q, grip_q = read_positions_with_workbench_driver(args.canport, args.arm_side, args.first_esc_id)
         print(f"pre_enable_positions_arm={[round(item, 6) for item in arm_q]}", flush=True)
         print(f"pre_enable_positions_gripper={[round(item, 6) for item in grip_q]}", flush=True)
         print("Enabling with official openarm.enable_all()...", flush=True)

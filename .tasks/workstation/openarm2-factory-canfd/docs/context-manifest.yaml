@@ -1,0 +1,94 @@
+version: 1
+task: workstation/openarm2-factory-canfd
+generated_at: "2026-10-23T21:08:47+08:00"
+phase: paused_waiting_for_r_j1_canfd_pilot
+repository:
+  root: /home/ubuntu/Projects/OpenARM
+  head: 8d5872d9218cac4fa56d310081f6f4b5b5ae7555
+  worktree: dirty_uncommitted_changes_preserved
+workstation:
+  version: 0.33.0-openarm2-official-topology-fd-session
+  server: stopped_on_pause
+  url_when_running: http://127.0.0.1:5000
+hardware_snapshot_before_shutdown:
+  captured_at: "2026-10-23T21:08:47+08:00"
+  can0: "DOWN, STOPPED, classic CAN 1 Mbps, restart-ms 0"
+  writes_or_motion_during_pause: false
+arm_state:
+  arm_cn: OAF26093001
+  product_version: openarm_2_0
+  arm_side: right_arm
+  profile_id: openarm_right_arm_v1
+  expected_bus: can0
+  release_decision: HOLD
+  evidence_count: 34
+  attached_motor_records: 16
+  passed_before_fd:
+    - identity
+    - link
+    - static
+    - timeout
+    - enable_low_gain
+  locked_or_pending:
+    - fd_switch
+    - zero
+    - gripper
+    - camera
+    - demo
+    - release_gate
+    - report
+findings:
+  - id: canfd_scope
+    statement: "官方推荐/默认 CAN-FD 1M/5M 是最终运行接口；它不要求 ID 和波特率配置帧改成 CAN-FD 帧。"
+    evidence:
+      - docs/official/setup-tutorial.md
+      - external/openarm_can_1.4.0/setup/cli/commands/change_motor_id_commands.cpp
+      - external/openarm_can_1.4.0/setup/cli/commands/change_motor_baudrate_commands.cpp
+  - id: static_evidence_split
+    statement: "经典 CAN 1M 静态验收保留为切换前基线；切换后必须新增真实 FD+BRS 静态复核，不能用接口处于 FD 但仅发送经典帧替代。"
+    evidence:
+      - docs/ARM_WORKSTATION_V5_DUAL_VERSION_PLAN.md
+      - https://docs.openarm.dev/setup/openarm-setup/configure-test/
+  - id: official_quick_test_limit
+    statement: "官方 Motor Test 是 quick sanity check；示例 cansend 使用单个 #，属于经典 CAN 数据帧，不等同于完整出厂静态验收。"
+    evidence:
+      - https://docs.openarm.dev/setup/openarm-setup/configure-test/
+source_hashes:
+  VERSION: a2548fdd3bb1d536d9f1fe2783c217e28f8a8004bee1c9f5895693ea47d5a187
+  docs/ARM_WORKSTATION_V5_DUAL_VERSION_PLAN.md: a3c7a1e38f13fb40b4c9428f3cc71dfd72d515b0d9d14ad5d889e06349fe378b
+  docs/WORKSTATION_CHANGELOG.md: befde43be03d2d1c3646a2a790f4e0974c58b5789e67744155941f59703a2a77
+  docs/official/setup-tutorial.md: 5c4378253df8ad63028f4f1c1ce29ec6cc1029bbcd76b907d313654e3c7d8466
+  profiles/products/openarm_2_0.yaml: 05f929f053d6abac7fe27fdc3e951db65d5a2220bd53371d3ea68b076d8258ce
+  src/workstation.py: 88f879167574d67aba0eddd771809dc2ca80ad34cca75d8703146a24e946d2ab
+  tests/test_workstation.py: 8faae2711f920c7a7bf4c3f313a658a268bffd2a66b01445d1481a18d451be09
+  external/openarm_can_1.4.0/setup/cli/commands/change_motor_id_commands.cpp: 11e77d0fb963c574e642886aecfdd602950865fb480845eadfe7aa420519fbed
+  external/openarm_can_1.4.0/setup/cli/commands/change_motor_baudrate_commands.cpp: ef36abc5cfdacece83496ed8a531dd367a22f14b99ed8d45033a7d2588caafeb
+validation:
+  pytest: "292 passed in 49.27s"
+  python_compile: pass
+  frontend_syntax: pass
+  diff_check: pass_before_pause_docs
+negative_searches:
+  - query: "官方完整出厂静态验收规范"
+    result: "未找到；官方只给出 quick sanity check、波特率配置和最终通信检查。"
+open_questions:
+  blocking:
+    - "R-J1 从经典 1M 切到 5M 保存并重上电后，真实 FD+BRS 读参、使能/失能是否稳定。"
+    - "5M 状态下能否可靠写回 1M、保存、重上电并恢复通信。"
+  non_blocking:
+    - "最终出厂报告中 FD 静态复核的具体总线健康阈值。"
+next_evidence:
+  prerequisites:
+    - "用户仅连接并上电 R-J1，确认急停和人工断电条件。"
+    - "启动工作站并确认版本仍为 0.33.0-openarm2-official-topology-fd-session。"
+    - "只读检查 can0 当前状态和 R-J1 当前 can_br。"
+  sequence:
+    - classic_1m_baseline_readback
+    - change_baud_5m_save
+    - user_power_cycle
+    - fd_1m_5m_real_fd_brs_readback
+    - fd_enable_disable_safety_check
+    - change_baud_1m_save
+    - user_power_cycle
+    - classic_1m_recovery_readback
+  do_not_proceed_to_whole_arm_until: "all R-J1 pilot steps pass and evidence is saved"

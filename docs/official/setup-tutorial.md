@@ -35,15 +35,13 @@ openarm-can-cli can_configure
 的 `CanConfigureOptions`：sample-point 0.75、dsample-point 0.75、dsjw 2、restart-ms 0。
 工作站的 `_can_configure_command()` 已逐字符对齐（0.22.0）。
 
-### 我们的偏离
+### 本工站采用的 2.0 拓扑（2026-10-23 决定）
 
-| 项 | 官方 | 我们（方案 A） |
-|---|---|---|
-| 左臂总线 | can1 | **can0**（和右臂同一条） |
-| 左臂 ID | 0x01–0x08 | **0x09–0x10 / MST 0x19–0x20** |
+2.0 新生产与官方一致：右臂接 can0，左臂接 can1；两侧各自使用 ESC 0x01–0x08、
+MST 0x11–0x18。两侧处于不同物理总线，所以相同 ID 不冲突。
 
-原因见 `docs/ARM_WORKSTATION_V5_DUAL_VERSION_PLAN.md` §2.3。
-**影响：凡是官方用 `--arm`（默认 IDs 1–8）的命令，左臂都必须改用 `--id`。**
+旧的“方案 A”（左臂在 can0 使用 ESC 0x09–0x10）仅保留给 1.0 历史产品和历史证据，
+不再作为 2.0 新生产目标。
 
 ---
 
@@ -72,7 +70,7 @@ CLI 选项（`setup/cli/openarm_cli.cpp:239-246`）：
 - `-a, --arm` / `--no-arm`：作用于 IDs 1–8，**默认开**
 - `--id`：指定 ID，可写 `--id 1,2,3` 或 `--id 1 2 3`；**给了 `--id` 就会覆盖 `--arm`**
 
-**我们左臂要用**：`openarm-can-cli -i can0 set_zero --id 9,10,11,12,13,14,15,16`
+**2.0 左臂使用官方命令**：`openarm-can-cli -i can1 set_zero --arm`
 
 ### 和 1.0 的区别
 
@@ -194,4 +192,4 @@ https://github.com/enactic/openarm_can/issues/101（OPEN）
 
 > 官方 abetomo：零位校准应对每条臂单独执行，不要主从同时连着跑。
 
-**对我们尤其重要**：方案 A 把左右臂放在同一条 can0 上。
+**对我们同样重要**：虽然 2.0 左右臂分属 can0/can1，零位校准仍应一次只操作一条臂。

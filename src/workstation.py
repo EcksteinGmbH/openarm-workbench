@@ -54,7 +54,7 @@ VENDOR_MAINTENANCE_LOGS_DIR = VENDOR_MAINTENANCE_DIR / "logs"
 DMTOOL_APPIMAGE_PATH = Path(os.environ.get("DMTOOL_APPIMAGE_PATH", "/home/ubuntu/下载/DMTool-v2.1.6.0-fix-x86_64.AppImage"))
 OFFICIAL_ZERO_COMMAND = "openarm-can-zero-position-calibration"
 OFFICIAL_MOTOR_CHECK_COMMAND = "openarm-can-motor-check"
-OFFICIAL_CHANGE_BAUDRATE_COMMAND = "openarm-can-change-baudrate"
+OFFICIAL_CHANGE_BAUDRATE_COMMAND = "openarm-can-cli"
 OFFICIAL_DEMO_COMMAND = "openarm-can-demo"
 LOCAL_OPENARM_COMMANDS = {
     OFFICIAL_ZERO_COMMAND: ROOT_DIR / "tools" / OFFICIAL_ZERO_COMMAND,
@@ -138,6 +138,15 @@ WORKBENCH_ZERO_CONFIRMATIONS = {
     "no_motion_ack": "理解本工站内置零位只写零位，不发送动作控制命令",
     "one_arm_only": "当前只对单侧机械臂执行零位校准",
 }
+ARM_WIZARD_TIMEOUT_CONFIRMATIONS = {
+    "stage": "静态验收已通过，当前处于整臂验收阶段",
+    "power": "急停/断电手段可用，写入过程中不会断电",
+}
+ARM_WIZARD_ENABLE_CONFIRMATIONS = {
+    "estop": "急停按钮在手边",
+    "clear": "机械臂活动范围内没有人和障碍物",
+    "hands": "手已远离夹爪和关节缝隙",
+}
 LEGACY_JOB_TYPE_ALIASES = {
     "single_commissioning": "single_id_config",
     "arm_verification": "arm_comm_scan",
@@ -149,9 +158,9 @@ PUBLIC_JOB_TYPE_ALIASES = {
 SINGLE_SCAN_JOB_TYPES = {"single_id_config", "single_param_config", "single_comm_check"}
 
 
-# 0x01-0x20 spans every ID OpenARM assigns: right arm ESC 0x01-0x08 / MST 0x11-0x18
-# and left arm ESC 0x09-0x10 / MST 0x19-0x20. Anything narrower makes a correctly
-# configured motor look absent, which is the one answer a scan must never give.
+# 0x01-0x20 spans both supported layouts: official split-bus 2.0 uses ESC 0x01-0x08
+# per side, while legacy 1.0 left uses ESC 0x09-0x10 on can0. Anything narrower makes
+# a correctly configured legacy motor look absent, which a scan must never report.
 DEFAULT_SCAN_IDS = [*range(0x01, 0x21)]
 DEFAULT_ARM_SCAN_IDS = [*range(0x01, 0x21)]
 FAST_SCAN_RIDS = [
@@ -206,8 +215,8 @@ SINGLE_INSPECT_FIELDS = [
 ]
 SINGLE_INSPECT_RIDS = [rid for _, rid, _, _ in SINGLE_INSPECT_FIELDS]
 SINGLE_WIZARD_ARM_PROFILES = {
-    "right_arm": {"profile_id": "openarm_right_arm_v1", "prefix": "R", "label": "右臂"},
-    "left_arm": {"profile_id": "openarm_left_arm_v1", "prefix": "L", "label": "左臂"},
+    "right_arm": {"prefix": "R", "label": "右臂"},
+    "left_arm": {"prefix": "L", "label": "左臂"},
 }
 SINGLE_WIZARD_PRODUCT_LINES = {"openarm_2_0": "OpenArm 2.0", "openarm_1_0": "OpenArm 1.0"}
 # Operator-facing troubleshooting catalog for the beginner single-motor wizard.
@@ -217,6 +226,7 @@ SINGLE_WIZARD_PRODUCT_LINES = {"openarm_2_0": "OpenArm 2.0", "openarm_1_0": "Ope
 BLOCKING_PROBLEM_CODES = {
     # Needs a hardware verification or a decision that cannot happen on this page.
     "arm_step_locked",
+    "arm_bus_mismatch",
     "can_interface_missing",
     "can_interface_down",
     "can_bus_error",
@@ -360,6 +370,24 @@ SINGLE_MOTOR_PROBLEMS: Dict[str, Dict[str, Any]] = {
         "solutions": [
             "回到高亮显示的那一步，先把它做完。",
             "如果前一步做过但没通过，请先处理它的问题再重试。",
+        ],
+    },
+    "arm_safety_not_confirmed": {
+        "title": "安全确认还没完成",
+        "message": "这一步会写入电机或短时使能，服务端没有收到页面上的全部安全确认。",
+        "solutions": [
+            "逐条阅读并勾选当前步骤上方的确认项。",
+            "确认急停/断电手段可用，机械臂周围无人且手已离开夹点。",
+            "确认无误后重新执行这一步。",
+        ],
+    },
+    "arm_bus_mismatch": {
+        "title": "CAN 接口和臂侧不匹配",
+        "message": "所选接口不是该产品版本为这侧机械臂规定的接口；继续可能读到另一侧同 ID 的电机。",
+        "solutions": [
+            "OpenArm 2.0 右臂接 can0，左臂接 can1，两侧都使用 ESC_ID 1-8。",
+            "确认 USB-CAN 线接在所选臂侧，再从整臂向导重新执行。",
+            "不要为了绕过提示临时修改电机 ID。",
         ],
     },
     "arm_motor_record_mismatch": {
@@ -1534,8 +1562,8 @@ class ProfileManager:
         profiles["openarm_left_arm_v1"] = self._derive_arm_profile(
             profiles["openarm_v1"],
             profile_id="openarm_left_arm_v1",
-            name="OpenARM 左臂模板",
-            description="按出厂规划组织的左臂模板，使用 L-J1 ~ L-J8 与 0x09 ~ 0x10 ID。",
+            name="OpenARM 1.0 左臂模板",
+            description="保留既有 1.0 出厂规划：L-J1 ~ L-J8 使用 ESC 0x09 ~ 0x10。",
             arm_side="left_arm",
             joint_prefix="L",
             expected_bus="can0",
@@ -1543,10 +1571,20 @@ class ProfileManager:
             mst_id_offset=8,
             target_timeout_override=5000,
         )
+        profiles["openarm_left_arm_v2"] = self._derive_arm_profile(
+            profiles["openarm_v1"],
+            profile_id="openarm_left_arm_v2",
+            name="OpenARM 2.0 左臂模板",
+            description="按 OpenARM 2.0 官方分总线拓扑组织：L-J1 ~ L-J8 在 can1 使用 ESC 0x01 ~ 0x08。",
+            arm_side="left_arm",
+            joint_prefix="L",
+            expected_bus="can1",
+            target_timeout_override=5000,
+        )
         return profiles
 
     def list_profiles(self) -> List[Dict[str, Any]]:
-        order = ["openarm_v1", "openarm_right_arm_v1", "openarm_left_arm_v1"]
+        order = ["openarm_v1", "openarm_right_arm_v1", "openarm_left_arm_v1", "openarm_left_arm_v2"]
         ordered_ids = [profile_id for profile_id in order if profile_id in self._profiles]
         ordered_ids.extend(profile_id for profile_id in self._profiles if profile_id not in ordered_ids)
         return [self.get_profile(profile_id) for profile_id in ordered_ids]
@@ -1622,11 +1660,18 @@ class ProductRegistry:
                     raise ValueError(f"product registry {filename} arm {arm_side} {key} outside 0x01-0x20")
 
         sides = list(data["arms"])
-        if len(sides) == 2:
-            left, right = (data["arms"][side] for side in sides)
-            overlap = set(left["esc_ids"]) & set(right["esc_ids"])
-            if overlap:
-                raise ValueError(f"product registry {filename} arms share ESC IDs {sorted(overlap)}")
+        for index, first_side in enumerate(sides):
+            first = data["arms"][first_side]
+            for second_side in sides[index + 1:]:
+                second = data["arms"][second_side]
+                if str(first["expected_bus"]) != str(second["expected_bus"]):
+                    continue
+                overlap = set(first["esc_ids"]) & set(second["esc_ids"])
+                if overlap:
+                    raise ValueError(
+                        f"product registry {filename} arms share ESC IDs {sorted(overlap)} "
+                        f"on {first['expected_bus']}"
+                    )
 
         for stage in ("commissioning", "operation"):
             if stage not in data["can"]:
@@ -1880,6 +1925,22 @@ class WorkstationService:
         version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
         return version if version in self.product_registry.known_versions() else DEFAULT_PRODUCT_VERSION
 
+    def _product_arm_config(self, product_version: str, arm_side: str) -> Dict[str, Any]:
+        """Resolve one side from the product registry, the topology authority.
+
+        A side name alone is insufficient: 1.0 left uses IDs 9-16 on can0 while 2.0
+        left uses IDs 1-8 on can1. Keeping this lookup in one place prevents a wizard
+        from silently applying the legacy left-arm profile to a 2.0 build.
+        """
+        try:
+            product = self.product_registry.get(str(product_version))
+        except KeyError as error:
+            raise ValueError(f"unknown product_version {product_version}") from error
+        try:
+            return product["arms"][arm_side]
+        except KeyError as error:
+            raise ValueError(f"arm_side {arm_side} is not defined for {product_version}") from error
+
     def _whole_arm_timeout_policy(self) -> Dict[str, Dict[str, int]]:
         """The operational TIMEOUT each arm side targets, per product version.
 
@@ -2124,10 +2185,17 @@ class WorkstationService:
                 )
                 capabilities = TransportCapabilities(True, True, True, True, True, True)
             elif transport == "socketcan":
+                fd_enabled = bool(connection.get("fd", connection.get("fd_enabled", False)))
                 driver = DamiaoSocketCANDriver(
                     channel=connection.get("channel", "can0"),
                     bitrate=int(connection.get("bitrate", 1000000)),
+                    fd=fd_enabled,
                 )
+                connection = {
+                    **connection,
+                    "fd": fd_enabled,
+                    "dbitrate": int(connection["dbitrate"]) if connection.get("dbitrate") else None,
+                }
                 capabilities = TransportCapabilities(True, True, True, True, True, True)
             else:
                 raise ValueError("unsupported transport")
@@ -2475,6 +2543,7 @@ class WorkstationService:
         return {
             "job_id": job.job_id,
             "job_type": _public_job_type(job.job_type),
+            "profile_id": job.profile_id,
             "artifact_dir": job.artifact_dir,
             "status": job.status,
             # Stated only when the job knew its product. Links made before the product
@@ -2630,15 +2699,16 @@ class WorkstationService:
             raise ValueError(f"unsupported OpenARM baudrate: {baudrate}")
         command = [
             OFFICIAL_CHANGE_BAUDRATE_COMMAND,
+            "-i",
+            str(socketcan),
+            "change_baud",
             "--baudrate",
             str(baudrate),
             "--canid",
             str(int(canid)),
-            "--socketcan",
-            str(socketcan),
         ]
         if flash:
-            command.append("--flash")
+            command.append("--save")
         return self._run_factory_command(
             arm_cn=arm_cn,
             workflow_type="official_baudrate_change",
@@ -2892,14 +2962,20 @@ class WorkstationService:
         target_recvid: Optional[int] = None,
     ) -> Dict[str, Any]:
         profile_id = None
-        if arm_side:
-            profile_id = "openarm_left_arm_v1" if arm_side == "left_arm" else "openarm_right_arm_v1"
-        elif arm_cn:
+        if arm_cn:
             try:
                 _path, arm = self._load_arm_record(arm_cn)
-                profile_id = arm.get("bom_profile")
+                if arm_side:
+                    product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+                    profile_id = self._product_arm_config(product_version, arm_side)["profile_id"]
+                else:
+                    profile_id = arm.get("bom_profile")
             except Exception:
                 profile_id = None
+        elif arm_side:
+            # Compatibility for callers without an arm record. New production paths
+            # always pass arm_cn and resolve through the product registry above.
+            profile_id = "openarm_left_arm_v1" if arm_side == "left_arm" else "openarm_right_arm_v1"
 
         joints: List[Dict[str, Any]] = []
         if profile_id:
@@ -4963,6 +5039,7 @@ class WorkstationService:
                 "ok": ok,
             }
             self._record_arm_step_run(arm_cn, "arm_timeout_standardization", payload)
+            self._write_timeout_evidence(arm_cn, profile_id, payload)
             return payload
 
     def arm_safe_enable_check(
@@ -4987,6 +5064,8 @@ class WorkstationService:
                     str(session.connection.get("channel", "can0")),
                     "--arm-side",
                     str(arm_side),
+                    "--first-esc-id",
+                    str(int(profile["joints"][0]["target_esc_id"])),
                     "--hold-ms",
                     str(max(50, int(hold_ms))),
                 ]
@@ -5061,6 +5140,7 @@ class WorkstationService:
                     "ok": completed.returncode == 0 and summary.get("passed"),
                 }
                 self._record_arm_step_run(arm_cn, "arm_safe_enable_check", payload)
+                self._write_low_gain_evidence(arm_cn, profile_id, payload)
                 return payload
             results = []
             motors: list[tuple[dict[str, Any], Motor, dict[str, Any]]] = []
@@ -5240,7 +5320,90 @@ class WorkstationService:
                 "ok": all(item["passed"] for item in results),
             }
             self._record_arm_step_run(arm_cn, "arm_safe_enable_check", payload)
+            self._write_low_gain_evidence(arm_cn, profile_id, payload)
             return payload
+
+    def _write_timeout_evidence(self, arm_cn: Optional[str], profile_id: str, payload: Dict[str, Any]):
+        """Save the per-joint TIMEOUT evidence the formal report reads.
+
+        The arm record only keeps a summary, while `formal_factory_report` reads
+        per-joint values from `arm_records/<CN>/timeout_adjustments/`, selecting by the
+        arm side in the file name. Without this the standardization is invisible to the
+        report, and the three arms shipped before had their evidence written by hand.
+        """
+        if not arm_cn:
+            return
+        arm_side = "left_arm" if "left" in str(profile_id) else "right_arm"
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # The report matches on a "right_" / "left_" prefix inside the file name.
+        name = f"{stamp}_{'left' if arm_side == 'left_arm' else 'right'}_timeout_standardization.json"
+        path = _arm_record_dir(arm_cn) / "timeout_adjustments" / name
+        _atomic_json(
+            path,
+            {
+                "arm_cn": str(arm_cn),
+                "arm_side": arm_side,
+                "profile_id": profile_id,
+                "recorded_at": _now_iso(),
+                "ok": bool(payload.get("ok")),
+                "motion_command_sent": bool(payload.get("motion_command_sent")),
+                "summary": payload.get("summary"),
+                "results": [
+                    {
+                        "joint_name": item.get("joint_name"),
+                        "esc_id": item.get("esc_id"),
+                        "mst_id": item.get("mst_id"),
+                        "target_timeout": item.get("target_timeout"),
+                        "before": item.get("before"),
+                        "after_write": item.get("after_write"),
+                        "after_save": item.get("after_save"),
+                        "ok": bool(item.get("ok")),
+                        "issues": list(item.get("issues") or []),
+                    }
+                    for item in payload.get("results") or []
+                ],
+            },
+        )
+
+    def _write_low_gain_evidence(self, arm_cn: Optional[str], profile_id: str, payload: Dict[str, Any]):
+        """Persist the independent enable/disable evidence used by formal reports."""
+        if not arm_cn:
+            return
+        arm_side = payload.get("arm_side") or ("left_arm" if "left" in str(profile_id) else "right_arm")
+        side_prefix = "left" if arm_side == "left_arm" else "right"
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        summary = dict(payload.get("summary") or {})
+        results = list(payload.get("results") or [])
+        summary.setdefault("enabled_count", sum(1 for item in results if item.get("enable_ok")))
+        summary.setdefault("disabled_count", sum(1 for item in results if item.get("disable_ok")))
+        summary.setdefault(
+            "keepalive_frames",
+            sum(int(item.get("keepalive_frames_sent") or 0) for item in results),
+        )
+        summary.setdefault(
+            "comm_lost_reported",
+            any("comm" in str(issue).lower() for item in results for issue in (item.get("issues") or [])),
+        )
+        path = _arm_record_dir(str(arm_cn)) / "low_gain_enable" / f"{stamp}_{side_prefix}_low_gain_enable.json"
+        _atomic_json(
+            path,
+            {
+                "record_type": "low_gain_enable",
+                "arm_cn": str(arm_cn),
+                "arm_side": arm_side,
+                "profile_id": profile_id,
+                "recorded_at": _now_iso(),
+                "ok": bool(payload.get("ok")),
+                "status": "passed" if payload.get("ok") else "failed",
+                "hold_ms": payload.get("hold_ms"),
+                "keepalive_frames_sent": summary.get("keepalive_frames"),
+                "comm_lost_reported": bool(summary.get("comm_lost_reported")),
+                "motion_command_sent": bool(payload.get("motion_command_sent")),
+                "control_keepalive_sent": bool(payload.get("control_keepalive_sent")),
+                "summary": summary,
+                "results": results,
+            },
+        )
 
     def _record_arm_step_run(self, arm_cn: Optional[str], kind: str, payload: Dict[str, Any]):
         """Note on the arm record that a wizard step ran, and how it went.
@@ -6165,26 +6328,46 @@ class WorkstationService:
                 ),
             }
 
-    def _joints_matching_ids(self, esc_id: Any, mst_id: Any) -> List[str]:
+    def _joints_matching_ids(
+        self,
+        esc_id: Any,
+        mst_id: Any,
+        profile_id: Optional[str] = None,
+        expected_bus: Optional[str] = None,
+    ) -> List[str]:
         if esc_id is None or mst_id is None or int(mst_id) == 0:
             return []
-        names = []
-        for meta in SINGLE_WIZARD_ARM_PROFILES.values():
-            for joint in self.profile_manager.get_profile(meta["profile_id"])["joints"]:
+        if profile_id:
+            profile_ids = [profile_id]
+        else:
+            profile_ids = list(dict.fromkeys(
+                arm["profile_id"]
+                for product in self.product_registry.list_products()
+                for arm in product["arms"].values()
+                if expected_bus is None or str(arm["expected_bus"]) == str(expected_bus)
+            ))
+        names: List[str] = []
+        for candidate_profile_id in profile_ids:
+            for joint in self.profile_manager.get_profile(candidate_profile_id)["joints"]:
                 if int(joint["target_esc_id"]) == int(esc_id) and int(joint["target_mst_id"]) == int(mst_id):
-                    names.append(joint["joint_name"])
+                    if joint["joint_name"] not in names:
+                        names.append(joint["joint_name"])
         return names
 
     # ---- Beginner single-motor wizard ----
 
-    def single_wizard_options(self) -> Dict[str, Any]:
+    def _single_wizard_arm_options(self, product_line: str) -> List[Dict[str, Any]]:
         arms = []
-        for arm_side, meta in SINGLE_WIZARD_ARM_PROFILES.items():
-            profile = self.profile_manager.get_profile(meta["profile_id"])
+        product = self.product_registry.get(product_line)
+        for arm_side, arm_config in product["arms"].items():
+            meta = SINGLE_WIZARD_ARM_PROFILES[arm_side]
+            profile = self.profile_manager.get_profile(arm_config["profile_id"])
             arms.append(
                 {
                     "arm_side": arm_side,
                     "label": meta["label"],
+                    "profile_id": profile["profile_id"],
+                    "expected_bus": arm_config["expected_bus"],
                     "joints": [
                         {
                             "joint": str(joint["joint_name"]).split("-", 1)[-1],
@@ -6199,8 +6382,17 @@ class WorkstationService:
                     ],
                 }
             )
+        return arms
+
+    def single_wizard_options(self) -> Dict[str, Any]:
+        arms_by_product = {
+            product_line: self._single_wizard_arm_options(product_line)
+            for product_line in SINGLE_WIZARD_PRODUCT_LINES
+        }
         return {
-            "arms": arms,
+            # `arms` keeps old clients working; current clients select from the map.
+            "arms": arms_by_product["openarm_2_0"],
+            "arms_by_product": arms_by_product,
             "product_lines": [{"id": key, "label": label} for key, label in SINGLE_WIZARD_PRODUCT_LINES.items()],
             "defaults": {"channel": "can0", "bitrate": 1000000, "arm_side": "right_arm", "joint": "J1", "product_line": "openarm_2_0"},
         }
@@ -6767,7 +6959,7 @@ class WorkstationService:
     # Steps the wizard can run itself. The rest still live in the engineer tools;
     # each one moves here as it is wired, so the operator never leaves this page for
     # a step listed as available.
-    ARM_WIZARD_RUNNABLE = {"link", "static"}
+    ARM_WIZARD_RUNNABLE = {"link", "static", "timeout", "enable"}
 
     def arm_wizard_run_step(
         self,
@@ -6776,11 +6968,13 @@ class WorkstationService:
         arm_side: str = "right_arm",
         channel: str = "can0",
         bitrate: int = 1000000,
+        confirmations: Optional[Dict[str, bool]] = None,
     ) -> Dict[str, Any]:
         """Run one wizard step for this arm, without leaving the wizard.
 
-        Only read-only steps are wired: 连接自检 and 静态验收. Both refuse to send a
-        motion command and neither writes to a motor.
+        Read-only steps run directly. TIMEOUT writes and the low-gain enable check
+        additionally enforce their recorded prerequisites and inline confirmations
+        at the service boundary, so bypassing the browser cannot skip the safety gate.
         """
         with self._lock:
             try:
@@ -6791,7 +6985,52 @@ class WorkstationService:
                 return self._wizard_problem("step_not_wired", f"step={step_id}")
             if arm_side not in SINGLE_WIZARD_ARM_PROFILES:
                 raise ValueError("arm_side must be right_arm or left_arm")
-            profile_id = SINGLE_WIZARD_ARM_PROFILES[arm_side]["profile_id"]
+            product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            arm_config = self._product_arm_config(product_version, arm_side)
+            profile_id = str(arm_config["profile_id"])
+            expected_bus = str(arm_config["expected_bus"])
+            if str(channel) != expected_bus:
+                return self._wizard_problem(
+                    "arm_bus_mismatch",
+                    f"product={product_version}; side={arm_side}; expected={expected_bus}; selected={channel}",
+                    expected_bus=expected_bus,
+                    selected_bus=str(channel),
+                )
+
+            passed_static = self._arm_wizard_has_passed_static(arm, profile_id)
+            passed_timeout = self._arm_wizard_has_passed_run(
+                arm,
+                "arm_timeout_standardization",
+                profile_id,
+            )
+            missing_steps = []
+            if step_id in {"timeout", "enable"} and not passed_static:
+                missing_steps.append("static")
+            if step_id == "enable" and not passed_timeout:
+                missing_steps.append("timeout")
+            if missing_steps:
+                return self._wizard_problem(
+                    "arm_step_out_of_order",
+                    f"step={step_id}; missing={','.join(missing_steps)}",
+                    missing_steps=missing_steps,
+                )
+
+            required_confirmations = {
+                "timeout": ARM_WIZARD_TIMEOUT_CONFIRMATIONS,
+                "enable": ARM_WIZARD_ENABLE_CONFIRMATIONS,
+            }.get(step_id, {})
+            supplied_confirmations = confirmations or {}
+            missing_confirmations = [
+                {"key": key, "label": label}
+                for key, label in required_confirmations.items()
+                if not supplied_confirmations.get(key)
+            ]
+            if missing_confirmations:
+                return self._wizard_problem(
+                    "arm_safety_not_confirmed",
+                    f"step={step_id}",
+                    missing_confirmations=missing_confirmations,
+                )
 
             problem = self._wizard_can_precheck(channel, int(bitrate))
             if problem:
@@ -6803,7 +7042,40 @@ class WorkstationService:
 
             if step_id == "link":
                 return self._arm_wizard_link_check(session, arm_cn, profile_id, channel, int(bitrate))
+            if step_id == "timeout":
+                return self._arm_wizard_timeout_step(session, arm_cn, profile_id, channel, int(bitrate))
+            if step_id == "enable":
+                return self._arm_wizard_enable_step(session, arm_cn, profile_id, channel, int(bitrate))
             return self._arm_wizard_static_check(session, arm, arm_cn, profile_id, channel, int(bitrate))
+
+    def _arm_wizard_has_passed_static(self, arm: Dict[str, Any], profile_id: str) -> bool:
+        """Require static acceptance from this product and selected arm side."""
+        arm_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+        for linked_job in arm.get("linked_jobs") or []:
+            if linked_job.get("status") != "passed" or linked_job.get("job_type") != "arm_acceptance":
+                continue
+            linked_version = linked_job.get("product_version")
+            if linked_version and str(linked_version) != arm_version:
+                continue
+            linked_profile = linked_job.get("profile_id")
+            if not linked_profile:
+                artifact_value = linked_job.get("artifact_dir")
+                artifact_dir = Path(artifact_value) if artifact_value else None
+                payload = _load_json(artifact_dir / "job.json", {}) if artifact_dir and artifact_dir.is_dir() else {}
+                linked_profile = (payload.get("job") or {}).get("profile_id")
+            if linked_profile == profile_id:
+                return True
+        return False
+
+    @staticmethod
+    def _arm_wizard_has_passed_run(arm: Dict[str, Any], kind: str, profile_id: str) -> bool:
+        """Require a successful command run from the selected arm-side profile."""
+        return any(
+            item.get("kind") == kind
+            and item.get("status") == "passed"
+            and item.get("profile_id") == profile_id
+            for item in arm.get("command_run_history") or []
+        )
 
     JOINT_VIEW_FIELDS = ("ESC_ID", "MST_ID", "CTRL_MODE", "TIMEOUT", "can_br", "Gr", "KT_Value", "PMAX", "VMAX", "TMAX", "sw_ver")
 
@@ -6891,6 +7163,100 @@ class WorkstationService:
             "checked_at": _now_iso(),
         }
 
+    def _arm_wizard_timeout_step(
+        self, session: DeviceSession, arm_cn: str, profile_id: str, channel: str, bitrate: int
+    ) -> Dict[str, Any]:
+        """参数标准化: write each joint's Profile TIMEOUT and save it to Flash.
+
+        Writes to the motors. Sends no motion command, and leaves every joint
+        disabled. The run is recorded on the arm, which is what the release gate
+        and the formal report read.
+        """
+        try:
+            payload = self.arm_timeout_standardization(
+                session_id=session.session_id,
+                profile_id=profile_id,
+                save_flash=True,
+                confirmed=True,
+                arm_cn=arm_cn,
+            )
+        except Exception as error:
+            return self._wizard_problem(self._wizard_error_code(error, "unknown_error"), str(error))
+
+        joints = [
+            {
+                "joint_name": item.get("joint_name"),
+                "passed": bool(item.get("ok")),
+                "target": item.get("target_timeout"),
+                "before": item.get("before"),
+                "after_write": item.get("after_write"),
+                "after_save": item.get("after_save"),
+                "issues": list(item.get("issues") or []),
+                "disabled_after": not ((item.get("status_after") or {}).get("is_enabled")),
+            }
+            for item in payload.get("results") or []
+        ]
+        return {
+            "ok": True,
+            "step_id": "timeout",
+            "passed": bool(payload.get("ok")),
+            "writes": True,
+            "motion_command_sent": False,
+            "arm_cn": arm_cn,
+            "profile_id": profile_id,
+            "channel": channel,
+            "bitrate": bitrate,
+            "summary": payload.get("summary") or {},
+            "joints": joints,
+            "checked_at": _now_iso(),
+        }
+
+    def _arm_wizard_enable_step(
+        self, session: DeviceSession, arm_cn: str, profile_id: str, channel: str, bitrate: int
+    ) -> Dict[str, Any]:
+        """低增益使能检查: official enable_all, keepalive at the present pose, disable.
+
+        The motors energize. No trajectory is sent - the hold target is the pose the
+        arm is already in - and the check refuses to enable when position feedback is
+        not populated.
+        """
+        try:
+            payload = self.arm_safe_enable_check(
+                session_id=session.session_id,
+                profile_id=profile_id,
+                hold_ms=300,
+                arm_cn=arm_cn,
+            )
+        except Exception as error:
+            return self._wizard_problem(self._wizard_error_code(error, "unknown_error"), str(error))
+
+        joints = [
+            {
+                "joint_name": item.get("joint_name"),
+                "passed": bool(item.get("passed")),
+                "enable_ok": bool(item.get("enable_ok")),
+                "disable_ok": bool(item.get("disable_ok")),
+                "id16_special_frame": bool(item.get("id16_special_frame")),
+                "issues": list(item.get("issues") or []),
+            }
+            for item in payload.get("results") or []
+        ]
+        summary = payload.get("summary") or {}
+        return {
+            "ok": True,
+            "step_id": "enable",
+            "passed": bool(summary.get("passed") if summary else payload.get("ok")),
+            "motion_command_sent": bool(payload.get("motion_command_sent")),
+            "hold_ms": payload.get("hold_ms"),
+            "arm_cn": arm_cn,
+            "profile_id": profile_id,
+            "channel": channel,
+            "bitrate": bitrate,
+            "summary": summary,
+            "joints": joints,
+            "checked_at": _now_iso(),
+        }
+
     def _arm_wizard_static_check(
         self,
         session: DeviceSession,
@@ -6939,16 +7305,21 @@ class WorkstationService:
             "checked_at": _now_iso(),
         }
 
-    def arm_wizard_status(self, arm_cn: str) -> Dict[str, Any]:
+    def arm_wizard_status(self, arm_cn: str, arm_side: str = "right_arm") -> Dict[str, Any]:
         """Where this arm stands: which steps are done, which is next, what blocks it."""
         with self._lock:
             try:
                 _path, arm = self._load_arm_record(arm_cn)
             except KeyError:
                 return self._wizard_problem("arm_not_found", f"arm_cn={arm_cn}")
+            if arm_side not in SINGLE_WIZARD_ARM_PROFILES:
+                raise ValueError("arm_side must be right_arm or left_arm")
             product_version = str(arm.get("product_version") or DEFAULT_PRODUCT_VERSION)
+            product = self.product_registry.get(product_version)
+            arm_config = self._product_arm_config(product_version, arm_side)
+            profile_id = str(arm_config["profile_id"])
             gate = self.factory_release_gate(arm_cn)
-            done = self._arm_wizard_completed_steps(arm, gate)
+            done = self._arm_wizard_completed_steps(arm, gate, profile_id)
 
             # An arm that already cleared the release gate is finished, whatever traces
             # its individual steps left. TIMEOUT standardization and the low-gain enable
@@ -6981,8 +7352,21 @@ class WorkstationService:
             return {
                 "ok": True,
                 "arm_cn": arm_cn,
+                "arm_side": arm_side,
+                "profile_id": profile_id,
+                "expected_bus": arm_config["expected_bus"],
+                "arm_sides": [
+                    {
+                        "id": side,
+                        "label": SINGLE_WIZARD_ARM_PROFILES[side]["label"],
+                        "profile_id": config["profile_id"],
+                        "expected_bus": config["expected_bus"],
+                        "esc_ids": [int(value) for value in config["esc_ids"]],
+                    }
+                    for side, config in product["arms"].items()
+                ],
                 "product_version": product_version,
-                "product_label": self.product_registry.get(product_version)["label"],
+                "product_label": product["label"],
                 "groups": [dict(group) for group in self.ARM_WIZARD_GROUPS],
                 "evidence_count": evidence,
                 # Only an archive with nothing in it can be discarded; once a test has
@@ -6997,7 +7381,12 @@ class WorkstationService:
                 "motor_records": self._arm_attached_motor_records(arm),
             }
 
-    def _arm_wizard_completed_steps(self, arm: Dict[str, Any], gate: Dict[str, Any]) -> set:
+    def _arm_wizard_completed_steps(
+        self,
+        arm: Dict[str, Any],
+        gate: Dict[str, Any],
+        profile_id: str,
+    ) -> set:
         """Which steps this arm already has evidence for.
 
         Read from the evidence that is already on record, so an arm tested through the
@@ -7005,8 +7394,7 @@ class WorkstationService:
         starting from zero.
         """
         done = {"identity"}
-        linked = gate["evidence"]["linked_jobs"]
-        if any(item.get("status") == "passed" for item in linked):
+        if self._arm_wizard_has_passed_static(arm, profile_id):
             done.add("link")
             done.add("static")
         if any(record.get("status") == "passed" for record in arm.get("zero_calibration_records") or []):
@@ -7015,11 +7403,10 @@ class WorkstationService:
         if any(record.get("status") == "passed" for record in demo_records):
             done.add("demo")
             done.add("gripper")
-        for run in arm.get("command_run_history") or []:
-            if run.get("kind") == "arm_timeout_standardization" and run.get("status") == "passed":
-                done.add("timeout")
-            if run.get("kind") == "arm_safe_enable_check" and run.get("status") == "passed":
-                done.add("enable")
+        if self._arm_wizard_has_passed_run(arm, "arm_timeout_standardization", profile_id):
+            done.add("timeout")
+        if self._arm_wizard_has_passed_run(arm, "arm_safe_enable_check", profile_id):
+            done.add("enable")
         if gate["release_decision"] == "PASS":
             done.add("gate")
         if arm.get("factory_reports"):
@@ -7179,14 +7566,26 @@ class WorkstationService:
                 return self._wizard_problem("can_bus_error", f"can_state={can_state}")
             return {"ok": True, "interface": self._link_interface_view(iface), "prepared_at": _now_iso()}
 
-    def link_wizard_connect(self, channel: str = "can0", bitrate: int = 1000000) -> Dict[str, Any]:
+    def link_wizard_connect(
+        self,
+        channel: str = "can0",
+        bitrate: int = 1000000,
+        mode: str = "can20",
+        dbitrate: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """Step 3: open the workstation device session on the prepared port."""
         with self._lock:
-            problem = self._wizard_can_precheck(channel, int(bitrate))
+            fd = mode == "canfd"
+            problem = self._wizard_can_precheck(channel, int(bitrate), fd=fd, dbitrate=dbitrate)
             if problem:
                 return problem
             try:
-                session = self._wizard_session(channel, int(bitrate))
+                session = self._wizard_session(
+                    channel,
+                    int(bitrate),
+                    fd=fd,
+                    dbitrate=dbitrate,
+                )
             except Exception as error:
                 return self._wizard_problem("connect_failed", str(error))
             return {
@@ -7194,19 +7593,34 @@ class WorkstationService:
                 "device_session_id": session.session_id,
                 "channel": channel,
                 "bitrate": int(bitrate),
+                "mode": mode,
+                "dbitrate": int(dbitrate) if dbitrate else None,
                 "capabilities": asdict(session.capabilities),
                 "interface": self._link_interface_view(self._interface_snapshot(channel)),
                 "connected_at": _now_iso(),
             }
 
-    def link_wizard_bus_check(self, channel: str = "can0", bitrate: int = 1000000) -> Dict[str, Any]:
+    def link_wizard_bus_check(
+        self,
+        channel: str = "can0",
+        bitrate: int = 1000000,
+        mode: str = "can20",
+        dbitrate: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """Step 4: read-only bus inventory so the operator sees who answers before any test."""
         with self._lock:
-            problem = self._wizard_can_precheck(channel, int(bitrate))
+            fd = mode == "canfd"
+            problem = self._wizard_can_precheck(channel, int(bitrate), fd=fd, dbitrate=dbitrate)
             if problem:
                 return problem
             try:
-                session, candidates, duplicate_ids, _ = self._wizard_scan(channel, int(bitrate), DEFAULT_ARM_SCAN_IDS)
+                session, candidates, duplicate_ids, _ = self._wizard_scan(
+                    channel,
+                    int(bitrate),
+                    DEFAULT_ARM_SCAN_IDS,
+                    fd=fd,
+                    dbitrate=dbitrate,
+                )
             except WizardConnectError as error:
                 return self._wizard_problem("connect_failed", str(error))
             if not candidates:
@@ -7219,7 +7633,9 @@ class WorkstationService:
                     {
                         "esc_id": candidate.get("detected_esc_id"),
                         "mst_id": candidate.get("detected_mst_id"),
-                        "matched_joints": self._joints_matching_ids(params.get("ESC_ID"), params.get("MST_ID")),
+                        "matched_joints": self._joints_matching_ids(
+                            params.get("ESC_ID"), params.get("MST_ID"), expected_bus=channel
+                        ),
                         "factory_default_ids": int(params.get("MST_ID") or 0) == 0,
                         "status": status.get("status"),
                         "has_error": bool(status.get("has_error")),
@@ -7232,6 +7648,8 @@ class WorkstationService:
                 "ok": True,
                 "read_only": True,
                 "channel": channel,
+                "mode": mode,
+                "dbitrate": int(dbitrate) if dbitrate else None,
                 "scanned_range": "0x01-0x20",
                 "motors": motors,
                 "duplicate_esc_ids": sorted(duplicate_ids),
@@ -7296,7 +7714,9 @@ class WorkstationService:
                     {
                         "esc_id": params.get("ESC_ID") if params.get("ESC_ID") is not None else candidate.get("detected_esc_id"),
                         "mst_id": params.get("MST_ID") if params.get("MST_ID") is not None else candidate.get("detected_mst_id"),
-                        "matched_joints": self._joints_matching_ids(params.get("ESC_ID"), params.get("MST_ID")),
+                        "matched_joints": self._joints_matching_ids(
+                            params.get("ESC_ID"), params.get("MST_ID"), expected_bus=channel
+                        ),
                         "factory_default_ids": int(params.get("MST_ID") or 0) == 0,
                         "model_check": _infer_motor_model(params, None),
                         "rows": self._inspect_rows(params),
@@ -7373,20 +7793,42 @@ class WorkstationService:
             return "job_state_invalid"
         return default
 
-    def _wizard_can_precheck(self, channel: str, bitrate: int) -> Optional[Dict[str, Any]]:
+    def _wizard_can_precheck(
+        self,
+        channel: str,
+        bitrate: int,
+        *,
+        fd: bool = False,
+        dbitrate: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
         interfaces = {item["name"]: item for item in self._list_socketcan_interfaces()}
         iface = interfaces.get(channel)
         if iface is None:
             return self._wizard_problem("can_interface_missing", f"{channel} not in {sorted(interfaces)}")
+        if fd and not dbitrate:
+            return self._wizard_problem("interface_prepare_failed", "CAN FD requires dbitrate")
         state = str(iface.get("state") or "").upper()
         can_state = str(iface.get("can_state") or "").upper()
-        needs_restart = state != "UP" or int(iface.get("bitrate") or 0) != int(bitrate) or can_state in {"BUS-OFF", "STOPPED"}
+        mode_mismatch = bool(iface.get("fd_enabled")) != bool(fd)
+        data_rate_mismatch = fd and int(iface.get("dbitrate") or 0) != int(dbitrate or 0)
+        needs_restart = (
+            state != "UP"
+            or int(iface.get("bitrate") or 0) != int(bitrate)
+            or mode_mismatch
+            or data_rate_mismatch
+            or can_state in {"BUS-OFF", "STOPPED"}
+        )
         if needs_restart:
             self._invalidate_socketcan_sessions(channel)
             try:
                 for cmd in (
                     ["ip", "link", "set", channel, "down"],
-                    ["ip", "link", "set", channel, "type", "can", "bitrate", str(int(bitrate))],
+                    self._can_configure_command(
+                        channel,
+                        "canfd" if fd else "can20",
+                        int(bitrate),
+                        int(dbitrate) if dbitrate else None,
+                    ),
                     ["ip", "link", "set", channel, "up"],
                 ):
                     self._run_system_command(self._privileged_command(cmd))
@@ -7428,7 +7870,14 @@ class WorkstationService:
                 closed += 1
         return closed
 
-    def _reusable_socketcan_session(self, channel: str, bitrate: int) -> Optional[DeviceSession]:
+    def _reusable_socketcan_session(
+        self,
+        channel: str,
+        bitrate: int,
+        *,
+        fd: bool = False,
+        dbitrate: Optional[int] = None,
+    ) -> Optional[DeviceSession]:
         live_ifindex = self._interface_ifindex(channel)
         for session in self.sessions.values():
             if not (
@@ -7436,6 +7885,11 @@ class WorkstationService:
                 and session.connection_state != "disconnected"
                 and session.connection.get("channel") == channel
                 and int(session.connection.get("bitrate", 0)) == int(bitrate)
+                and bool(session.connection.get("fd", False)) == bool(fd)
+                and (
+                    not fd
+                    or int(session.connection.get("dbitrate") or 0) == int(dbitrate or 0)
+                )
             ):
                 continue
             bound_ifindex = session.connection.get("ifindex")
@@ -7447,28 +7901,72 @@ class WorkstationService:
             return session
         return None
 
-    def _wizard_session_ex(self, channel: str, bitrate: int, *, force_new: bool = False) -> Tuple[DeviceSession, bool]:
+    def _wizard_session_ex(
+        self,
+        channel: str,
+        bitrate: int,
+        *,
+        fd: bool = False,
+        dbitrate: Optional[int] = None,
+        force_new: bool = False,
+    ) -> Tuple[DeviceSession, bool]:
         """Return the wizard session for ``channel`` plus whether it was reused."""
         if force_new:
             self._invalidate_socketcan_sessions(channel)
         else:
-            session = self._reusable_socketcan_session(channel, int(bitrate))
+            session = self._reusable_socketcan_session(
+                channel,
+                int(bitrate),
+                fd=fd,
+                dbitrate=dbitrate,
+            )
             if session is not None:
                 return session, True
+            # A live socket on the same interface but with another CAN mode cannot be
+            # reused. Close it before opening FD/classic with different frame flags.
+            self._invalidate_socketcan_sessions(channel)
         try:
-            payload = self.connect_device("socketcan", {"channel": channel, "bitrate": int(bitrate)})
+            payload = self.connect_device(
+                "socketcan",
+                {
+                    "channel": channel,
+                    "bitrate": int(bitrate),
+                    "fd": bool(fd),
+                    "dbitrate": int(dbitrate) if dbitrate else None,
+                },
+            )
         except Exception as error:
             raise WizardConnectError(str(error)) from error
         session = self._session(payload["device_session_id"])
         session.connection["ifindex"] = self._interface_ifindex(channel)
         return session, False
 
-    def _wizard_session(self, channel: str, bitrate: int, *, force_new: bool = False) -> DeviceSession:
-        session, _ = self._wizard_session_ex(channel, int(bitrate), force_new=force_new)
+    def _wizard_session(
+        self,
+        channel: str,
+        bitrate: int,
+        *,
+        fd: bool = False,
+        dbitrate: Optional[int] = None,
+        force_new: bool = False,
+    ) -> DeviceSession:
+        session, _ = self._wizard_session_ex(
+            channel,
+            int(bitrate),
+            fd=fd,
+            dbitrate=dbitrate,
+            force_new=force_new,
+        )
         return session
 
     def _wizard_scan(
-        self, channel: str, bitrate: int, scan_ids: List[int]
+        self,
+        channel: str,
+        bitrate: int,
+        scan_ids: List[int],
+        *,
+        fd: bool = False,
+        dbitrate: Optional[int] = None,
     ) -> Tuple[DeviceSession, List[Dict[str, Any]], List[int], bool]:
         """Inventory-scan the bus, rebuilding a reused session once if nobody answers.
 
@@ -7477,11 +7975,22 @@ class WorkstationService:
         not make. Reconnecting once rules out the second case before we blame the
         hardware. Returns ``(session, candidates, duplicate_ids, reconnected)``.
         """
-        session, reused = self._wizard_session_ex(channel, int(bitrate))
+        session, reused = self._wizard_session_ex(
+            channel,
+            int(bitrate),
+            fd=fd,
+            dbitrate=dbitrate,
+        )
         candidates, duplicate_ids = self._inventory_scan(session, scan_ids)
         if candidates or not reused:
             return session, candidates, duplicate_ids, False
-        session, _ = self._wizard_session_ex(channel, int(bitrate), force_new=True)
+        session, _ = self._wizard_session_ex(
+            channel,
+            int(bitrate),
+            fd=fd,
+            dbitrate=dbitrate,
+            force_new=True,
+        )
         candidates, duplicate_ids = self._inventory_scan(session, scan_ids)
         return session, candidates, duplicate_ids, True
 
@@ -7499,7 +8008,8 @@ class WorkstationService:
             if product_line not in SINGLE_WIZARD_PRODUCT_LINES:
                 raise ValueError("unsupported product_line")
             arm_meta = SINGLE_WIZARD_ARM_PROFILES[arm_side]
-            profile_id = arm_meta["profile_id"]
+            arm_config = self._product_arm_config(product_line, arm_side)
+            profile_id = str(arm_config["profile_id"])
             joint_name = f"{arm_meta['prefix']}-{joint}"
             self.profile_manager.get_joint(profile_id, joint_name)
 
@@ -7563,7 +8073,11 @@ class WorkstationService:
         rows.append({"field": "TIMEOUT", "current": params.get("TIMEOUT"), "target": "只记录", "changes": False, "written": False})
         joint_name = target.get("joint_name") or job.target_joint
         # Motors have no unique readable serial, so "already configured" is judged from the IDs the motor carries now.
-        configured_as = self._joints_matching_ids(params.get("ESC_ID"), params.get("MST_ID"))
+        configured_as = self._joints_matching_ids(
+            params.get("ESC_ID"),
+            params.get("MST_ID"),
+            profile_id=job.profile_id,
+        )
         joint_taken_by = []
         if joint_name not in configured_as:
             joint_taken_by = [

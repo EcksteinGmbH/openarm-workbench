@@ -349,7 +349,13 @@ function prepare() {
 }
 
 function connect() {
-    return run('正在连接…', () => post('/api/link/wizard/connect', { channel: link.selection.channel, bitrate: link.selection.mode === 'canfd' ? 1000000 : link.selection.bitrate }), payload => {
+    const body = {
+        channel: link.selection.channel,
+        mode: link.selection.mode,
+        bitrate: link.selection.mode === 'canfd' ? 1000000 : link.selection.bitrate
+    };
+    if (link.selection.mode === 'canfd') body.dbitrate = link.selection.dbitrate;
+    return run('正在连接…', () => post('/api/link/wizard/connect', body), payload => {
         link.connected = payload;
         link.prepared = payload.interface || link.prepared;
         link.step = 'bus';
@@ -358,7 +364,13 @@ function connect() {
 }
 
 function busCheck() {
-    return run('正在检查总线…', () => post('/api/link/wizard/bus-check', { channel: link.selection.channel, bitrate: link.selection.mode === 'canfd' ? 1000000 : link.selection.bitrate }), payload => {
+    const body = {
+        channel: link.selection.channel,
+        mode: link.selection.mode,
+        bitrate: link.selection.mode === 'canfd' ? 1000000 : link.selection.bitrate
+    };
+    if (link.selection.mode === 'canfd') body.dbitrate = link.selection.dbitrate;
+    return run('正在检查总线…', () => post('/api/link/wizard/bus-check', body), payload => {
         link.bus = payload;
         link.step = 'done';
         addLog(`建联向导：总线上找到 ${payload.motors.length} 颗电机`, 'info', 'link');

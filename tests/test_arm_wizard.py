@@ -106,6 +106,34 @@ def test_a_2_0_arm_stops_at_the_first_locked_step(service):
     assert status["release_decision"] == "HOLD"
 
 
+def test_2_0_left_side_uses_the_official_can1_profile(service):
+    service.bind_arm_identity("OAF26092046", product_version="openarm_2_0")
+
+    status = service.arm_wizard_status("OAF26092046", arm_side="left_arm")
+
+    assert status["profile_id"] == "openarm_left_arm_v2"
+    assert status["expected_bus"] == "can1"
+    by_side = {item["id"]: item for item in status["arm_sides"]}
+    assert by_side["right_arm"]["expected_bus"] == "can0"
+    assert by_side["left_arm"]["expected_bus"] == "can1"
+    assert by_side["right_arm"]["esc_ids"] == by_side["left_arm"]["esc_ids"] == list(range(1, 9))
+
+
+def test_2_0_left_side_refuses_can0_before_touching_hardware(service):
+    service.bind_arm_identity("OAF26092047", product_version="openarm_2_0")
+
+    payload = service.arm_wizard_run_step(
+        "OAF26092047",
+        "link",
+        arm_side="left_arm",
+        channel="can0",
+    )
+
+    assert payload["ok"] is False
+    assert payload["problem"]["code"] == "arm_bus_mismatch"
+    assert payload["problem"]["expected_bus"] == "can1"
+
+
 def test_an_unknown_arm_gets_a_problem_not_a_crash(service):
     payload = service.arm_wizard_status("OAF00000000")
     assert payload["ok"] is False

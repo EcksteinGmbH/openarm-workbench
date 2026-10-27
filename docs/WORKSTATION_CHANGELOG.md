@@ -3,7 +3,7 @@
 This file records workstation-level software changes that can affect factory
 testing, report output, hardware operation, or operator workflow.
 
-Current workstation version: `0.31.0-arm-wizard-runs-static`
+Current workstation version: `0.33.0-openarm2-official-topology-fd-session`
 
 ## Versioning Rule
 
@@ -13,6 +13,79 @@ Current workstation version: `0.31.0-arm-wizard-runs-static`
 - Suffixes such as `-factory-report` may be used while the workstation is still evolving rapidly.
 
 ## Update Log
+
+### 0.33.0-openarm2-official-topology-fd-session - 2026-10-23
+
+Summary: OpenArm 2.0 production now follows the official split-bus topology, and
+CAN-FD mode is carried all the way from the web request to an FD+BRS SocketCAN
+session. OpenArm 1.0 remains frozen on its validated legacy mapping.
+
+- 2.0 right is can0 and 2.0 left is can1; each side uses ESC 1-8 / MST 17-24.
+  A dedicated `openarm_left_arm_v2` Profile prevents changing the historical 1.0
+  left profile (can0, ESC 9-16). Product-registry validation permits overlapping IDs
+  only when the sides are on different buses.
+- Single-motor and whole-arm wizards resolve the Profile from product version plus arm
+  side. The whole-arm service rejects a mismatched interface before opening hardware,
+  and its page displays the product-specific bus and ID range instead of a fixed label.
+- SocketCAN connections now pass `fd=True` to the driver, retain the 5 Mbps data-phase
+  setting, and never reuse a classic session for an FD request. The link wizard sends
+  mode and data bitrate through connect and inventory checks.
+- The official `openarm_can` 1.4.0 CLI is built from the vendored source and exposed by
+  `tools/openarm-can-cli`; baudrate commands now use its `change_baud --save` contract.
+  The 1.0 dynamic wrappers remain unchanged.
+- No motor baudrate, ID or zero was changed while making this release. The next
+  hardware action is an isolated R-J1 1M-to-5M-to-1M recovery pilot.
+
+Verification:
+
+- `PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/pytest -q`: 292 passed.
+- Python compile check, JavaScript syntax checks and `git diff --check`: passed.
+- Live API after restart reports version 0.33.0, 2.0 right `can0`/IDs 1-8 and 2.0
+  left `can1`/IDs 1-8. `can0` remains DOWN; no hardware write was performed.
+
+### 0.32.0-arm-wizard-runs-timeout-enable - 2026-10-23
+
+Summary: the arm wizard now owns TIMEOUT standardization and the low-gain
+enable/disable check, including server-side prerequisites, safety acknowledgements,
+and the evidence files consumed by the formal report.
+
+**参数标准化 runs in the wizard.**
+
+The step writes each joint's Profile TIMEOUT, reads it back, saves Flash, reads it
+again and verifies that every joint remains disabled. Two inline acknowledgements are
+sent to and enforced by the service; a direct API call cannot bypass them. A passed
+static acceptance record is required first. Per-joint evidence is written under the
+arm's `timeout_adjustments/` directory, which is the source the formal report already
+uses.
+
+Static acceptance and TIMEOUT prerequisites are matched to the selected arm-side
+Profile. Switching the wizard between left and right now reloads side-specific
+progress, so evidence from one side cannot mark or unlock the other side.
+
+**低增益使能检查 runs in the wizard.**
+
+The step uses the official enable-all/current-position keepalive/disable sequence. It
+requires passed static acceptance, passed TIMEOUT standardization and all three
+workspace safety acknowledgements at the service boundary. The complete result is now
+written under the arm's `low_gain_enable/` directory; previously only a compact entry
+in `command_run_history` survived. Formal reports now recover those older verified
+summaries with explicit provenance, while new runs retain the complete standalone
+evidence file. Both current and recovered evidence must identify the same arm side
+and Profile and prove complete enable/disable counts.
+
+Live evidence that drove this change:
+
+- OpenArm 2.0 right arm `OAF26093001`, CAN 2.0 / 1 Mbps, 2026-10-08.
+- TIMEOUT standardization passed on R-J1 through R-J8 at 5000, with every joint
+  disabled after the Flash write.
+- The low-gain enable check passed three times: 8/8 enabled, 8/8 disabled, no
+  `COMM_LOST`, and 408-424 keepalive frames per run.
+- The arm remains `HOLD`: CAN-FD, 2.0 zero, gripper/camera, Demo and CAN-health
+  evidence are still incomplete or intentionally locked.
+
+Verification:
+
+- `PYTHONDONTWRITEBYTECODE=1 ./.venv/bin/pytest -q`: 286 passed.
 
 ### 0.31.0-arm-wizard-runs-static - 2026-09-30
 

@@ -8,6 +8,11 @@ import { PROBLEM_KICKER, FIX_HEADING, RETRY, REDO_STEP, restartLabel } from './w
 // is blocked, without a dialog driving them. Dialogs are reserved for failures the
 // operator cannot clear from the page, exactly as in the other two wizards.
 
+const WRITE_CHECKS = [
+    { id: 'stage', label: '静态验收已通过，当前处于整臂验收阶段' },
+    { id: 'power', label: '急停 / 断电手段在手边，写入过程中不会断电' }
+];
+
 const SAFETY_CHECKS = [
     { id: 'estop', label: '急停按钮在手边，我知道怎么按' },
     { id: 'clear', label: '机械臂活动范围内没有人和障碍物' },
@@ -56,9 +61,21 @@ function stepTag(step) {
     return { text: '只读，不动电机', cls: 'readonly' };
 }
 
+function stepChecks(step) {
+    if (step.motion) return SAFETY_CHECKS;
+    if (step.writes) return WRITE_CHECKS;
+    return [];
+}
+
 function safetyReady(step) {
-    if (!step.motion) return true;
-    return SAFETY_CHECKS.every(check => arm.safety[`${step.id}:${check.id}`]);
+    return stepChecks(step).every(check => arm.safety[`${step.id}:${check.id}`]);
+}
+
+function sideChoiceLabel(side) {
+    const ids = side.esc_ids || [];
+    const first = ids.length ? `0x${Number(ids[0]).toString(16).toUpperCase().padStart(2, '0')}` : '-';
+    const last = ids.length ? `0x${Number(ids[ids.length - 1]).toString(16).toUpperCase().padStart(2, '0')}` : '-';
+    return `${side.label} · ${side.expected_bus} · ESC ${first}–${last}`;
 }
 
 // ---- 1. picking an arm -----------------------------------------------------------
@@ -218,8 +235,9 @@ function renderSteps() {
         <div class="smw-field aw-side-field">
             <span>这次测哪一侧</span>
             <div class="smw-segment">
-                <button data-side="right_arm" class="${arm.side === 'right_arm' ? 'on' : ''}">右臂 · ESC 0x01–0x08</button>
-                <button data-side="left_arm" class="${arm.side === 'left_arm' ? 'on' : ''}">左臂 · ESC 0x09–0x10</button>
+                ${(arm.status.arm_sides || []).map(side => `
+                    <button data-side="${esc(side.id)}" class="${arm.side === side.id ? 'on' : ''}">${esc(sideChoiceLabel(side))}</button>
+                `).join('')}
             </div>
         </div>` : '';
     body.innerHTML = `
@@ -259,10 +277,10 @@ function renderStep(step, index) {
                     <div class="smw-note">这台臂是在工作站开始记录这一步之前测的。<strong>不代表没做过</strong>，放行门和出厂报告都不受影响；需要留证可以重测一次。</div>` : ''}
                 ${step.state === 'skipped' ? '<p class="muted aw-node-skip">这一步只有另一个产品版本需要。</p>' : ''}
 
-                ${runnable && armed && step.motion ? `
+                ${runnable && armed && stepChecks(step).length ? `
                     <div class="aw-safety">
-                        <strong>这一步机械臂会动，逐条确认后才能开始</strong>
-                        ${SAFETY_CHECKS.map(check => `
+                        <strong>${step.motion ? '这一步机械臂会动，逐条确认后才能开始' : '这一步会写入电机 Flash，逐条确认后才能开始'}</strong>
+                        ${stepChecks(step).map(check => `
                             <label class="smw-confirm">
                                 <input type="checkbox" data-safety="${esc(step.id)}:${esc(check.id)}"
                                     ${arm.safety[`${step.id}:${check.id}`] ? 'checked' : ''}>
@@ -279,7 +297,7 @@ function renderStep(step, index) {
                                 data-run="${esc(step.id)}" ${arm.busy || !safetyReady(step) ? 'disabled' : ''}>
                                 ${repeat ? REDO_STEP : `开始「${esc(step.label)}」`}
                             </button>
-                            ${step.motion && !safetyReady(step) ? '<span class="muted">勾选完上面三条才能开始</span>' : ''}`
+                            ${stepChecks(step).length && !safetyReady(step) ? `<span class="muted">勾选完上面${stepChecks(step).length === 2 ? '两' : '三'}条才能开始</span>` : ''}`
                         : `<button class="btn btn-ghost slim" data-toggle="${esc(step.id)}" ${arm.busy ? 'disabled' : ''}>
                                 ${repeat ? REDO_STEP : '改做这一步'}
                            </button>`}
@@ -481,7 +499,9 @@ async function loadArm(armCn) {
         render();
         return;
     }
-    await run('正在读取…', () => api(`/api/arm/wizard/${encodeURIComponent(armCn)}/status`), async payload => {
+    await run('正在读取…', () => api(
+        `/api/arm/wizard/${encodeURIComponent(armCn)}/status?arm_side=${encodeURIComponent(arm.side)}`
+    ), async payload => {
         arm.armCn = armCn;
         arm.status = payload;
         arm.open = null;
@@ -521,9 +541,17 @@ function runStep(stepId) {
     const step = (arm.status?.steps || []).find(item => item.id === stepId);
     if (!step) return;
     const side = arm.side;
+    const confirmations = Object.fromEntries(
+        stepChecks(step).map(check => [check.id, Boolean(arm.safety[`${step.id}:${check.id}`])])
+    );
     return run(`正在执行「${step.label}」…`, () => api(`/api/arm/wizard/${arm.armCn}/steps/${stepId}`, {
         method: 'POST',
-        body: JSON.stringify({ arm_side: side, channel: 'can0', bitrate: 1000000 })
+        body: JSON.stringify({
+            arm_side: side,
+            channel: arm.status?.expected_bus || 'can0',
+            bitrate: 1000000,
+            confirmations
+        })
     }), async payload => {
         arm.results = { ...arm.results, [stepId]: payload };
         addLog(`整臂向导：「${step.label}」${payload.passed ? '通过' : '未通过'}`, payload.passed ? 'info' : 'error', 'arm');
@@ -552,6 +580,58 @@ function stepResult(step) {
             ${result.missing_joints?.length ? `<div class="smw-warning">没有应答的关节：${esc(result.missing_joints.join('、'))}。检查供电、CAN 线和终端电阻。</div>` : ''}
             ${result.unexpected_esc_ids?.length ? `<div class="smw-warning">总线上有 Profile 之外的节点：${esc(result.unexpected_esc_ids.map(id => `0x${Number(id).toString(16).toUpperCase()}`).join('、'))}。</div>` : ''}
             <table class="smw-table"><thead><tr><th>关节</th><th>ESC_ID</th><th>状态</th><th>温度 MOS/线圈</th></tr></thead><tbody>${rows}</tbody></table>`;
+    }
+    if (step.id === 'enable') {
+        const s = result.summary || {};
+        const rows = (result.joints || []).map(joint => `
+            <tr class="${joint.passed ? '' : 'changed'}">
+                <th scope="row">${esc(joint.joint_name)}</th>
+                <td class="${joint.passed ? 'smw-good' : 'smw-bad'}">${joint.passed ? 'PASS' : 'FAIL'}</td>
+                <td>${joint.enable_ok ? '已使能' : '<span class="smw-bad">未确认</span>'}</td>
+                <td>${joint.disable_ok ? '已失能' : '<span class="smw-bad">未确认</span>'}</td>
+                <td>${joint.issues.length ? esc(joint.issues.join('、')) : '无'}</td>
+            </tr>`).join('');
+        return `
+            ${verdict}
+            <div class="aw-result-counts">
+                <span>使能 <strong>${esc(s.enabled_count ?? 0)} / ${esc(s.total_expected ?? 0)}</strong></span>
+                <span>失能 <strong>${esc(s.disabled_count ?? 0)}</strong></span>
+                <span>保活帧 <strong>${esc(s.keepalive_frames ?? 0)}</strong></span>
+                <span>COMM_LOST <strong>${s.comm_lost_reported ? '有' : '无'}</strong></span>
+                <span>检查后全部失能 <strong>${s.all_disabled_after_check ? '是' : '否'}</strong></span>
+                <span>运动指令 <strong>${result.motion_command_sent ? '有' : '未发送'}</strong></span>
+            </div>
+            <table class="smw-table">
+                <thead><tr><th>关节</th><th>判定</th><th>使能确认</th><th>失能确认</th><th>问题</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            <p class="muted">保持 ${esc(result.hold_ms ?? 300)} ms，目标位置就是当前位置，未发送运动轨迹。已记入这台臂的档案。</p>`;
+    }
+    if (step.id === 'timeout') {
+        const rows = (result.joints || []).map(joint => `
+            <tr class="${joint.passed ? '' : 'changed'}">
+                <th scope="row">${esc(joint.joint_name)}</th>
+                <td class="${joint.passed ? 'smw-good' : 'smw-bad'}">${joint.passed ? 'PASS' : 'FAIL'}</td>
+                <td>${esc(joint.before ?? '-')}</td>
+                <td>${esc(joint.after_write ?? '-')}</td>
+                <td>${esc(joint.after_save ?? '-')}</td>
+                <td>${esc(joint.target ?? '-')}</td>
+                <td>${joint.disabled_after ? '已失能' : '<span class="smw-bad">仍使能</span>'}</td>
+            </tr>`).join('');
+        const s = result.summary || {};
+        return `
+            ${verdict}
+            <div class="aw-result-counts">
+                <span>成功 <strong>${esc(s.passed ?? 0)} / ${esc(s.total_expected ?? 0)}</strong></span>
+                <span>失败 <strong>${esc(s.failed ?? 0)}</strong></span>
+                <span>写入后全部失能 <strong>${s.all_disabled_after_write ? '是' : '否'}</strong></span>
+                <span>运动指令 <strong>${result.motion_command_sent ? '有' : '未发送'}</strong></span>
+            </div>
+            <table class="smw-table">
+                <thead><tr><th>关节</th><th>判定</th><th>写入前</th><th>写入回读</th><th>保存后回读</th><th>目标</th><th>写入后状态</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            <p class="muted">已记入这台臂的档案。建议断电重上电后再跑一次「静态验收」，确认 5000 掉电不丢。</p>`;
     }
     const summary = result.summary || {};
     const labelCls = { PASS: 'smw-good', PENDING: 'smw-warn', WARNING: 'smw-warn', FAIL: 'smw-bad' };
@@ -611,7 +691,7 @@ function handleClick(event) {
     if (sideButton) {
         arm.side = sideButton.dataset.side;
         arm.results = {};
-        render();
+        void loadArm(arm.armCn);
         return;
     }
     if (event.target.closest('[data-new-arm]')) {

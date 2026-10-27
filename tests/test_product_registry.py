@@ -30,6 +30,30 @@ def test_registry_never_contradicts_the_profiles(service):
     assert service.product_registry.cross_check(service.profile_manager) == []
 
 
+def test_2_0_reuses_ids_only_because_each_side_has_its_own_bus(service):
+    product = service.product_registry.get("openarm_2_0")
+    right = product["arms"]["right_arm"]
+    left = product["arms"]["left_arm"]
+
+    assert right["esc_ids"] == left["esc_ids"] == list(range(0x01, 0x09))
+    assert right["mst_ids"] == left["mst_ids"] == list(range(0x11, 0x19))
+    assert (right["expected_bus"], left["expected_bus"]) == ("can0", "can1")
+
+
+def test_single_motor_options_are_resolved_per_product(service):
+    options = service.single_wizard_options()
+    arms = options["arms_by_product"]
+    left_1 = next(item for item in arms["openarm_1_0"] if item["arm_side"] == "left_arm")
+    left_2 = next(item for item in arms["openarm_2_0"] if item["arm_side"] == "left_arm")
+
+    assert left_1["profile_id"] == "openarm_left_arm_v1"
+    assert left_1["expected_bus"] == "can0"
+    assert [joint["target_esc_id"] for joint in left_1["joints"]] == list(range(0x09, 0x11))
+    assert left_2["profile_id"] == "openarm_left_arm_v2"
+    assert left_2["expected_bus"] == "can1"
+    assert [joint["target_esc_id"] for joint in left_2["joints"]] == list(range(0x01, 0x09))
+
+
 def test_a_contradicting_registry_stops_the_service(monkeypatch, tmp_path):
     source = workstation.PRODUCT_REGISTRY_DIR / "openarm_1_0.yaml"
     data = yaml.safe_load(source.read_text(encoding="utf-8"))
@@ -250,13 +274,13 @@ def test_the_2_0_zero_method_matches_the_official_procedure():
     assert zero["requires_jig"] is True
 
 
-def test_the_zero_target_ids_follow_plan_a_not_the_official_default():
-    # Official runs `--arm` (IDs 1-8) with the left arm on can1. Plan A puts our left
-    # arm at 0x09-0x10 on the same can0, and `--id` overrides `--arm`, so each side has
-    # to name its own IDs. Using `--arm` for our left arm would zero the right one.
-    by_side = workstation.ProductRegistry().get("openarm_2_0")["zero"]["target_ids_by_arm_side"]
+def test_the_2_0_zero_target_ids_follow_the_official_split_bus_topology():
+    product = workstation.ProductRegistry().get("openarm_2_0")
+    by_side = product["zero"]["target_ids_by_arm_side"]
     assert by_side["right_arm"] == list(range(0x01, 0x09))
-    assert by_side["left_arm"] == list(range(0x09, 0x11))
+    assert by_side["left_arm"] == list(range(0x01, 0x09))
+    assert product["arms"]["right_arm"]["expected_bus"] == "can0"
+    assert product["arms"]["left_arm"]["expected_bus"] == "can1"
 
 
 def test_zeroing_moves_a_1_0_arm_but_not_a_2_0_one(service):

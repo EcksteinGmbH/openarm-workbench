@@ -1,6 +1,6 @@
 # OpenARM Damiao 电机工作站项目
 
-当前工作站版本：`0.6.3-single-id-safety`
+当前工作站版本：`0.33.0-openarm2-official-topology-fd-session`
 
 版本更新记录见 [docs/WORKSTATION_CHANGELOG.md](/home/ubuntu/Projects/OpenARM/docs/WORKSTATION_CHANGELOG.md)。
 
@@ -119,7 +119,7 @@ sudo ip link set can0 up
 ip -details link show can0
 ```
 
-工站默认使用 CAN 2.0 / `1000000` bitrate；写入 ID、保存 Flash、零位和 Demo 类动作前，请确认只连接目标设备、急停/断电手段可用，并在操作后执行断电重上电复核。
+单电机配置阶段使用经典 CAN / `1000000` bitrate；OpenArm 2.0 装配运行阶段按官方配置为 CAN FD（仲裁段 1 Mbps、数据段 5 Mbps）。写入 ID、保存 Flash、零位和 Demo 类动作前，请确认只连接目标设备、急停/断电手段可用，并在操作后执行断电重上电复核。
 
 #### 启动Web服务
 ```bash

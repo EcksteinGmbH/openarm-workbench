@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+CLI="${ROOT_DIR}/build/openarm_can_1.4.0/openarm-can-cli"
+
+if [[ ! -x "${CLI}" ]]; then
+  echo "openarm_can 1.4.0 CLI is not built: ${CLI}" >&2
+  echo "Run: cmake -S external/openarm_can_1.4.0 -B build/openarm_can_1.4.0 -DBUILD_TESTING=OFF" >&2
+  echo "Then: cmake --build build/openarm_can_1.4.0 --target openarm-can-cli -j2" >&2
+  exit 127
+fi
+
+exec "${CLI}" "$@"

@@ -639,6 +639,7 @@ def arm_safe_enable_check():
             session_id=data["device_session_id"],
             profile_id=data.get("profile_id", "openarm_right_arm_v1"),
             hold_ms=int(data.get("hold_ms", 300)),
+            arm_cn=data.get("arm_cn"),
         )
     )
 
@@ -656,6 +657,7 @@ def arm_timeout_standardization():
             profile_id=data.get("profile_id", "openarm_right_arm_v1"),
             save_flash=bool(data.get("save_flash", True)),
             confirmed=bool(data.get("confirmed", False)),
+            arm_cn=data.get("arm_cn"),
         )
     )
 
@@ -821,7 +823,11 @@ def arm_wizard_detach_motor_record(arm_cn: str, record_id: str):
 
 @app.get("/api/arm/wizard/<arm_cn>/status")
 def arm_wizard_status(arm_cn: str):
-    return _wizard_call(service.arm_wizard_status, arm_cn=arm_cn)
+    return _wizard_call(
+        service.arm_wizard_status,
+        arm_cn=arm_cn,
+        arm_side=str(request.args.get("arm_side") or "right_arm"),
+    )
 
 
 @app.post("/api/arm/wizard/<arm_cn>/steps/<step_id>")
@@ -834,6 +840,7 @@ def arm_wizard_run_step(arm_cn: str, step_id: str):
         arm_side=str(data.get("arm_side", "right_arm")),
         channel=str(data.get("channel", "can0")),
         bitrate=int(data.get("bitrate", 1000000)),
+        confirmations=data.get("confirmations") or {},
     )
 
 
@@ -876,6 +883,8 @@ def link_wizard_connect():
         service.link_wizard_connect,
         channel=str(data.get("channel", "can0")),
         bitrate=int(data.get("bitrate", 1000000)),
+        mode=str(data.get("mode", "can20")),
+        dbitrate=int(data["dbitrate"]) if data.get("dbitrate") else None,
     )
 
 
@@ -886,6 +895,8 @@ def link_wizard_bus_check():
         service.link_wizard_bus_check,
         channel=str(data.get("channel", "can0")),
         bitrate=int(data.get("bitrate", 1000000)),
+        mode=str(data.get("mode", "can20")),
+        dbitrate=int(data["dbitrate"]) if data.get("dbitrate") else None,
     )
 
 

@@ -249,7 +249,7 @@ def test_vendor_maintenance_record_api(client, tmp_path, monkeypatch):
 
 
 def test_single_motor_wizard_api_flow_and_problem_envelope(client, monkeypatch):
-    monkeypatch.setattr(web_app.service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    monkeypatch.setattr(web_app.service, "_wizard_can_precheck", lambda channel, bitrate, **kwargs: None)
     options = _json(client.get("/api/single-motor/wizard/options"))
     assert options["defaults"]["product_line"] == "openarm_2_0"
     assert [arm["arm_side"] for arm in options["arms"]] == ["right_arm", "left_arm"]
@@ -325,7 +325,7 @@ def test_blocking_problems_are_flagged_for_the_dialog(client, monkeypatch):
 def test_recoverable_problems_are_not_flagged_as_blocking(client, monkeypatch):
     # A bus with no motor on it is the operator's to fix in place; the in-page panel
     # already says so, and a dialog on every power-up step would only be noise.
-    monkeypatch.setattr(web_app.service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    monkeypatch.setattr(web_app.service, "_wizard_can_precheck", lambda channel, bitrate, **kwargs: None)
     monkeypatch.setattr(web_app.service, "_inventory_scan", lambda session, scan_ids: ([], []))
     payload = _json(client.post("/api/link/wizard/bus-check", json={"channel": "can0"}))
     assert payload["problem"]["code"] == "bus_no_motor"
@@ -607,3 +607,47 @@ def test_the_three_wizards_use_one_vocabulary(client):
     # so an operator who opened the wrong arm had to hunt for the picker.
     for tab, source in sources.items():
         assert "restartLabel(" in source, f"{tab} offers no way to start over"
+
+
+def test_arm_endpoints_forward_arm_cn_for_evidence(client, monkeypatch):
+    """A Flash write that leaves no evidence on the arm cannot be verified later."""
+    seen = {}
+
+    def record(name):
+        def _call(**kwargs):
+            seen[name] = kwargs
+            return {"ok": True, "results": [], "summary": {}}
+        return _call
+
+    monkeypatch.setattr(web_app.service, "arm_timeout_standardization", record("timeout"))
+    monkeypatch.setattr(web_app.service, "arm_safe_enable_check", record("enable"))
+
+    client.post("/api/device/arm-timeout-standardization", json={
+        "device_session_id": "s1", "confirmed": True, "arm_cn": "OAF26093001"})
+    client.post("/api/device/arm-safe-enable-check", json={
+        "device_session_id": "s1", "arm_cn": "OAF26093001"})
+
+    assert seen["timeout"]["arm_cn"] == "OAF26093001"
+    assert seen["enable"]["arm_cn"] == "OAF26093001"
+
+
+def test_arm_wizard_endpoint_forwards_inline_safety_confirmations(client, monkeypatch):
+    seen = {}
+
+    def record(**kwargs):
+        seen.update(kwargs)
+        return {"ok": True, "passed": True}
+
+    monkeypatch.setattr(web_app.service, "arm_wizard_run_step", record)
+    response = client.post(
+        "/api/arm/wizard/OAF26093001/steps/enable",
+        json={
+            "arm_side": "right_arm",
+            "channel": "can0",
+            "bitrate": 1000000,
+            "confirmations": {"estop": True, "clear": True, "hands": True},
+        },
+    )
+
+    assert response.status_code == 200
+    assert seen["confirmations"] == {"estop": True, "clear": True, "hands": True}

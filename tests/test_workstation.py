@@ -75,6 +75,11 @@ class _FakeBaseDriver:
         for key in [motor.SlaveID, motor.MasterID]:
             self.motors.pop(key, None)
 
+    def ensure_motor(self, motor):
+        # Both real drivers expose this; without it the double makes any caller that
+        # registers a motor before reading look like a hardware failure.
+        return self.addMotor(motor)
+
     def _entry(self, motor):
         return self.registry.get(motor.SlaveID)
 
@@ -370,10 +375,11 @@ def test_write_params_updates_master_id_before_esc_id_change():
     assert service.verify_params(job_info["job_id"])["verified"] is True
 
 
-def test_official_right_and_left_arm_profile_ids_match_delivery_plan():
+def test_legacy_1_0_profiles_and_official_2_0_left_profile_stay_separate():
     service = workstation.WorkstationService()
     right = service.profile_manager.get_profile("openarm_right_arm_v1")
     left = service.profile_manager.get_profile("openarm_left_arm_v1")
+    left_v2 = service.profile_manager.get_profile("openarm_left_arm_v2")
 
     assert [(joint["joint_name"], joint["target_esc_id"], joint["target_mst_id"]) for joint in right["joints"]] == [
         ("R-J1", 0x01, 0x11),
@@ -397,8 +403,14 @@ def test_official_right_and_left_arm_profile_ids_match_delivery_plan():
     ]
     assert left["supported_scan_ids"] == list(range(0x09, 0x11))
     assert left["expected_bus"] == "can0"
+    assert [(joint["joint_name"], joint["target_esc_id"], joint["target_mst_id"]) for joint in left_v2["joints"]] == [
+        (f"L-J{index}", index, 0x10 + index) for index in range(1, 9)
+    ]
+    assert left_v2["supported_scan_ids"] == list(range(0x01, 0x09))
+    assert left_v2["expected_bus"] == "can1"
     assert [joint["target_timeout"] for joint in right["joints"]] == [5000] * 8
     assert [joint["target_timeout"] for joint in left["joints"]] == [5000] * 8
+    assert [joint["target_timeout"] for joint in left_v2["joints"]] == [5000] * 8
 
 
 def test_arm_timeout_standardization_uses_per_joint_profile_targets():
@@ -1553,14 +1565,15 @@ def test_official_motor_check_and_baudrate_wrappers(monkeypatch):
 
     planned_baudrate = service.run_official_baudrate_change(canid=1, baudrate=1000000, socketcan="can0", flash=True)
     assert planned_baudrate["command_run"]["command"] == [
-        "openarm-can-change-baudrate",
+        "openarm-can-cli",
+        "-i",
+        "can0",
+        "change_baud",
         "--baudrate",
         "1000000",
         "--canid",
         "1",
-        "--socketcan",
-        "can0",
-        "--flash",
+        "--save",
     ]
 
     with pytest.raises(ValueError):
@@ -2446,18 +2459,81 @@ def test_latest_low_gain_record_is_same_side_passed_and_fully_disabled(tmp_path)
     )
     record_dir.mkdir(parents=True)
     (record_dir / "left.json").write_text(
-        '{"arm_side":"left_arm","ok":true,"summary":{"failed":0,"all_disabled_after_check":true}}'
+        '{"arm_cn":"OAF26080401","arm_side":"left_arm","profile_id":"openarm_left_arm_v1",'
+        '"ok":true,"summary":{"total_expected":8,"enabled_count":8,"disabled_count":8,'
+        '"failed":0,"all_disabled_after_check":true}}'
     )
     right_path = record_dir / "right.json"
     right_path.write_text(
-        '{"arm_side":"right_arm","ok":true,"keepalive_frames_sent":432,'
-        '"summary":{"failed":0,"all_disabled_after_check":true}}'
+        '{"arm_cn":"OAF26080401","arm_side":"right_arm","profile_id":"openarm_right_arm_v1",'
+        '"ok":true,"keepalive_frames_sent":432,'
+        '"summary":{"total_expected":8,"enabled_count":8,"disabled_count":8,'
+        '"failed":0,"all_disabled_after_check":true}}'
     )
 
-    record = _latest_low_gain_record(tmp_path, "OAF26080401", "right_arm")
+    record = _latest_low_gain_record(
+        tmp_path,
+        "OAF26080401",
+        "right_arm",
+        "openarm_right_arm_v1",
+    )
 
     assert record["keepalive_frames_sent"] == 432
     assert record["_evidence_path"] == str(right_path)
+
+
+def test_latest_low_gain_record_recovers_verified_legacy_arm_summary(tmp_path):
+    arms_dir = tmp_path / "artifacts" / "factory" / "arms"
+    arms_dir.mkdir(parents=True)
+    (arms_dir / "OAF26093001.json").write_text(
+        """{
+          "command_run_history": [{
+            "run_id": "c04a414af06f",
+            "kind": "arm_safe_enable_check",
+            "profile_id": "openarm_right_arm_v1",
+            "arm_side": "right_arm",
+            "status": "passed",
+            "motion_command_sent": false,
+            "finished_at": "2026-10-08T08:39:13Z",
+            "summary": {
+              "total_expected": 8,
+              "enabled_count": 8,
+              "disabled_count": 8,
+              "failed": 0,
+              "all_disabled_after_check": true,
+              "keepalive_frames": 408,
+              "comm_lost_reported": false
+            }
+          }]
+        }""",
+        encoding="utf-8",
+    )
+
+    record = _latest_low_gain_record(tmp_path, "OAF26093001", "right_arm")
+
+    assert record["ok"] is True
+    assert record["keepalive_frames_sent"] == 408
+    assert record["recovered_from"]["run_id"] == "c04a414af06f"
+
+
+def test_latest_low_gain_record_rejects_incomplete_legacy_summary(tmp_path):
+    arms_dir = tmp_path / "artifacts" / "factory" / "arms"
+    arms_dir.mkdir(parents=True)
+    (arms_dir / "OAF26093002.json").write_text(
+        """{
+          "command_run_history": [{
+            "run_id": "incomplete",
+            "kind": "arm_safe_enable_check",
+            "arm_side": "right_arm",
+            "status": "passed",
+            "finished_at": "2026-10-08T08:39:13Z",
+            "summary": {"failed": 0, "all_disabled_after_check": true}
+          }]
+        }""",
+        encoding="utf-8",
+    )
+
+    assert _latest_low_gain_record(tmp_path, "OAF26093002", "right_arm") == {}
 
 
 def test_infer_motor_model_from_limit_registers():
@@ -2476,7 +2552,7 @@ def test_infer_motor_model_from_limit_registers():
 
 def _wizard_service(monkeypatch):
     service = workstation.WorkstationService()
-    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate, **kwargs: None)
     session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
     driver = service.sessions[session["device_session_id"]].driver
     return service, driver
@@ -2489,9 +2565,9 @@ def test_single_wizard_happy_path_saves_record_without_report(monkeypatch):
     identified = service.single_wizard_identify(arm_side="left_arm", joint="J2", product_line="openarm_2_0")
     assert identified["ok"] is True
     assert identified["joint_name"] == "L-J2"
-    assert identified["configured_as"] == ["R-J1"]
+    assert identified["configured_as"] == ["L-J1"]
     rows = {row["field"]: row for row in identified["param_rows"]}
-    assert rows["ESC_ID"]["target"] == 0x0A and rows["ESC_ID"]["changes"] is True
+    assert rows["ESC_ID"]["target"] == 0x02 and rows["ESC_ID"]["changes"] is True
     assert rows["TIMEOUT"]["written"] is False
     # Fake motor limits (12.5/30/10) are DM4310 while L-J2 expects DM-J8009P-2EC.
     assert identified["model_check"]["families"] == ["DM4310"]
@@ -2513,10 +2589,10 @@ def test_single_wizard_happy_path_saves_record_without_report(monkeypatch):
     assert record["sn_register"] == 123456
     assert record["product_line"] == "openarm_2_0"
     assert record["joint_name"] == "L-J2"
-    assert record["target"]["ESC_ID"] == 0x0A
+    assert record["target"]["ESC_ID"] == 0x02
     assert record["verified"] == {
-        "ESC_ID": 0x0A,
-        "MST_ID": 0x1A,
+        "ESC_ID": 0x02,
+        "MST_ID": 0x12,
         "CTRL_MODE": "MIT",
         "can_br": 1000000,
         "can_br_code": 4,
@@ -2538,7 +2614,7 @@ def test_single_wizard_happy_path_saves_record_without_report(monkeypatch):
     assert again["joint_taken_by"] == []
 
     # A second factory-new motor reports the same SN register value; it must not be merged or treated as the same motor.
-    entry = driver.registry.pop(0x0A)
+    entry = driver.registry.pop(0x02)
     entry["params"][int(DM_variable.ESC_ID)] = 1
     entry["params"][int(DM_variable.MST_ID)] = 0
     driver.registry[1] = entry
@@ -2720,7 +2796,7 @@ def test_link_wizard_prepare_and_connect_flow(monkeypatch):
     # Interface writes go through sudo -n; see test_interface_configuration_runs_privileged.
     assert ["sudo", "-n", "ip", "link", "set", "can0", "up"] in commands
 
-    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate, **kwargs: None)
     connected = service.link_wizard_connect(channel="can0", bitrate=1000000)
     assert connected["ok"] is True
     assert connected["capabilities"]["read_params"] is True
@@ -2730,6 +2806,43 @@ def test_link_wizard_prepare_and_connect_flow(monkeypatch):
 
     closed = service.link_wizard_disconnect(channel="can0")
     assert closed["closed_sessions"] == [session_id]
+
+
+def test_link_wizard_opens_a_real_fd_session_and_does_not_reuse_classic(monkeypatch):
+    service = _link_service(monkeypatch)
+    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate, **kwargs: None)
+
+    classic = service.link_wizard_connect(channel="can0", mode="can20")
+    fd = service.link_wizard_connect(
+        channel="can0",
+        mode="canfd",
+        bitrate=1000000,
+        dbitrate=5000000,
+    )
+
+    assert fd["device_session_id"] != classic["device_session_id"]
+    assert service.sessions[classic["device_session_id"]].connection_state == "disconnected"
+    connection = service.sessions[fd["device_session_id"]].connection
+    assert connection["fd"] is True
+    assert connection["dbitrate"] == 5000000
+    assert fd["mode"] == "canfd"
+
+
+def test_socketcan_connection_passes_fd_flag_to_the_driver(monkeypatch):
+    captured = {}
+
+    def factory(*args, **kwargs):
+        captured.update(kwargs)
+        return FakeSocketCANDriver(*args, **kwargs)
+
+    monkeypatch.setattr(workstation, "DamiaoSocketCANDriver", factory)
+    service = workstation.WorkstationService()
+    service.connect_device(
+        "socketcan",
+        {"channel": "can1", "bitrate": 1000000, "fd": True, "dbitrate": 5000000},
+    )
+
+    assert captured == {"channel": "can1", "bitrate": 1000000, "fd": True}
 
 
 def test_link_wizard_prepare_failure_and_bus_check(monkeypatch):
@@ -2743,7 +2856,7 @@ def test_link_wizard_prepare_failure_and_bus_check(monkeypatch):
     assert failed["problem"]["code"] == "interface_prepare_failed"
     assert "Operation not permitted" in failed["problem"]["detail"]
 
-    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate: None)
+    monkeypatch.setattr(service, "_wizard_can_precheck", lambda channel, bitrate, **kwargs: None)
     session = service.connect_device("socketcan", {"channel": "can0", "bitrate": 1000000})
     driver = service.sessions[session["device_session_id"]].driver
     entry = driver.registry.pop(1)
@@ -2897,7 +3010,7 @@ def test_every_profile_agrees_with_the_commissioning_timeout_policy():
     expected = {value for arm in policy.values() for value in arm.values()}
     assert expected == {workstation.WHOLE_ARM_TARGET_TIMEOUT}
 
-    for profile_id in ("openarm_v1", "openarm_right_arm_v1", "openarm_left_arm_v1"):
+    for profile_id in ("openarm_v1", "openarm_right_arm_v1", "openarm_left_arm_v1", "openarm_left_arm_v2"):
         profile = service.profile_manager.get_profile(profile_id)
         timeouts = {int(joint["target_timeout"]) for joint in profile["joints"]}
         assert timeouts == {workstation.WHOLE_ARM_TARGET_TIMEOUT}, f"{profile_id}: {sorted(timeouts)}"
@@ -2999,6 +3112,20 @@ def _arm_scan_service(monkeypatch, timeout_value):
     return service, session["device_session_id"]
 
 
+def _mark_arm_static_passed(service, arm_cn, profile_id="openarm_right_arm_v1"):
+    path, arm = service._load_arm_record(arm_cn)
+    arm["linked_jobs"] = [
+        {
+            "job_id": "static-pass",
+            "job_type": "arm_acceptance",
+            "profile_id": profile_id,
+            "status": "passed",
+            "product_version": arm.get("product_version"),
+        }
+    ]
+    workstation._atomic_json(path, arm)
+
+
 def test_static_acceptance_treats_unwritten_timeout_as_pending(monkeypatch):
     """Standardization runs after static acceptance, so a factory 0 is not a failure."""
     service, session_id = _arm_scan_service(monkeypatch, 0)
@@ -3033,3 +3160,188 @@ def test_joint_label_separates_pending_timeout_from_failure():
     assert workstation._motor_result_label(True, ["timeout_mismatch"]) == "FAIL"
     assert workstation._motor_result_label(True, ["timeout_pending", "mst_id_mismatch"]) == "FAIL"
     assert workstation._motor_result_label(False, ["timeout_pending"]) == "FAIL"
+
+
+def test_arm_wizard_runs_timeout_step_and_records_it(monkeypatch):
+    """参数标准化 runs from the wizard, writes no motion command, and leaves evidence."""
+    service, session_id = _arm_scan_service(monkeypatch, 0)
+    arm_cn = "OAF26099001"
+    service.bind_arm_identity(arm_cn=arm_cn, arm_type="OpenARM Follower", product_version="openarm_2_0")
+    _mark_arm_static_passed(service, arm_cn)
+    monkeypatch.setattr(service, "_wizard_session", lambda channel, bitrate: service.sessions[session_id])
+
+    payload = service.arm_wizard_run_step(
+        arm_cn=arm_cn,
+        step_id="timeout",
+        arm_side="right_arm",
+        confirmations={"stage": True, "power": True},
+    )
+
+    assert payload["ok"] is True and payload["passed"] is True
+    assert payload["writes"] is True and payload["motion_command_sent"] is False
+    assert len(payload["joints"]) == 8
+    for joint in payload["joints"]:
+        assert joint["passed"] is True
+        assert joint["before"] == 0 and joint["after_save"] == joint["target"] == 5000
+        assert joint["disabled_after"] is True
+
+    # The wizard reads progress from the arm record, so the run must be on it.
+    _path, arm = service._load_arm_record(arm_cn)
+    kinds = [run.get("kind") for run in arm.get("command_run_history") or []]
+    assert "arm_timeout_standardization" in kinds
+    status = service.arm_wizard_status(arm_cn)
+    assert next(s["state"] for s in status["steps"] if s["id"] == "timeout") == "done"
+
+
+def test_timeout_standardization_writes_report_evidence(monkeypatch, tmp_path):
+    """The formal report reads per-joint TIMEOUT from arm_records, not the arm summary."""
+    service, session_id = _arm_scan_service(monkeypatch, 0)
+    arm_cn = "OAF26099005"
+    service.bind_arm_identity(arm_cn=arm_cn, arm_type="OpenARM Follower", product_version="openarm_2_0")
+
+    service.arm_timeout_standardization(
+        session_id=session_id, profile_id="openarm_right_arm_v1", confirmed=True, arm_cn=arm_cn
+    )
+
+    evidence_dir = workstation._arm_record_dir(arm_cn) / "timeout_adjustments"
+    files = list(evidence_dir.glob("*.json"))
+    assert len(files) == 1
+    # formal_factory_report._timeout_adjustments() selects by this name prefix.
+    assert "right_" in files[0].name
+    import json as _json
+    payload = _json.loads(files[0].read_text(encoding="utf-8"))
+    assert payload["ok"] is True and payload["arm_side"] == "right_arm"
+    assert len(payload["results"]) == 8
+    for item in payload["results"]:
+        assert item["ok"] is True
+        assert item["before"] == 0
+        assert item["after_save"] == item["target_timeout"] == 5000
+
+
+def test_arm_wizard_runs_enable_step_without_motion(monkeypatch, tmp_path):
+    """低增益使能检查 runs from the wizard and records itself; no trajectory is sent."""
+    service, session_id = _arm_scan_service(monkeypatch, 5000)
+    arm_cn = "OAF26099006"
+    service.bind_arm_identity(arm_cn=arm_cn, arm_type="OpenARM Follower", product_version="openarm_2_0")
+    _mark_arm_static_passed(service, arm_cn)
+    service._record_arm_step_run(
+        arm_cn,
+        "arm_timeout_standardization",
+        {
+            "ok": True,
+            "profile_id": "openarm_right_arm_v1",
+            "arm_side": "right_arm",
+            "motion_command_sent": False,
+            "summary": {"passed": 8, "failed": 0, "all_disabled_after_write": True},
+        },
+    )
+    stdout = "\n".join(
+        [
+            "keepalive_frames_sent=408",
+            *[
+                f"ENABLE recv_id=0x{recv_id:X} status={{'status': 'ENABLED'}}"
+                for recv_id in range(0x11, 0x19)
+            ],
+            *[
+                f"DISABLE recv_id=0x{recv_id:X} status={{'status': 'DISABLED'}}"
+                for recv_id in range(0x11, 0x19)
+            ],
+            "RESULT: PASS",
+        ]
+    )
+    monkeypatch.setattr(
+        workstation.subprocess,
+        "run",
+        lambda *args, **kwargs: workstation.subprocess.CompletedProcess(args[0], 0, stdout=stdout, stderr=""),
+    )
+    monkeypatch.setattr(service, "_wizard_session", lambda channel, bitrate: service.sessions[session_id])
+
+    payload = service.arm_wizard_run_step(
+        arm_cn=arm_cn,
+        step_id="enable",
+        arm_side="right_arm",
+        confirmations={"estop": True, "clear": True, "hands": True},
+    )
+
+    assert payload["ok"] is True and payload["passed"] is True
+    assert payload["motion_command_sent"] is False
+    assert len(payload["joints"]) == 8
+
+    _path, arm = service._load_arm_record(arm_cn)
+    kinds = [run.get("kind") for run in arm.get("command_run_history") or []]
+    assert "arm_safe_enable_check" in kinds
+    evidence_dir = workstation._arm_record_dir(arm_cn) / "low_gain_enable"
+    files = list(evidence_dir.glob("*.json"))
+    assert len(files) == 1
+    evidence = _latest_low_gain_record(workstation.FACTORY_DIR.parents[1], arm_cn, "right_arm")
+    assert evidence["ok"] is True
+    assert evidence["summary"]["all_disabled_after_check"] is True
+    assert evidence["keepalive_frames_sent"] > 0
+
+
+def test_arm_wizard_enforces_prerequisites_and_confirmations_before_hardware(monkeypatch):
+    service, _session_id = _arm_scan_service(monkeypatch, 0)
+    arm_cn = "OAF26099007"
+    service.bind_arm_identity(arm_cn=arm_cn, arm_type="OpenARM Follower", product_version="openarm_2_0")
+
+    out_of_order = service.arm_wizard_run_step(
+        arm_cn=arm_cn,
+        step_id="timeout",
+        confirmations={"stage": True, "power": True},
+    )
+    assert out_of_order["problem"]["code"] == "arm_step_out_of_order"
+    assert out_of_order["problem"]["missing_steps"] == ["static"]
+
+    _mark_arm_static_passed(service, arm_cn)
+    unconfirmed = service.arm_wizard_run_step(arm_cn=arm_cn, step_id="timeout")
+    assert unconfirmed["problem"]["code"] == "arm_safety_not_confirmed"
+    assert {item["key"] for item in unconfirmed["problem"]["missing_confirmations"]} == {"stage", "power"}
+
+
+def test_arm_wizard_static_prerequisite_must_match_selected_arm_side(monkeypatch):
+    service, _session_id = _arm_scan_service(monkeypatch, 0)
+    arm_cn = "OAF26099008"
+    service.bind_arm_identity(arm_cn=arm_cn, arm_type="OpenARM Follower", product_version="openarm_2_0")
+    _mark_arm_static_passed(service, arm_cn, profile_id="openarm_left_arm_v1")
+
+    result = service.arm_wizard_run_step(
+        arm_cn=arm_cn,
+        step_id="timeout",
+        arm_side="right_arm",
+        confirmations={"stage": True, "power": True},
+    )
+
+    assert result["problem"]["code"] == "arm_step_out_of_order"
+    assert result["problem"]["missing_steps"] == ["static"]
+
+
+def test_arm_wizard_timeout_prerequisite_must_match_selected_arm_side(monkeypatch):
+    service, _session_id = _arm_scan_service(monkeypatch, 0)
+    arm_cn = "OAF26099009"
+    service.bind_arm_identity(arm_cn=arm_cn, arm_type="OpenARM Follower", product_version="openarm_2_0")
+    _mark_arm_static_passed(service, arm_cn, profile_id="openarm_right_arm_v1")
+    service._record_arm_step_run(
+        arm_cn,
+        "arm_timeout_standardization",
+        {
+            "ok": True,
+            "profile_id": "openarm_left_arm_v2",
+            "arm_side": "left_arm",
+            "motion_command_sent": False,
+            "summary": {"passed": 8, "failed": 0, "all_disabled_after_write": True},
+        },
+    )
+
+    result = service.arm_wizard_run_step(
+        arm_cn=arm_cn,
+        step_id="enable",
+        arm_side="right_arm",
+        confirmations={"estop": True, "clear": True, "hands": True},
+    )
+
+    assert result["problem"]["code"] == "arm_step_out_of_order"
+    assert result["problem"]["missing_steps"] == ["timeout"]
+    right_status = service.arm_wizard_status(arm_cn, arm_side="right_arm")
+    left_status = service.arm_wizard_status(arm_cn, arm_side="left_arm")
+    assert next(step["state"] for step in right_status["steps"] if step["id"] == "timeout") != "done"
+    assert next(step["state"] for step in left_status["steps"] if step["id"] == "timeout") == "done"

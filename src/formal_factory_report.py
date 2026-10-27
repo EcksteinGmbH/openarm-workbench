@@ -249,20 +249,84 @@ def _apply_timeout_adjustments(job_payload: Dict[str, Any], adjustments: Dict[st
     return payload
 
 
-def _latest_low_gain_record(root: Path, arm_serial: str, side: str) -> Dict[str, Any]:
+def _latest_low_gain_record(
+    root: Path,
+    arm_serial: str,
+    side: str,
+    profile_id: str | None = None,
+) -> Dict[str, Any]:
+    accepted_profiles = {profile_id} if profile_id else set()
+    if profile_id == "openarm_v1":
+        accepted_profiles.add("openarm_left_arm_v1" if side == "left_arm" else "openarm_right_arm_v1")
     record_dir = root / "artifacts" / "factory" / "arm_records" / arm_serial / "low_gain_enable"
-    if not record_dir.exists():
-        return {}
-    for path in sorted(record_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
-        payload = _load_json(path, {})
-        if not payload or payload.get("arm_side") != side or payload.get("ok") is not True:
-            continue
-        summary = payload.get("summary") or {}
+    if record_dir.exists():
+        for path in sorted(record_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+            payload = _load_json(path, {})
+            if not payload or payload.get("arm_side") != side or payload.get("ok") is not True:
+                continue
+            if payload.get("arm_cn") not in (None, arm_serial):
+                continue
+            if accepted_profiles and payload.get("profile_id") not in accepted_profiles:
+                continue
+            summary = payload.get("summary") or {}
+            if int(summary.get("failed", 0) or 0) != 0 or not summary.get("all_disabled_after_check"):
+                continue
+            expected = int(summary.get("total_expected", 0) or 0)
+            if expected <= 0 or (
+                int(summary.get("enabled_count", 0) or 0) != expected
+                or int(summary.get("disabled_count", 0) or 0) != expected
+            ):
+                continue
+            result = copy.deepcopy(payload)
+            result["_evidence_path"] = str(path)
+            return result
+
+    # 0.31 recorded live low-gain runs only in the arm's command history. Preserve
+    # those machine-written summaries as legacy evidence instead of asking an
+    # operator to energize a known-good arm again merely to change the file shape.
+    arm = _load_json(root / "artifacts" / "factory" / "arms" / f"{arm_serial}.json", {})
+    runs = sorted(
+        (
+            item
+            for item in arm.get("command_run_history") or []
+            if item.get("kind") == "arm_safe_enable_check"
+            and item.get("status") == "passed"
+            and item.get("arm_side") == side
+            and (not accepted_profiles or item.get("profile_id") in accepted_profiles)
+        ),
+        key=lambda item: str(item.get("finished_at") or ""),
+        reverse=True,
+    )
+    for run in runs:
+        summary = copy.deepcopy(run.get("summary") or {})
         if int(summary.get("failed", 0) or 0) != 0 or not summary.get("all_disabled_after_check"):
             continue
-        result = copy.deepcopy(payload)
-        result["_evidence_path"] = str(path)
-        return result
+        expected = int(summary.get("total_expected", 0) or 0)
+        if expected <= 0 or (
+            int(summary.get("enabled_count", 0) or 0) != expected
+            or int(summary.get("disabled_count", 0) or 0) != expected
+        ):
+            continue
+        return {
+            "record_type": "low_gain_enable_legacy_summary",
+            "arm_cn": arm_serial,
+            "arm_side": side,
+            "profile_id": run.get("profile_id"),
+            "recorded_at": run.get("finished_at"),
+            "ok": True,
+            "status": "passed",
+            "hold_ms": None,
+            "keepalive_frames_sent": summary.get("keepalive_frames"),
+            "comm_lost_reported": bool(summary.get("comm_lost_reported")),
+            "motion_command_sent": bool(run.get("motion_command_sent")),
+            "summary": summary,
+            "results": [],
+            "recovered_from": {
+                "source": "arm.command_run_history",
+                "run_id": run.get("run_id"),
+                "detail": "0.31 stored the verified summary but no standalone evidence file",
+            },
+        }
     return {}
 
 
@@ -483,6 +547,10 @@ def _copy_evidence(
         target = evidence_dir / f"low_gain_enable_{side}.json"
         if low_gain_source.resolve() != target.resolve():
             shutil.copy2(low_gain_source, target)
+        paths["low_gain"] = target
+    elif low_gain_record:
+        target = evidence_dir / f"low_gain_enable_{side}.json"
+        _dump_json(target, {key: value for key, value in low_gain_record.items() if not key.startswith("_")})
         paths["low_gain"] = target
     if job_payload:
         path = evidence_dir / "arm_acceptance_job.json"
@@ -851,7 +919,7 @@ def render_formal_factory_report(
     report_job_payload = _apply_timeout_adjustments(job_payload, timeout_adjustments)
     zero_run = _passed_command(arm, "official_zero_calibration", side)
     demo_run = _passed_command(arm, "official_demo_validation", side)
-    low_gain_record = _latest_low_gain_record(root_dir, arm_serial, side)
+    low_gain_record = _latest_low_gain_record(root_dir, arm_serial, side, profile_id)
     zero = _parse_zero_stdout(zero_run.get("stdout", "")) if zero_run else {"passed": False, "stops": "-", "post_arm": "-", "post_gripper": "-"}
     demo = demo_run.get("demo_summary") or {}
     demo_monitor_samples = _parse_demo_monitor_samples(demo_run.get("stdout", "")) if demo_run else []

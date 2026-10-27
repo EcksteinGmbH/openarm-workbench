@@ -1,13 +1,13 @@
 # OpenArm 2.0 product registry.
 #
-# WARNING: nothing in this file has been confirmed on 2.0 hardware. Every entry that
-# drives a motor carries `hardware_verified: false` and a `locked_reason`, and the
-# workstation refuses to execute a locked step. Values were taken from the official
-# 2.0 documentation via docs/ARM_WORKSTATION_V5_DUAL_VERSION_PLAN.md; they are a
-# starting point for verification, not an accepted configuration.
+# WARNING: only the classic-CAN commissioning stage has been confirmed on 2.0
+# hardware. Every unverified entry that writes or drives a motor carries
+# `hardware_verified: false` and a `locked_reason`; the workstation refuses to execute
+# those locked steps. The assembled-arm topology follows the official split-bus
+# layout: both sides use IDs 1-8, right on can0 and left on can1.
 product_version: openarm_2_0
 label: OpenArm 2.0
-profile_revision: 2026-09-20.1
+profile_revision: 2026-10-23.1
 hardware_verified: false
 
 arms:
@@ -18,12 +18,11 @@ arms:
     esc_ids: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
     mst_ids: [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18]
   left_arm:
-    profile_id: openarm_left_arm_v1
+    profile_id: openarm_left_arm_v2
     joint_prefix: L
-    expected_bus: can0
-    # Plan A, same as 1.0: left arm keeps distinct IDs rather than official can1 0x01-0x08.
-    esc_ids: [0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]
-    mst_ids: [0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20]
+    expected_bus: can1
+    esc_ids: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+    mst_ids: [0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18]
 
 # Official "same motor lineup" as 1.0. Confirmed against the 16 motors already
 # commissioned for 2.0 in artifacts/factory/single_motor_records/.
@@ -38,8 +37,9 @@ motors:
   J8: DM-J4310-2EC
 
 can:
-  # Plan A: IDs are configured over classic CAN at 1 Mbps before assembly. This half
-  # IS verified - all 16 motors were commissioned this way on 2026-09-17.
+  # IDs are configured over classic CAN at 1 Mbps before assembly. This stage is
+  # verified; the left-side records made before the official split-bus decision retain
+  # their historical 0x09-0x10 values and are not the target for new production.
   commissioning:
     mode: can20
     bitrate: 1000000
@@ -123,12 +123,10 @@ zero:
   method: cell_jig_set_zero
   command: openarm-can-cli
   subcommand: set_zero
-  # Official uses `--arm` (IDs 1-8) with the left arm on can1. Plan A puts our left arm
-  # at 0x09-0x10 on the same can0, and `--id` overrides `--arm`
-  # (openarm_cli.cpp:245), so each side names its own IDs.
+  # Official uses `--arm` (IDs 1-8), with right on can0 and left on can1.
   target_ids_by_arm_side:
     right_arm: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
-    left_arm: [0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10]
+    left_arm: [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
   motion: false
   requires_jig: true
   hardware_verified: false

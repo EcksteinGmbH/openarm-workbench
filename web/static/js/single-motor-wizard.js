@@ -110,7 +110,8 @@ function verifiedValues(record) {
 }
 
 function selectedArm() {
-    return wizard.options?.arms.find(arm => arm.arm_side === wizard.selection.arm_side);
+    const arms = wizard.options?.arms_by_product?.[wizard.selection.product_line] || wizard.options?.arms || [];
+    return arms.find(arm => arm.arm_side === wizard.selection.arm_side);
 }
 
 function selectedJoint() {
@@ -181,6 +182,7 @@ function renderSelect() {
     const options = wizard.options;
     if (!options) return '<div class="smw-card">正在加载…</div>';
     const arm = selectedArm();
+    const arms = options.arms_by_product?.[wizard.selection.product_line] || options.arms || [];
     const channels = wizard.interfaces.length ? wizard.interfaces.map(item => item.name) : ['can0'];
     return `
         <div class="smw-card">
@@ -194,7 +196,7 @@ function renderSelect() {
             <div class="smw-field">
                 <span>左右臂</span>
                 <div class="smw-segment">
-                    ${options.arms.map(item => `<button data-select="arm_side" data-value="${item.arm_side}" class="${wizard.selection.arm_side === item.arm_side ? 'on' : ''}">${esc(item.label)}</button>`).join('')}
+                    ${arms.map(item => `<button data-select="arm_side" data-value="${item.arm_side}" class="${wizard.selection.arm_side === item.arm_side ? 'on' : ''}">${esc(item.label)}</button>`).join('')}
                 </div>
             </div>
             <div class="smw-field">
@@ -213,7 +215,7 @@ function renderSelect() {
                 </div>
             </div>
             ${targetSummary()}
-            ${wizard.selection.product_line === 'openarm_2_0' ? '<p class="smw-note">OpenArm 2.0 电机现阶段按 CAN 2.0 / 1 Mbps 配置，装配后再统一调整。</p>' : ''}
+            ${wizard.selection.product_line === 'openarm_2_0' ? `<p class="smw-note">OpenArm 2.0 单电机仍在台架上用 CAN 2.0 / 1 Mbps 配置；装配后右臂接 can0、左臂接 can1，两侧都使用 ESC 0x01–0x08，再统一切换 CAN FD。</p>` : ''}
             <div class="smw-start-row">
                 <div class="smw-checklist">
                     <strong>开始前确认</strong>
